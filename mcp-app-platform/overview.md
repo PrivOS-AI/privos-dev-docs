@@ -29,7 +29,7 @@ Privos Chat Host
 ├── PostMessage Bridge (JSON-RPC 2.0 over postMessage)
 │   ├── Sandboxed iframe rendering (deny-by-default)
 │   ├── Tool call proxying (app→host→registry→host→app)
-│   └── HOST_CONTEXT_CHANGED push (roomId, userId, theme, surfaceColor)
+│   └── HOST_CONTEXT_CHANGED push (roomId, userId, theme)
 ├── MCP Tool Registry (16+ Privos tools apps can call)
 └── OAuth scope enforcement per tool call
 ```

@@ -49,11 +49,10 @@ await app.callServerTool({
 Subscribes to `HOST_CONTEXT_CHANGED` push + fetches Privos-specific context:
 
 ```tsx
-const { roomId, userId, username, roomName, theme, surfaceColor, userRoles } = usePrivosContext();
+const { roomId, userId, username, roomName, theme, userRoles } = usePrivosContext();
 ```
 
 - `theme` (`'light'` | `'dark'`) — updates in real-time when the user toggles theme
-- `surfaceColor` (e.g. `'#080d0f'`) — exact room background color for pixel-perfect matching
 
 Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).
 

@@ -129,9 +129,9 @@ Privos pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` Post
 ### How It Works
 
 1. Privos host detects theme change (user toggles light/dark/auto)
-2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark', surfaceColor?: '#080d0f' } }` to iframe
-3. `usePrivosContext()` hook receives updated `theme` and `surfaceColor` values
-4. App applies theme via CSS variables or React state — use `surfaceColor` for exact background matching
+2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark' } }` to iframe
+3. `usePrivosContext()` hook receives updated `theme` value
+4. App sets `data-theme` attribute on `<html>` → CSS variables switch between light/dark palettes
 
 ### Recommended Pattern
 
@@ -139,37 +139,39 @@ Use a `ThemeProvider` with three modes:
 
 | Mode | Behavior |
 |------|----------|
-| **Auto** | Follows Privos host theme in real-time |
+| **Auto** | Follows Privos host `theme` in real-time |
 | **Light** | Forces light regardless of host |
 | **Dark** | Forces dark regardless of host |
 
 ```tsx
-// ThemeProvider sets data-theme attribute on <html>
-// surfaceColor overrides --bg for exact background matching
-const ctx = usePrivosContext();
-<ThemeProvider hostTheme={ctx.theme} surfaceColor={ctx.surfaceColor}>
+const { theme } = usePrivosContext();
+<ThemeProvider hostTheme={theme}>
   <App />
 </ThemeProvider>
 ```
 
+The `ThemeProvider` sets `data-theme="light"` or `data-theme="dark"` on `<html>`. CSS variables handle everything else — no inline style overrides needed.
+
 ### CSS Variables
 
-Use Privos `--rcx-color-*` tokens with hardcoded fallbacks for standalone:
+Define light and dark palettes with hardcoded values. Sandboxed iframes cannot access the parent's CSS variables, so use standalone colors that match the Privos palette:
 
 ```css
 :root, [data-theme="light"] {
-  --bg: var(--rcx-color-surface-room, #F7F8FA);
-  --text: var(--rcx-color-font-titles-labels, #1F2329);
-  --accent: var(--rcx-color-button-background-primary-default, #156FF5);
-  --border: var(--rcx-color-stroke-light, #E4E7EA);
+  --bg: #F7F8FA;
+  --text: #1F2329;
+  --accent: #156FF5;
+  --border: #E4E7EA;
 }
 
 [data-theme="dark"] {
-  --bg: var(--rcx-color-surface-room, #080d0f);
-  --text: var(--rcx-color-font-default, #E4E7EA);
-  --accent: var(--rcx-color-button-background-primary-default, #095AD2);
-  --border: var(--rcx-color-stroke-light, #353B45);
+  --bg: #080d0f;
+  --text: #E4E7EA;
+  --accent: #095AD2;
+  --border: #353B45;
 }
+
+body { background: var(--bg); color: var(--text); }
 ```
 
 ### Key Token Mappings
