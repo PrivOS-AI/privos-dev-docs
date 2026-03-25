@@ -129,9 +129,9 @@ Privos pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` Post
 ### How It Works
 
 1. Privos host detects theme change (user toggles light/dark/auto)
-2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark' } }` to iframe
-3. `usePrivosContext()` hook receives updated `theme` value
-4. App applies theme via CSS variables or React state
+2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark', surfaceColor?: '#080d0f' } }` to iframe
+3. `usePrivosContext()` hook receives updated `theme` and `surfaceColor` values
+4. App applies theme via CSS variables or React state — use `surfaceColor` for exact background matching
 
 ### Recommended Pattern
 
@@ -145,8 +145,9 @@ Use a `ThemeProvider` with three modes:
 
 ```tsx
 // ThemeProvider sets data-theme attribute on <html>
-// CSS variables switch between light/dark palettes
-<ThemeProvider hostTheme={theme}>
+// surfaceColor overrides --bg for exact background matching
+const ctx = usePrivosContext();
+<ThemeProvider hostTheme={ctx.theme} surfaceColor={ctx.surfaceColor}>
   <App />
 </ThemeProvider>
 ```
@@ -164,7 +165,7 @@ Use Privos `--rcx-color-*` tokens with hardcoded fallbacks for standalone:
 }
 
 [data-theme="dark"] {
-  --bg: var(--rcx-color-surface-room, #1F2329);
+  --bg: var(--rcx-color-surface-room, #080d0f);
   --text: var(--rcx-color-font-default, #E4E7EA);
   --accent: var(--rcx-color-button-background-primary-default, #095AD2);
   --border: var(--rcx-color-stroke-light, #353B45);
