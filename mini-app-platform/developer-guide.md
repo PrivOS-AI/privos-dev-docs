@@ -121,3 +121,67 @@ npm run dev
 - **Blank iframe**: Check `X-Frame-Options` and CSP `frame-ancestors` headers
 - **Mixed content**: If Privos runs on HTTPS, app server must also use HTTPS
 - **CORS**: Not needed for iframe embedding, but needed if app calls Privos API directly
+
+## 7. Theme Sync (Light/Dark Mode)
+
+Privos pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` PostMessage.
+
+### How It Works
+
+1. Privos host detects theme change (user toggles light/dark/auto)
+2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark' } }` to iframe
+3. `usePrivosContext()` hook receives updated `theme` value
+4. App applies theme via CSS variables or React state
+
+### Recommended Pattern
+
+Use a `ThemeProvider` with three modes:
+
+| Mode | Behavior |
+|------|----------|
+| **Auto** | Follows Privos host theme in real-time |
+| **Light** | Forces light regardless of host |
+| **Dark** | Forces dark regardless of host |
+
+```tsx
+// ThemeProvider sets data-theme attribute on <html>
+// CSS variables switch between light/dark palettes
+<ThemeProvider hostTheme={theme}>
+  <App />
+</ThemeProvider>
+```
+
+### CSS Variables
+
+Use Privos `--rcx-color-*` tokens with hardcoded fallbacks for standalone:
+
+```css
+:root, [data-theme="light"] {
+  --bg: var(--rcx-color-surface-room, #F7F8FA);
+  --text: var(--rcx-color-font-titles-labels, #1F2329);
+  --accent: var(--rcx-color-button-background-primary-default, #156FF5);
+  --border: var(--rcx-color-stroke-light, #E4E7EA);
+}
+
+[data-theme="dark"] {
+  --bg: var(--rcx-color-surface-room, #1F2329);
+  --text: var(--rcx-color-font-default, #E4E7EA);
+  --accent: var(--rcx-color-button-background-primary-default, #095AD2);
+  --border: var(--rcx-color-stroke-light, #353B45);
+}
+```
+
+### Key Token Mappings
+
+| App Variable | Privos Token | Light | Dark |
+|-------------|-------------|-------|------|
+| `--bg` | `--rcx-color-surface-room` | #F7F8FA | #1F2329 |
+| `--bg-card` | `--rcx-color-surface-light` | #FFFFFF | #262931 |
+| `--bg-hover` | `--rcx-color-surface-hover` | #F2F3F5 | #2F343D |
+| `--text` | `--rcx-color-font-titles-labels` | #1F2329 | #E4E7EA |
+| `--text-muted` | `--rcx-color-font-hint` | #6C737A | #9EA2A8 |
+| `--border` | `--rcx-color-stroke-light` | #E4E7EA | #353B45 |
+| `--accent` | `--rcx-color-button-background-primary-default` | #156FF5 | #095AD2 |
+| `--danger` | `--rcx-color-button-background-danger-default` | #EC0D2A | #BB0B21 |
+
+When running inside the Privos iframe, `--rcx-color-*` variables are inherited from the host — colors match automatically. Fallback values used when running standalone.

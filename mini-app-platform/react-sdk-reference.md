@@ -52,6 +52,8 @@ Subscribes to `HOST_CONTEXT_CHANGED` push + fetches Privos-specific context:
 const { roomId, userId, username, roomName, theme, userRoles } = usePrivosContext();
 ```
 
+The `theme` value (`'light'` or `'dark'`) updates in real-time when the Privos user toggles theme. Use it with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).
+
 ## usePrivosTool
 
 Generic hook — auto-fetches on mount and when args change. Best for reads:
