@@ -4,7 +4,7 @@
 
 ### Admin Portal
 
-1. Navigate to **Admin → Apps** (`/admin/mini-apps`)
+1. Navigate to **Admin → Apps** (`/admin/mcp-apps`)
 2. Click **Connect App**
 3. Enter MCP server URL (e.g., `https://myapp.example.com`)
 4. Privos performs two-step discovery:
@@ -19,13 +19,13 @@
 curl -X POST -H "Content-Type: application/json" \
   -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
   -d '{"serverUrl": "https://myapp.example.com"}' \
-  http://localhost:3000/api/v1/mini-apps.connect
+  http://localhost:3000/api/v1/mcp-apps.connect
 
 # Install in a room
 curl -X POST -H "Content-Type: application/json" \
   -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
-  -d '{"miniAppId": "<id>", "roomId": "<room_id>"}' \
-  http://localhost:3000/api/v1/mini-apps.install
+  -d '{"mcpAppId": "<id>", "roomId": "<room_id>"}' \
+  http://localhost:3000/api/v1/mcp-apps.install
 ```
 
 ## Admin Features

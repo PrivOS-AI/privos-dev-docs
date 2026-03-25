@@ -10,11 +10,11 @@
 - **SSRF protection**: manifest fetch requires HTTPS in production, 5s timeout, 100KB max
 - **PostMessage origin**: validated on message receipt
 - **UI HTML proxy**: fetched server-side (no direct iframe src to external URL)
-- **X-Frame-Options**: automatically exempted for `/api/v1/mini-apps.ui-resource` route
+- **X-Frame-Options**: automatically exempted for `/api/v1/mcp-apps.ui-resource` route
 
 ## Data Model
 
-### mini_apps collection
+### mcp_apps collection
 
 ```typescript
 {
@@ -30,7 +30,7 @@
     website?: string;
   };
   serverUrl: string;      // MCP server base URL
-  tools: IMiniAppTool[];  // Discovered via tools/list
+  tools: IMcpAppTool[];  // Discovered via tools/list
   scopes: string[];
   oauthAppId: string;     // Links to oauth_apps._id
   developerId: string;
@@ -46,12 +46,12 @@
 }
 ```
 
-### mini_app_installations collection
+### mcp_app_installations collection
 
 ```typescript
 {
   _id: string;
-  miniAppId: string;
+  mcpAppId: string;
   appId: string;
   roomId?: string;        // null = workspace-level
   installedBy: string;
@@ -65,14 +65,14 @@
 ```
 packages/
 ├── core-typings/src/
-│   ├── IMiniApp.ts                          # IMiniApp + IMiniAppTool types
-│   └── IMiniAppInstallation.ts              # Installation type
+│   ├── IMcpApp.ts                           # IMcpApp + IMcpAppTool types
+│   └── IMcpAppInstallation.ts               # Installation type
 ├── model-typings/src/models/
-│   ├── IMiniAppsModel.ts                    # Model interface
-│   └── IMiniAppInstallationsModel.ts        # Model interface
+│   ├── IMcpAppsModel.ts                     # Model interface
+│   └── IMcpAppInstallationsModel.ts         # Model interface
 ├── models/src/models/
-│   ├── MiniApps.ts                          # MongoDB model
-│   └── MiniAppInstallations.ts              # MongoDB model
+│   ├── McpApps.ts                           # MongoDB model
+│   └── McpAppInstallations.ts               # MongoDB model
 ├── app-react/                          # React hooks package
 └── create-privos-mcp-app/                   # CLI scaffolder
 
@@ -83,13 +83,13 @@ apps/meteor/
 │       ├── mcp-manifest-fetcher.ts          # Fetch manifest metadata
 │       ├── mcp-tool-discovery-client.ts     # MCP client initialize → tools/list
 │       ├── mcp-ui-resource-fetcher.ts       # Fetch ui:// HTML
-│       ├── mini-app-lifecycle-service.ts    # Connect/refresh/install/uninstall
+│       ├── mcp-app-lifecycle-service.ts     # Connect/refresh/install/uninstall
 │       ├── mcp-tool-registry.ts             # Tool definitions + scope enforcement
 │       ├── mcp-tool-handlers-*.ts           # Tool handlers (7 files)
 │       └── mcp-tool-handlers-loader.ts      # Auto-imports all handlers
-├── app/api/server/v1/mini-apps.ts           # REST endpoints (11 routes)
+├── app/api/server/v1/mcp-apps.ts           # REST endpoints (11 routes)
 └── client/views/
-    ├── admin/miniApps/                      # Admin portal UI
-    ├── room/mini-apps/                      # Room tab/sidebar/host components
-    └── mini-apps/                           # Standalone page
+    ├── admin/mcpApps/                      # Admin portal UI
+    ├── room/mcp-apps/                      # Room tab/sidebar/host components
+    └── mcp-apps/                           # Standalone page
 ```

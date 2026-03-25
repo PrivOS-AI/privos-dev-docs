@@ -101,7 +101,7 @@ npm run dev
 - **Must NOT** set `X-Frame-Options: DENY` or `SAMEORIGIN` — the app UI renders inside a sandboxed iframe on the Privos domain
 - **Must** allow framing via CSP: `frame-ancestors https://your-privos-domain.com` (or `frame-ancestors *` for dev)
 
-**Note:** Privos automatically **exempts** app UI resource endpoints (`/api/v1/mini-apps.ui-resource`) from `X-Frame-Options` restrictions.
+**Note:** Privos automatically **exempts** app UI resource endpoints (`/api/v1/mcp-apps.ui-resource`) from `X-Frame-Options` restrictions.
 
 ### Rendering Modes
 

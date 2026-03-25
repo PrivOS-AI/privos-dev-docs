@@ -4,17 +4,17 @@
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `mini-apps.connect` | POST | Admin | Register app by server URL |
-| `mini-apps.list` | GET | User | List all registered apps |
-| `mini-apps.get` | GET | User | Get app details by ID |
-| `mini-apps.refresh` | POST | Admin | Re-fetch tools and metadata |
-| `mini-apps.delete` | POST | Admin | Remove app, revoke tokens |
-| `mini-apps.install` | POST | User | Install app in a room |
-| `mini-apps.uninstall` | POST | User | Remove from room |
-| `mini-apps.installations` | GET | User | List room installations |
-| `mini-apps.updateSettings` | POST | Admin | Update install permissions, status |
-| `mini-apps.tool-call` | POST | User | Execute a Privos MCP tool |
-| `mini-apps.ui-resource` | GET | User | Fetch UI HTML (server proxy) |
+| `mcp-apps.connect` | POST | Admin | Register app by server URL |
+| `mcp-apps.list` | GET | User | List all registered apps |
+| `mcp-apps.get` | GET | User | Get app details by ID |
+| `mcp-apps.refresh` | POST | Admin | Re-fetch tools and metadata |
+| `mcp-apps.delete` | POST | Admin | Remove app, revoke tokens |
+| `mcp-apps.install` | POST | User | Install app in a room |
+| `mcp-apps.uninstall` | POST | User | Remove from room |
+| `mcp-apps.installations` | GET | User | List room installations |
+| `mcp-apps.updateSettings` | POST | Admin | Update install permissions, status |
+| `mcp-apps.tool-call` | POST | User | Execute a Privos MCP tool |
+| `mcp-apps.ui-resource` | GET | User | Fetch UI HTML (server proxy) |
 
 ## Privos MCP Tools
 

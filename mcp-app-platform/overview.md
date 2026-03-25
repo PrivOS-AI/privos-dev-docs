@@ -25,7 +25,7 @@ Developer's MCP App Server (external)
 │
 Privos Chat Host
 ├── MCP Client (connects to app servers, discovers tools)
-├── App Registry (mini_apps + mini_app_installations collections)
+├── App Registry (mcp_apps + mcp_app_installations collections)
 ├── PostMessage Bridge (JSON-RPC 2.0 over postMessage)
 │   ├── Sandboxed iframe rendering (deny-by-default)
 │   ├── Tool call proxying (app→host→registry→host→app)
