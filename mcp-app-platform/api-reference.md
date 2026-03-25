@@ -4,17 +4,22 @@
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `mcp-apps.connect` | POST | Admin | Register app by server URL |
-| `mcp-apps.list` | GET | User | List all registered apps |
+| `mcp-apps.connect` | POST | Admin | Register direct app by server URL |
+| `mcp-apps.register-relay` | POST | Admin | Register relay app, returns clientId+clientSecret+relayUrl |
+| `mcp-apps.list` | GET | User | List all apps (includes relayOnline status for relay apps) |
 | `mcp-apps.get` | GET | User | Get app details by ID |
+| `mcp-apps.relay-status` | GET | User | Check if relay app is currently online |
 | `mcp-apps.refresh` | POST | Admin | Re-fetch tools and metadata |
 | `mcp-apps.delete` | POST | Admin | Remove app, revoke tokens |
 | `mcp-apps.install` | POST | User | Install app in a room |
 | `mcp-apps.uninstall` | POST | User | Remove from room |
 | `mcp-apps.installations` | GET | User | List room installations |
-| `mcp-apps.updateSettings` | POST | Admin | Update install permissions, status |
+| `mcp-apps.updateSettings` | POST | Admin | Update install perms, status, wakeUrl, queueTtl, queueMaxSize |
 | `mcp-apps.tool-call` | POST | User | Execute a Privos MCP tool |
 | `mcp-apps.ui-resource` | GET | User | Fetch UI HTML (server proxy) |
+| `/apps/{appId}/ui` | GET | User | Per-app namespaced UI endpoint |
+| `/apps/{appId}/mcp` | POST | User | Per-app namespaced JSON-RPC proxy |
+| `wss://host/api/v1/mcp-apps.relay` | WebSocket | OAuth Bearer | Relay endpoint (token in Authorization header) |
 
 ## Privos MCP Tools
 
@@ -130,6 +135,57 @@ await app.callServerTool({
     options: [{ value: 'Web' }, { value: 'Email' }, { value: 'Phone' }]
   }
 });
+```
+
+## Relay App Endpoints
+
+### Register Relay App
+
+**POST `/api/v1/mcp-apps.register-relay`** (Admin only)
+
+```json
+{
+  "manifestUrl": "https://myapp.example.com/.well-known/mcp/manifest.json",
+  "connectionType": "relay"
+}
+```
+
+**Response:**
+```json
+{
+  "_id": "app_123",
+  "clientId": "client_abc",
+  "clientSecret": "secret_xyz",
+  "relayUrl": "wss://chat.privos.com/api/v1/mcp-apps.relay"
+}
+```
+
+### Check Relay Status
+
+**GET `/api/v1/mcp-apps.relay-status?appId=app_123`** (User)
+
+**Response:**
+```json
+{ "isOnline": true, "lastSeen": "2026-03-25T14:30:00Z" }
+```
+
+### OAuth Token (for relay apps)
+
+**POST `/oauth/token`** (Client Credentials)
+
+```bash
+curl -X POST http://localhost:3000/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET"
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
 ```
 
 ## Scope Taxonomy

@@ -2,6 +2,7 @@
 
 ## Security
 
+### Direct Apps
 - **Iframe sandbox**: deny-by-default — no `allow-same-origin` (prevents cookie/localStorage theft)
 - **Permissions**: camera/microphone only granted if declared in `_meta.ui.permissions`
 - **CSP**: app-declared CSP from `_meta.ui.csp` enforced
@@ -12,6 +13,15 @@
 - **UI HTML proxy**: fetched server-side (no direct iframe src to external URL)
 - **X-Frame-Options**: automatically exempted for `/api/v1/mcp-apps.ui-resource` route
 
+### Relay Apps
+- **OAuth bearer token**: WebSocket connection requires valid Bearer token in `Authorization` header
+- **Token expiry**: tokens expire after 1 hour, app must refresh via `/oauth/token`
+- **HTTPS-only wakeUrl**: if specified, only HTTPS URLs accepted for background wake calls
+- **Cookie isolation**: `/apps/{appId}/ui` namespace prevents cookie leakage to other apps
+- **Rate limiting**: per-app rate limits on relay WS connections and tool calls
+- **Scope enforcement**: same as direct apps
+- **Manifest fetch**: same SSRF protections as direct apps
+
 ## Data Model
 
 ### mcp_apps collection
@@ -19,20 +29,26 @@
 ```typescript
 {
   _id: string;
-  appId: string;          // From manifest name (e.g., "com.example.app")
-  name: string;           // Display title
+  appId: string;              // From manifest name (e.g., "com.example.app")
+  name: string;               // Display title
   version: string;
   description: string;
-  icon?: string;          // Absolute URL to 96x96 PNG/SVG icon
+  icon?: string;              // Absolute URL to 96x96 PNG/SVG icon
   author: {
     name: string;
     email?: string;
     website?: string;
   };
-  serverUrl: string;      // MCP server base URL
-  tools: IMcpAppTool[];  // Discovered via tools/list
+  connectionType: 'direct' | 'relay';  // NEW: connection mode
+  serverUrl?: string;         // MCP server base URL (optional for relay)
+  relayUrl?: string;          // NEW: relay endpoint URL (relay apps only)
+  relayOnline?: boolean;      // NEW: current relay connection status
+  wakeUrl?: string;           // NEW: HTTP endpoint to wake app (relay only)
+  queueTtlMs?: number;        // NEW: msg queue TTL when app offline (default: 3600000)
+  queueMaxSize?: number;      // NEW: max msgs in queue (default: 1000)
+  tools: IMcpAppTool[];       // Discovered via tools/list
   scopes: string[];
-  oauthAppId: string;     // Links to oauth_apps._id
+  oauthAppId: string;         // Links to oauth_apps._id
   developerId: string;
   status: 'draft' | 'active' | 'suspended';
   installPermission: ('admin' | 'owner' | 'leader')[];
