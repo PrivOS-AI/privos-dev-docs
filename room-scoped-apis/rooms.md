@@ -165,6 +165,67 @@ curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/members/USER_
 
 ---
 
+### Get Room Agent Bots
+
+```http
+GET /api/v1/internal/rooms/:roomId/agentBots
+```
+
+**Description:** Get all agent bots configured for a room. Returns bots that have agent flow configuration (`agent.flowId` set).
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "agents": [
+      {
+        "id": "flow-id-123",
+        "name": "Customer Support Bot",
+        "description": "Handles customer inquiries",
+        "botUserId": "bot-user-id",
+        "botUsername": "support-bot",
+        "commands": [
+          {
+            "name": "help",
+            "description": "Show help information",
+            "isBuiltIn": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Agent flow ID (same as flow ID in Privos Studio) |
+| `name` | string | Agent display name |
+| `description` | string | Agent description |
+| `botUserId` | string | PrivOS Chat bot user ID |
+| `botUsername` | string | Bot username |
+| `commands` | array | Array of commands the agent can execute |
+
+**Example:**
+
+```bash
+curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/agentBots" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Notes:**
+- Returns empty array if no agent bots are configured for the room
+- Used by AI Chat to populate agent dropdown
+- Agents must have `type: 'bot'` and `agent.flowId` set to appear in results
+- Falls back to "Default Agent" when no agents are found
+
+---
+
 ## Error Codes
 
 | Error Code | Description |

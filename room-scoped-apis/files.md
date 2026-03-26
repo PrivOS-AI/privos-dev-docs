@@ -197,6 +197,150 @@ curl -X DELETE "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/by-p
 
 ---
 
+### List File Versions
+
+```http
+GET /api/v1/fileManagement/versions/:fileId
+```
+
+**Description:** List all versions of a file stored in MinIO. Returns version history with editor metadata (user info who made the change).
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `fileId` | string | Yes | File key/path in MinIO (e.g., `ROOM_ID/Documents/report.pdf`) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "versions": [
+      {
+        "versionId": "v1234567890",
+        "etag": "d41d8cd98f00b204e9800998ecf8427e",
+        "size": 102400,
+        "lastModified": "2024-01-15T10:30:00.000Z",
+        "editor": {
+          "userId": "USER_ID",
+          "username": "john.doe",
+          "name": "John Doe"
+        },
+        "isCurrent": true
+      },
+      {
+        "versionId": "v1234567800",
+        "etag": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+        "size": 98765,
+        "lastModified": "2024-01-14T14:20:00.000Z",
+        "editor": {
+          "userId": "USER_ID_2",
+          "username": "jane.smith",
+          "name": "Jane Smith"
+        },
+        "isCurrent": false
+      }
+    ],
+    "fileKey": "ROOM_ID/Documents/report.pdf"
+  }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `versions` | array | Array of file versions sorted by date (newest first) |
+| `versionId` | string | MinIO version ID for this version |
+| `etag` | string | Entity tag for this version |
+| `size` | number | File size in bytes |
+| `lastModified` | string | ISO 8601 timestamp when version was created |
+| `editor` | object | User who created/uploaded this version |
+| `editor.userId` | string | User ID |
+| `editor.username` | string | User's login username |
+| `editor.name` | string | User's display name |
+| `isCurrent` | boolean | Whether this is the current/active version |
+| `fileKey` | string | Full file key in MinIO |
+
+**Example:**
+
+```bash
+curl -X GET "https://your-domain.com/api/v1/fileManagement/versions/ROOM_ID%2FDocuments%2Freport.pdf" \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+**Notes:**
+- `fileId` should be URL-encoded (forward slashes become `%2F`)
+- Requires at least `x-api-key` header; room-scoped JWT optional for additional auth
+- Returns empty versions array if file has no history
+
+---
+
+### Restore File Version
+
+```http
+POST /api/v1/fileManagement/restore/:versionId
+```
+
+**Description:** Restore a previous file version as the current version. The old version becomes the new current, and metadata is updated with the restoring user's info.
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `versionId` | string | Yes | Version ID to restore (obtained from list versions endpoint) |
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `fileKey` | string | Yes | Full file key in MinIO (e.g., `ROOM_ID/Documents/report.pdf`) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Version restored successfully",
+    "fileKey": "ROOM_ID/Documents/report.pdf",
+    "restoredVersionId": "v1234567800",
+    "newCurrentVersion": {
+      "versionId": "v1234567800",
+      "size": 98765,
+      "lastModified": "2024-01-16T09:15:00.000Z",
+      "editor": {
+        "userId": "CURRENT_USER_ID",
+        "username": "current.user",
+        "name": "Current User"
+      },
+      "isCurrent": true
+    }
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST "https://your-domain.com/api/v1/fileManagement/restore/v1234567800" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileKey": "ROOM_ID/Documents/report.pdf"
+  }'
+```
+
+**Notes:**
+- Restore operation is captured with the current user's metadata
+- Original version ID is preserved in version history
+- Restoring the current version is a no-op
+- All versions remain accessible after restore
+
+---
+
 ## Error Codes
 
 | Error Code | HTTP Status | Description |
