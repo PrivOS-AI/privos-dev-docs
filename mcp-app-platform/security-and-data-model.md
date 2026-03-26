@@ -16,11 +16,13 @@
 ### Relay Apps
 - **OAuth bearer token**: WebSocket connection requires valid Bearer token in `Authorization` header
 - **Token expiry**: tokens expire after 1 hour, app must refresh via `/oauth/token`
+- **Pairing token expiry**: one-time pairing tokens expire after 1 hour if unused, persist after pairing
 - **HTTPS-only wakeUrl**: if specified, only HTTPS URLs accepted for background wake calls
 - **Cookie isolation**: `/apps/{appId}/ui` namespace prevents cookie leakage to other apps
 - **Rate limiting**: per-app rate limits on relay WS connections and tool calls
 - **Scope enforcement**: same as direct apps
 - **Manifest fetch**: same SSRF protections as direct apps
+- **App files in MinIO**: icons and assets stored at `.apps/{appId}/`, served via file management API
 
 ## Data Model
 
@@ -33,19 +35,20 @@
   name: string;               // Display title
   version: string;
   description: string;
-  icon?: string;              // Absolute URL to 96x96 PNG/SVG icon
+  icon?: string;              // Relative path to icon in MinIO (e.g., "icon.png")
+  iconFileId?: string;        // File ID in file management system (for serving via API)
   author: {
     name: string;
     email?: string;
     website?: string;
   };
-  connectionType: 'direct' | 'relay';  // NEW: connection mode
+  connectionType: 'direct' | 'relay';
   serverUrl?: string;         // MCP server base URL (optional for relay)
-  relayUrl?: string;          // NEW: relay endpoint URL (relay apps only)
-  relayOnline?: boolean;      // NEW: current relay connection status
-  wakeUrl?: string;           // NEW: HTTP endpoint to wake app (relay only)
-  queueTtlMs?: number;        // NEW: msg queue TTL when app offline (default: 3600000)
-  queueMaxSize?: number;      // NEW: max msgs in queue (default: 1000)
+  relayUrl?: string;          // Relay endpoint URL (relay apps only)
+  relayOnline?: boolean;      // Current relay connection status
+  wakeUrl?: string;           // HTTPS endpoint to wake app (relay only)
+  queueTtlMs?: number;        // Msg queue TTL when app offline (default: 3600000)
+  queueMaxSize?: number;      // Max msgs in queue (default: 1000)
   tools: IMcpAppTool[];       // Discovered via tools/list
   scopes: string[];
   oauthAppId: string;         // Links to oauth_apps._id

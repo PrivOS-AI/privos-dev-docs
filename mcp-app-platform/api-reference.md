@@ -6,6 +6,8 @@
 |----------|--------|------|-------------|
 | `mcp-apps.connect` | POST | Admin | Register direct app by server URL |
 | `mcp-apps.register-relay` | POST | Admin | Register relay app, returns clientId+clientSecret+relayUrl |
+| `mcp-apps.generate-pair-url` | POST | Admin | Generate one-time pairing URL, returns { pairUrl, pairToken } |
+| `mcp-apps.pair-status` | GET | Admin | Check pairing status by token, returns { status: 'waiting'\|'paired'\|'expired', app? } |
 | `mcp-apps.list` | GET | User | List all apps (includes relayOnline status for relay apps) |
 | `mcp-apps.get` | GET | User | Get app details by ID |
 | `mcp-apps.relay-status` | GET | User | Check if relay app is currently online |
@@ -139,24 +141,53 @@ await app.callServerTool({
 
 ## Relay App Endpoints
 
-### Register Relay App
+### Generate Pairing URL
 
-**POST `/api/v1/mcp-apps.register-relay`** (Admin only)
+**POST `/api/v1/mcp-apps.generate-pair-url`** (Admin only)
 
+Generates a one-time pairing URL for relay app developers to use during `npm start`.
+
+**Request:**
 ```json
 {
-  "manifestUrl": "https://myapp.example.com/.well-known/mcp/manifest.json",
-  "connectionType": "relay"
+  "manifestUrl": "https://myapp.example.com/.well-known/mcp/manifest.json"
 }
 ```
 
 **Response:**
 ```json
 {
-  "_id": "app_123",
-  "clientId": "client_abc",
-  "clientSecret": "secret_xyz",
-  "relayUrl": "wss://chat.privos.com/api/v1/mcp-apps.relay"
+  "pairUrl": "https://chat.privos.com/pair?token=eyJ...",
+  "pairToken": "pair_abc_123xyz",
+  "expiresIn": 3600
+}
+```
+
+### Check Pairing Status
+
+**GET `/api/v1/mcp-apps.pair-status?token=pair_abc_123xyz`** (Admin)
+
+Check pairing progress during relay setup flow.
+
+**Response (waiting):**
+```json
+{
+  "status": "waiting",
+  "createdAt": "2026-03-25T10:00:00Z",
+  "expiresAt": "2026-03-25T11:00:00Z"
+}
+```
+
+**Response (paired):**
+```json
+{
+  "status": "paired",
+  "app": {
+    "_id": "app_123",
+    "clientId": "client_abc",
+    "clientSecret": "secret_xyz",
+    "relayUrl": "wss://chat.privos.com/api/v1/mcp-apps.relay"
+  }
 }
 ```
 
@@ -187,6 +218,23 @@ curl -X POST http://localhost:3000/oauth/token \
   "expires_in": 3600
 }
 ```
+
+## App Asset Storage
+
+### File Management via MinIO
+
+App icons and assets are stored in MinIO at path `.apps/{appId}/`.
+
+**Serving Files:**
+```
+GET /api/v1/file-management.files/{fileId}/content/{filename}
+```
+
+**Icon Storage:**
+- Icon stored as relative path in `mcp_apps.icon` field (e.g., `"icon.png"`)
+- No domain prefix — served via file management API
+- Accessed via: `GET /api/v1/file-management.files/{appIconFileId}/content/icon.png`
+- Icon also included in pairing metadata and initialize response `serverInfo.icon`
 
 ## Scope Taxonomy
 

@@ -193,57 +193,61 @@ When running inside the Privos iframe, `--rcx-color-*` variables are inherited f
 
 ## 8. Relay Apps (WebSocket Connection)
 
-For apps behind NAT, firewall, or private networks, use the relay connection type. Admin provides `clientId`, `clientSecret`, and `relayUrl`. Your app initiates a WebSocket connection to Privos.
+For apps behind NAT, firewall, or private networks, use the relay connection type. Your app connects outbound to Privos via WebSocket with OAuth credentials obtained through a one-click pairing flow.
 
-### Setup
+### Setup — Auto-Pairing Flow
 
-1. **Admin registers relay app** (see [Admin Guide](./admin-guide.md))
-   - Returns `clientId`, `clientSecret`, `relayUrl` (e.g., `wss://chat.privos.com/api/v1/mcp-apps.relay`)
+1. **Admin generates pairing URL** (see [Admin Guide](./admin-guide.md))
+   - URL: `https://chat.privos.com/pair?token=pair_abc_123xyz` (1-hour expiry)
+   - Share URL with app developer
 
-2. **Obtain OAuth token** via client credentials flow:
+2. **Developer starts app with pairing URL**:
    ```bash
-   curl -X POST https://chat.privos.com/oauth/token \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "grant_type=client_credentials" \
-     -d "client_id=$CLIENT_ID" \
-     -d "client_secret=$CLIENT_SECRET"
-
-   # Returns: { "access_token": "...", "expires_in": 3600, "token_type": "Bearer" }
+   npm start
+   # ℹ️  Enter pairing URL (or press Enter to skip):
+   # Paste: https://chat.privos.com/pair?token=pair_abc_123xyz
    ```
 
-3. **Connect WebSocket with bearer token**:
+3. **App exchanges token for credentials**:
+   - Sends `pair_token` to `POST /api/v1/mcp-apps.pair-status`
+   - Receives `clientId`, `clientSecret`, `relayUrl`
+   - Auto-saves to `.env` (or creates `.env.local`)
+
+4. **App obtains OAuth token and connects**:
+   ```bash
+   POST /oauth/token
+   grant_type=client_credentials
+   client_id=CLIENT_ID
+   client_secret=CLIENT_SECRET
+
+   # Returns: { "access_token": "...", "expires_in": 3600 }
+   ```
+
+5. **App connects to relay WebSocket**:
    ```typescript
-   const token = (await fetch('https://chat.privos.com/oauth/token', {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-     body: new URLSearchParams({
-       grant_type: 'client_credentials',
-       client_id: process.env.CLIENT_ID,
-       client_secret: process.env.CLIENT_SECRET,
-     })
-   }).then(r => r.json())).access_token;
-
+   const token = await getOAuthToken();
    const ws = new WebSocket('wss://chat.privos.com/api/v1/mcp-apps.relay', {
-     headers: {
-       Authorization: `Bearer ${token}`
-     }
-   });
-
-   ws.on('open', () => {
-     console.log('Connected to Privos relay');
+     headers: { Authorization: `Bearer ${token}` }
    });
 
    ws.on('message', (data) => {
      const msg = JSON.parse(data);
-     // Handle MCP JSON-RPC message from Privos
      handleMcpMessage(msg);
    });
-
-   ws.on('close', () => {
-     console.log('Relay disconnected, attempting reconnect...');
-     reconnectWithBackoff();
-   });
    ```
+
+### Manual Credential Entry (Fallback)
+
+If the pairing URL is lost, retrieve credentials from admin:
+- `CLIENT_ID` and `CLIENT_SECRET` stored in admin portal
+- Create `.env` manually:
+  ```
+  RELAY_URL=wss://chat.privos.com/api/v1/mcp-apps.relay
+  CLIENT_ID=client_abc
+  CLIENT_SECRET=secret_xyz
+  ```
+
+### Handling MCP Messages
 
 ### Handling MCP Messages
 
@@ -330,9 +334,18 @@ function scheduleReconnect() {
 connectRelay();
 ```
 
+### Relay App Architecture
+
+**No HTTP server needed.** Relay apps:
+- Use `npm start` to connect to Privos via WebSocket
+- Serve manifest via Node.js/Express embedded in the relay app package
+- UI is built with Vite, compiled to static HTML, sent via `resources/read` JSON-RPC
+- Admin portal inlines UI via data URI in pairing metadata
+- App icon sent via pairing response AND in initialize `serverInfo.icon` for refresh
+
 ### Relay App Manifest
 
-Same as direct apps. Include `/.well-known/mcp/manifest.json` even if you don't have an HTTP server:
+Include `/.well-known/mcp/manifest.json` served locally:
 
 ```json
 {
@@ -340,6 +353,7 @@ Same as direct apps. Include `/.well-known/mcp/manifest.json` even if you don't 
   "version": "1.0.0",
   "title": "My Relay App",
   "description": "App that runs behind NAT via relay",
+  "icon": "/icon.png",
   "author": { "name": "Your Name" }
 }
 ```

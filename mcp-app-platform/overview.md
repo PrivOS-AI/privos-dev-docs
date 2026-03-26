@@ -28,18 +28,24 @@ Privos Chat Host (MCP Client connects directly)
 
 ### Relay Connection
 ```
-Developer's MCP App Server (any network)
-├── OAuth token obtained (POST /oauth/token)
-│
-└── WebSocket connection (wss://privos-host/api/v1/mcp-apps.relay)
-    └── Bearer token in Authorization header
-    │
-    └────────────── JSON-RPC 2.0 over WS ──────────
+Admin generates pairing URL → Developer enters during npm start
+                              ↓
+Developer's MCP App Server → Exchanges token for clientId + clientSecret
+                              ↓
+                           Obtains OAuth token (POST /oauth/token)
+                              ↓
+                           WebSocket connection (wss://privos-host/api/v1/mcp-apps.relay)
+                              └─ Bearer token in Authorization header
+                                 ↓
+                                 └──────── JSON-RPC 2.0 over WS ────────────
 
 Privos Chat Host
+├── Pairing endpoint (generate URL, check status)
 ├── WebSocket relay (accepts connections from apps)
 ├── MCP Client (proxies to app via relay)
 ├── PostMessage Bridge (JSON-RPC 2.0 over postMessage)
+├── MinIO storage (.apps/{appId}/ bucket for app icons/assets)
+├── File management API (serves app files)
 └── App Registry + OAuth scope enforcement
 ```
 
