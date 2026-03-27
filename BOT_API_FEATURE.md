@@ -69,12 +69,13 @@ See [Supported Webhook Events Reference](./bot-webhooks/supported-webhook-events
 ### 6. Inline Keyboard
 
 - **Keyboard Buttons**: Messages can have interactive inline keyboard buttons displayed below the message content
-- **Button Types**: Supports multiple action types (callback, url, copy, message, bot-event)
+- **Button Types**: Supports multiple action types (callback, url, copy, message, bot-event, privos-flow)
 - **Keyboard Types**: Actions keyboards, single-select, and multi-select keyboards
 - **Visibility States**: Buttons can be active, inactive, or hidden
 - **One-Time**: Keyboards can be configured to collapse after first interaction
 - **Expiration**: Optional keyboard expiration timestamps
 - **bot-event Action**: Special button action that triggers existing BotWebhookEvent webhooks with custom metadata
+- **privos-flow Action**: Button action that calls a PrivOS Studio flow (chatflow/agentflow) with custom data
 - **Style Options**: Buttons support styling, emojis, and icons
 
 ## Database Schema
@@ -236,7 +237,7 @@ Content-Type: application/json
       {
         "id": "button1",
         "text": "Approve",
-        "action": "bot-event",             // Action type: callback, url, copy, message, bot-event
+        "action": "bot-event",             // Action type: callback, url, copy, message, bot-event, privos-flow
         "actionData": "{\"event\": \"message.mention\", \"botUserId\": \"bot123\", \"metadata\": {\"action\": \"approve\"}}"
       }
     ],
@@ -491,6 +492,68 @@ When clicked, the bot's webhook receives:
     }
   },
   "message": { ... }
+}
+```
+
+**Example privos-flow Button (callPrivosFlow)**:
+
+A button configured with:
+```json
+{
+  "id": "run_flow_btn",
+  "text": "Run Approval Flow",
+  "action": "privos-flow",
+  "actionData": "{\"flowId\": \"flow-abc-123\", \"data\": {\"action\": \"approve\", \"ticketId\": \"T-001\"}}",
+  "style": "success",
+  "emoji": "✅"
+}
+```
+
+When clicked, the server calls `callPrivosFlow()` which sends to PrivOS Studio:
+```
+POST {PRIVOS_FLOW_API_URL}/prediction/flow-abc-123
+Authorization: Bearer {PRIVOS_FLOW_API_KEY}
+
+{
+  "form": {
+    "data": "{\"action\":\"approve\",\"ticketId\":\"T-001\",\"sender\":{\"_id\":\"user123\",\"username\":\"john\"}}"
+  },
+  "chatId": "flow-abc-123"
+}
+```
+
+The `sender` field (`_id`, `username`) is automatically injected from the user who clicked the button.
+
+**actionData fields**:
+| Field | Required | Description |
+|-------|----------|-------------|
+| `flowId` | Yes | PrivOS Studio chatflow/agentflow ID |
+| `flowType` | No | `"callPrivosFlow"` (default) or `"chatWithAgentBot"` |
+| `data` | No | Custom data passed to the flow |
+
+**Example privos-flow Button (chatWithAgentBot)**:
+
+```json
+{
+  "id": "chat_btn",
+  "text": "Ask Agent",
+  "action": "privos-flow",
+  "actionData": "{\"flowId\": \"flow-xyz\", \"flowType\": \"chatWithAgentBot\", \"data\": {\"userBotId\": \"bot456\", \"message\": \"Hello agent\"}}",
+  "style": "primary"
+}
+```
+
+When clicked with `flowType: "chatWithAgentBot"`, calls `chatWithAgentBot()`:
+```
+POST {PRIVOS_FLOW_API_URL}/prediction/flow-xyz
+
+{
+  "form": {
+    "userId": "<clicked_user_id>",
+    "userBotId": "bot456",
+    "message": "Hello agent"
+  },
+  "chatId": "<clicked_user_id>"
 }
 ```
 
