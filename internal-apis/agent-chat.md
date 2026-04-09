@@ -26,6 +26,8 @@ Send a message from a bot user to a target user, optionally creating an in-app n
 | `userBotId` | string | Yes | Bot user ID to send from |
 | `message` | string | Yes | Message content |
 | `isNotification` | boolean | No | Create in-app notification (default: false) |
+| `inlineKeyboard` | IInlineKeyboard | No | Inline keyboard buttons attached to the message |
+| `replyMessageId` | string | No | Message ID to quote-reply to (creates a quote attachment) |
 
 **Request:**
 
@@ -35,6 +37,34 @@ Send a message from a bot user to a target user, optionally creating an in-app n
   "userBotId": "reminder.bot",
   "message": "You have 3 pending tasks that need attention",
   "isNotification": true
+}
+```
+
+**Request with Inline Keyboard:**
+
+```json
+{
+  "userId": "TARGET_USER_ID",
+  "userBotId": "ai-assistant",
+  "message": "Would you like to proceed?",
+  "inlineKeyboard": {
+    "type": "single_select",
+    "buttons": [
+      { "id": "yes", "text": "Yes", "action": "callback", "actionData": "confirm", "style": "primary" },
+      { "id": "no", "text": "No", "action": "callback", "actionData": "cancel", "style": "danger" }
+    ]
+  }
+}
+```
+
+**Request with Reply to Message:**
+
+```json
+{
+  "userId": "TARGET_USER_ID",
+  "userBotId": "ai-assistant",
+  "message": "Here is the answer to your question.",
+  "replyMessageId": "ORIGINAL_MSG_ID"
 }
 ```
 
@@ -162,10 +192,12 @@ The `reminder.bot` has special handling:
 
 ```typescript
 interface ISendMessageParams {
-  userId: string;          // Target user ID
-  userBotId: string;        // Bot user ID
-  message: string;          // Message content
-  isNotification?: boolean; // Create notification
+  userId: string;                  // Target user ID
+  userBotId: string;               // Bot user ID
+  message: string;                 // Message content
+  isNotification?: boolean;        // Create notification
+  inlineKeyboard?: IInlineKeyboard; // Inline keyboard buttons
+  replyMessageId?: string;         // Message ID to quote-reply to
 }
 
 interface ISendMessageResponse {
@@ -221,7 +253,43 @@ POST /api/v1/internal/agent-chat.sendMessage
 }
 ```
 
-### 3. System Notifications
+### 3. Bot with Inline Keyboard
+
+```http
+POST /api/v1/internal/agent-chat.sendMessage
+```
+
+```json
+{
+  "userId": "USER_ID",
+  "userBotId": "ai-assistant",
+  "message": "Your report is ready. What would you like to do?",
+  "inlineKeyboard": {
+    "type": "actions",
+    "buttons": [
+      { "id": "view", "text": "View Report", "action": "url", "actionData": "https://example.com/report/123" },
+      { "id": "download", "text": "Download PDF", "action": "callback", "actionData": "download_report_123" }
+    ]
+  }
+}
+```
+
+### 4. Reply to a User Message
+
+```http
+POST /api/v1/internal/agent-chat.sendMessage
+```
+
+```json
+{
+  "userId": "USER_ID",
+  "userBotId": "ai-assistant",
+  "message": "Based on your question, here is the answer...",
+  "replyMessageId": "ORIGINAL_MSG_ID"
+}
+```
+
+### 5. System Notifications
 
 ```http
 POST /api/v1/internal/agent-chat.sendMessage

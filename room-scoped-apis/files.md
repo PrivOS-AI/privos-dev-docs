@@ -197,6 +197,79 @@ curl -X DELETE "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/by-p
 
 ---
 
+### Move/Rename File
+
+```http
+PUT /api/v1/internal/rooms/:roomId/files/move
+```
+
+**Description:** Move or rename a file in MinIO within the room. Performs a copy-then-delete operation. If a file already exists at the destination, it will be replaced.
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `sourceKey` | string | Yes | Source file path (relative or full object key) |
+| `destinationKey` | string | Yes | Destination file path (relative or full object key) |
+| `root` | string | No | Storage root: `markdown` for `markdown/roomId/` prefix |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "status": "success",
+  "sourceKey": "ROOM_ID/Documents/report.pdf",
+  "destinationKey": "ROOM_ID/Archives/report.pdf",
+  "replaced": false
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sourceKey` | string | Full resolved source object key |
+| `destinationKey` | string | Full resolved destination object key |
+| `replaced` | boolean | Whether an existing file at the destination was replaced |
+
+**Example:**
+
+```bash
+# Move file to a different folder
+curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/move" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceKey": "Documents/report.pdf",
+    "destinationKey": "Archives/report.pdf"
+  }'
+
+# Rename a file in place
+curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/move" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceKey": "Documents/report.pdf",
+    "destinationKey": "Documents/report-final.pdf"
+  }'
+
+# Move within markdown root
+curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/move" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceKey": "draft.md",
+    "destinationKey": "published/draft.md",
+    "root": "markdown"
+  }'
+```
+
+---
+
 ### List File Versions
 
 ```http
@@ -341,6 +414,56 @@ curl -X POST "https://your-domain.com/api/v1/fileManagement/restore/v1234567800"
 
 ---
 
+### Sync File Changes
+
+```http
+POST /api/v1/internal/rooms/:roomId/files/sync
+```
+
+**Description:** Synchronize file/folder changes from MinIO to the database. Called by external services (AI Service, MCP Tools, etc.) after writing files directly to MinIO, so the database catalog stays in sync with MinIO state.
+
+For full documentation, see [file-sync.md](./file-sync.md).
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `changes` | array | Yes | List of file/folder changes to sync |
+| `changes[].path` | string | Yes | Path relative to `{roomId}/` (e.g., `Agent Artifacts/session1/report.md`) |
+| `changes[].action` | string | Yes | One of: `created`, `deleted`, `updated` |
+| `changes[].type` | string | No | Explicit hint: `file` or `folder`. If omitted, auto-detected via trailing `/` or file extension |
+
+**Path detection:** Trailing `/` or no file extension = folder. Has extension = file.
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "created": 2,
+  "updated": 1,
+  "deleted": 1,
+  "errors": []
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/sync" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "changes": [
+      { "path": "Agent Artifacts/session1/report.md", "action": "created" },
+      { "path": "Agent Artifacts/session1/old.md", "action": "deleted" }
+    ]
+  }'
+```
+
+---
+
 ## Error Codes
 
 | Error Code | HTTP Status | Description |
@@ -351,6 +474,8 @@ curl -X POST "https://your-domain.com/api/v1/fileManagement/restore/v1234567800"
 | `error-file-not-found` | 400 | File does not exist in storage |
 | `error-upload-url-failed` | 400 | Failed to generate presigned upload URL |
 | `error-delete-failed` | 400 | Failed to delete file from MinIO |
+| `error-move-failed` | 400 | Failed to move/rename file in MinIO |
+| `error-sync-failed` | 400 | Failed to sync file changes to database |
 
 ---
 

@@ -210,6 +210,135 @@ curl -X DELETE "https://your-domain.com/api/v1/internal/files.byPath?roomId=ROOM
 
 ---
 
+### Move/Rename File
+
+```http
+PUT /api/v1/internal/files.move
+```
+
+**Description:** Move or rename a file in MinIO within the same room. Performs a copy-then-delete operation. If a file already exists at the destination, it will be replaced.
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `roomId` | string | Yes | Room ID the file belongs to |
+| `sourceKey` | string | Yes | Source file path (relative or full object key) |
+| `destinationKey` | string | Yes | Destination file path (relative or full object key) |
+| `root` | string | No | Storage root: `markdown` for `markdown/roomId/` prefix |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "status": "success",
+  "sourceKey": "ROOM_ID/Documents/report.pdf",
+  "destinationKey": "ROOM_ID/Archives/report.pdf",
+  "replaced": false
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sourceKey` | string | Full resolved source object key |
+| `destinationKey` | string | Full resolved destination object key |
+| `replaced` | boolean | Whether an existing file at the destination was replaced |
+
+**Example:**
+
+```bash
+# Move file to a different folder
+curl -X PUT "https://your-domain.com/api/v1/internal/files.move" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "ROOM_ID",
+    "sourceKey": "Documents/report.pdf",
+    "destinationKey": "Archives/report.pdf"
+  }'
+
+# Rename a file in place
+curl -X PUT "https://your-domain.com/api/v1/internal/files.move" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "ROOM_ID",
+    "sourceKey": "Documents/report.pdf",
+    "destinationKey": "Documents/report-final.pdf"
+  }'
+
+# Move within markdown root
+curl -X PUT "https://your-domain.com/api/v1/internal/files.move" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "ROOM_ID",
+    "sourceKey": "draft.md",
+    "destinationKey": "published/draft.md",
+    "root": "markdown"
+  }'
+```
+
+---
+
+### Sync File Changes
+
+```http
+POST /api/v1/internal/files.sync
+```
+
+**Description:** Synchronize file/folder changes from MinIO to the database. Called by external services (AI Service, MCP Tools, etc.) after writing files directly to MinIO, so the database catalog stays in sync with MinIO state.
+
+For full documentation with all examples and edge cases, see [Room-Scoped File Sync API](../room-scoped-apis/file-sync.md).
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `roomId` | string | Yes | Room ID that owns the files |
+| `changes` | array | Yes | List of file/folder changes to sync |
+| `changes[].path` | string | Yes | Path relative to `{roomId}/` (e.g., `Agent Artifacts/session1/report.md`) |
+| `changes[].action` | string | Yes | One of: `created`, `deleted`, `updated` |
+| `changes[].type` | string | No | Explicit hint: `file` or `folder`. If omitted, auto-detected via trailing `/` or file extension |
+
+**Path detection:** Trailing `/` or no file extension = folder. Has extension = file.
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "created": 2,
+  "updated": 1,
+  "deleted": 1,
+  "errors": []
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST "https://your-domain.com/api/v1/internal/files.sync" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "ROOM_ID",
+    "changes": [
+      { "path": "Agent Artifacts/session1/output/", "action": "created" },
+      { "path": "Agent Artifacts/session1/output/report.md", "action": "created" },
+      { "path": "Agent Artifacts/session1/draft.md", "action": "updated" },
+      { "path": "Agent Artifacts/session1/old-output/", "action": "deleted" }
+    ]
+  }'
+```
+
+**Note:** This variant requires `roomId` in the request body. The room-scoped variant (`POST /api/v1/internal/rooms/:roomId/files/sync`) takes `roomId` from the URL path instead.
+
+---
+
 ## Task Processing
 
 Both upload and delete operations automatically trigger background tasks:
@@ -233,6 +362,8 @@ Task failures are logged as warnings but do not fail the API request. The primar
 | `error-forbidden` | 400 | Object key does not belong to this room |
 | `error-file-not-found` | 400 | File does not exist in storage |
 | `error-delete-failed` | 400 | Failed to delete file from MinIO |
+| `error-move-failed` | 400 | Failed to move/rename file in MinIO |
+| `error-sync-failed` | 400 | Failed to sync file changes to database |
 
 ---
 

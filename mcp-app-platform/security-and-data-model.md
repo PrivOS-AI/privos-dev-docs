@@ -60,6 +60,7 @@
     sidebar?: { toolName: string; title: string };
     standalone?: { toolName: string; title: string };
   };
+  localData?: Record<string, any>;
   _createdAt: Date;
   _updatedAt: Date;
 }

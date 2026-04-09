@@ -1,6 +1,6 @@
 # Users API
 
-Users API provides access to user information including positions and skills.
+Users API provides access to user information including positions, skills, and leaders.
 
 ## Base URL
 
@@ -132,16 +132,35 @@ GET /api/v1/internal/users.info?userId=USER_1&fields={"username":1,"name":1,"pos
         {
           "_id": "skill_2",
           "name": "TypeScript"
+        }
+      ],
+      "leaders": [
+        {
+          "_id": "leader_1",
+          "name": "Jane Smith",
+          "username": "jane.smith",
+          "rooms": [
+            { "_id": "room_1", "fname": "General" },
+            { "_id": "room_2", "fname": "Dev Team" }
+          ]
         },
         {
-          "_id": "skill_3",
-          "name": "Node.js"
+          "_id": "leader_2",
+          "name": "Bob Manager",
+          "username": "bob.manager",
+          "rooms": [
+            { "_id": "room_3", "fname": "Project Alpha" }
+          ]
         }
       ]
     }
   }
 }
 ```
+
+**Leaders Field:**
+
+The `leaders` array contains users who have the `leader` role in any room that the requested user belongs to. Each leader is grouped with all the rooms where they are a leader of this user. A leader who appears in multiple rooms will have all those rooms listed in their `rooms` array.
 
 ---
 
@@ -156,7 +175,8 @@ interface IUser {
   language?: string;
   position?: IPosition['_id'];
   skills?: ISkillReference[];
-  nameInsensitive?: string;  // Lowercase name for searching
+  leaders?: ILeader[];           // Only in users.info
+  nameInsensitive?: string;      // Lowercase name for searching
 }
 
 interface IPosition {
@@ -172,6 +192,18 @@ interface ISkillReference {
 interface ISkill {
   _id: string;
   name: string;
+}
+
+interface ILeader {
+  _id: string;
+  name: string;
+  username: string;
+  rooms: ILeaderRoom[];
+}
+
+interface ILeaderRoom {
+  _id: string;
+  fname: string;
 }
 ```
 

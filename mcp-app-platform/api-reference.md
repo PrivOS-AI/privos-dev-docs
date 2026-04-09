@@ -1,5 +1,7 @@
 # App Platform — API Reference
 
+> **Detailed documentation available:** See [apis/](./apis/) for comprehensive API docs with full request/response examples, data models, and error codes.
+
 ## REST Endpoints
 
 | Endpoint | Method | Auth | Description |
@@ -30,12 +32,18 @@ Tools apps can call via `callServerTool()` or React hooks:
 | Tool | Scope | Description |
 |------|-------|-------------|
 | `privos.context.get` | — | Room ID, name, user roles |
+| `privos.app.getLocalData` | — | Get app's localData storage |
+| `privos.app.setLocalData` | — | Set/update app's localData |
+| `privos.app.deleteLocalData` | — | Delete key from localData |
+| `privos.app.clearLocalData` | — | Clear all localData (requires confirmation) |
+| `privos.lists.create` | lists:write | Create a new list with fields and stages |
 | `privos.lists.getAll` | lists:read | All lists in room |
-| `privos.lists.get` | lists:read | Single list by ID with field definitions |
-| `privos.lists.getItems` | lists:read | Items in a list |
+| `privos.lists.get` | lists:read | Single list by ID or key, with field definitions |
+| `privos.lists.getItems` | lists:read | Items in a list (offset/count pagination, sortable, filterable by stage) |
 | `privos.lists.createItem` | lists:write | Create list item with custom field values |
 | `privos.lists.updateItem` | lists:write | Update list item |
 | `privos.lists.deleteItem` | lists:write | Delete list item |
+| `privos.lists.deleteItems` | lists:write | Batch delete items by IDs or custom field filter |
 | `privos.lists.addField` | lists:write | Add custom field definition to list |
 | `privos.lists.removeField` | lists:write | Remove custom field definition from list |
 | `privos.lists.updateList` | lists:write | Update list name/description |
@@ -46,6 +54,9 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `privos.lists.updateCustomField` | lists:write | Update a single custom field on an item |
 | `privos.lists.searchItems` | lists:read | Search items by name |
 | `privos.lists.getSubItems` | lists:read | Get child/sub-items of a parent item |
+| `privos.lists.getItemsByStages` | lists:read | Get items grouped by multiple stages |
+| `privos.lists.batchAddFields` | lists:write | Add multiple field definitions in one call |
+| `privos.lists.batchCreateItems` | lists:write | Create multiple items in one call |
 | `privos.stages.getByList` | lists:read | Get all stages (kanban columns) for a list |
 | `privos.stages.get` | lists:read | Get single stage by ID |
 | `privos.stages.create` | lists:write | Create a new stage |
@@ -117,9 +128,10 @@ Add a new custom field definition to a list.
 | Arg | Type | Required | Description |
 |-----|------|----------|-------------|
 | `listId` | string | Yes | List ID |
+| `fieldId` | string | No | Custom field ID (auto-generated if omitted) |
 | `name` | string | Yes | Field label |
-| `type` | enum | Yes | `TEXT`, `TEXTAREA`, `NUMBER`, `DATE`, `DATE_TIME`, `SELECT`, `MULTI_SELECT`, `CHECKBOX`, `URL` |
-| `options` | array | No | For SELECT/MULTI_SELECT: `[{ value: string }]` |
+| `type` | enum | Yes | `TEXT`, `TEXTAREA`, `NUMBER`, `DATE`, `DATE_TIME`, `SELECT`, `MULTI_SELECT`, `CHECKBOX`, `URL`, `USER`, `FILE`, `FILE_MULTIPLE`, `DOCUMENT`, `ASSIGNEE`, `DEADLINE`, `DEPENDENCIES` |
+| `options` | array | No | For SELECT/MULTI_SELECT: `[{ _id?, value, color? }]` |
 
 **Response:**
 ```json
