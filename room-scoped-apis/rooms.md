@@ -91,6 +91,8 @@ GET /api/v1/internal/rooms/:roomId/members
         "_id": "USER_ID",
         "username": "john.doe",
         "name": "John Doe",
+        "roles": ["admin", "user"],
+        "roomRoles": ["owner"],
         "position": {
           "_id": "POS_ID",
           "name": "Software Engineer"
@@ -140,6 +142,8 @@ GET /api/v1/internal/rooms/:roomId/members/:userId
       "_id": "USER_ID",
       "username": "john.doe",
       "name": "John Doe",
+      "roles": ["user"],
+      "roomRoles": ["owner"],
       "position": {
         "_id": "POS_ID",
         "name": "Software Engineer"

@@ -92,6 +92,8 @@ Get all members of a room with their positions and skills.
         "_id": "USER_1",
         "username": "john.doe",
         "name": "John Doe",
+        "roles": ["admin", "user"],
+        "roomRoles": ["owner"],
         "position": {
           "_id": "pos_1",
           "name": "Developer"
@@ -111,6 +113,8 @@ Get all members of a room with their positions and skills.
         "_id": "USER_2",
         "username": "jane.smith",
         "name": "Jane Smith",
+        "roles": ["user"],
+        "roomRoles": ["moderator"],
         "position": {
           "_id": "pos_2",
           "name": "Designer"
@@ -155,6 +159,8 @@ Get detailed information about a specific user within a room.
       "_id": "USER_1",
       "username": "john.doe",
       "name": "John Doe",
+      "roles": ["admin", "user"],
+      "roomRoles": ["owner"],
       "position": {
         "_id": "pos_1",
         "name": "Developer"
