@@ -2,7 +2,7 @@
 
 ## Overview
 
-Manage files in MinIO object storage without room-scoped authentication. Provides presigned URLs for direct uploads/downloads, file listing with manifest, file deletion, and automatic task processing (embedding/Weaviate cleanup).
+Manage files in MinIO object storage without room-scoped authentication. Provides presigned URLs for direct uploads/downloads, file listing with manifest, file deletion, move, and database sync.
 
 Supports multiple storage roots via the `root` parameter:
 
@@ -290,7 +290,7 @@ curl -X PUT "https://your-domain.com/api/v1/internal/files.move" \
 POST /api/v1/internal/files.sync
 ```
 
-**Description:** Synchronize file/folder changes from MinIO to the database. Called by external services (AI Service, MCP Tools, etc.) after writing files directly to MinIO, so the database catalog stays in sync with MinIO state.
+**Description:** Synchronize MinIO state → database. Called by external services (AI Service, MCP Tools, etc.) after writing files directly to MinIO. The server always reads MinIO as the source of truth — the payload is a hint about which paths changed.
 
 For full documentation with all examples and edge cases, see [Room-Scoped File Sync API](../room-scoped-apis/file-sync.md).
 
@@ -299,12 +299,14 @@ For full documentation with all examples and edge cases, see [Room-Scoped File S
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `roomId` | string | Yes | Room ID that owns the files |
-| `changes` | array | Yes | List of file/folder changes to sync |
-| `changes[].path` | string | Yes | Path relative to `{roomId}/` (e.g., `Agent Artifacts/session1/report.md`) |
-| `changes[].action` | string | Yes | One of: `created`, `deleted`, `updated` |
-| `changes[].type` | string | No | Explicit hint: `file` or `folder`. If omitted, auto-detected via trailing `/` or file extension |
+| `paths` | string[] | Yes | Non-empty list of paths relative to `{roomId}/` on MinIO |
 
-**Path detection:** Trailing `/` or no file extension = folder. Has extension = file.
+**Path detection:**
+
+| Rule | Example | Result |
+|------|---------|--------|
+| Trailing `/` | `"Agent Artifacts/session1/"` | Folder → `syncFolder()` against MinIO |
+| No trailing `/` | `"Agent Artifacts/session1/report.md"` | File → stat MinIO → upsert or delete DB record |
 
 **Response:**
 
@@ -326,16 +328,74 @@ curl -X POST "https://your-domain.com/api/v1/internal/files.sync" \
   -H "Content-Type: application/json" \
   -d '{
     "roomId": "ROOM_ID",
-    "changes": [
-      { "path": "Agent Artifacts/session1/output/", "action": "created" },
-      { "path": "Agent Artifacts/session1/output/report.md", "action": "created" },
-      { "path": "Agent Artifacts/session1/draft.md", "action": "updated" },
-      { "path": "Agent Artifacts/session1/old-output/", "action": "deleted" }
+    "paths": [
+      "Agent Artifacts/session1/",
+      "Documents/summary.md"
     ]
   }'
 ```
 
 **Note:** This variant requires `roomId` in the request body. The room-scoped variant (`POST /api/v1/internal/rooms/:roomId/files/sync`) takes `roomId` from the URL path instead.
+
+---
+
+### List Incoming Shared Folders
+
+```http
+GET /api/v1/internal/files.sharedFolders.incoming
+```
+
+**Description:** List all folders shared TO a room from other rooms. Use `detail=true` to include the full file manifest per folder.
+
+For full documentation, response fields, and examples, see [Room-Scoped Shared Folders API](../room-scoped-apis/shared-folders.md).
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `roomId` | string | Yes | Room ID to list incoming shares for |
+| `detail` | string | No | Set to `true` to include `files` array with presigned URLs per folder |
+
+**Examples:**
+
+```bash
+# Metadata only
+curl -X GET "https://your-domain.com/api/v1/internal/files.sharedFolders.incoming?roomId=ROOM_ID" \
+  -H "x-api-key: YOUR_API_KEY"
+
+# With files manifest
+curl -X GET "https://your-domain.com/api/v1/internal/files.sharedFolders.incoming?roomId=ROOM_ID&detail=true" \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+---
+
+### List Outgoing Shared Folders
+
+```http
+GET /api/v1/internal/files.sharedFolders.outgoing
+```
+
+**Description:** List all folders shared FROM a room to other rooms. Same response structure as incoming.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `roomId` | string | Yes | Room ID to list outgoing shares for |
+| `detail` | string | No | Set to `true` to include `files` array with presigned URLs per folder |
+
+**Examples:**
+
+```bash
+# Metadata only
+curl -X GET "https://your-domain.com/api/v1/internal/files.sharedFolders.outgoing?roomId=ROOM_ID" \
+  -H "x-api-key: YOUR_API_KEY"
+
+# With files manifest
+curl -X GET "https://your-domain.com/api/v1/internal/files.sharedFolders.outgoing?roomId=ROOM_ID&detail=true" \
+  -H "x-api-key: YOUR_API_KEY"
+```
 
 ---
 
@@ -364,6 +424,7 @@ Task failures are logged as warnings but do not fail the API request. The primar
 | `error-delete-failed` | 400 | Failed to delete file from MinIO |
 | `error-move-failed` | 400 | Failed to move/rename file in MinIO |
 | `error-sync-failed` | 400 | Failed to sync file changes to database |
+| `error-shared-folders-failed` | 400 | Failed to list shared folders |
 
 ---
 

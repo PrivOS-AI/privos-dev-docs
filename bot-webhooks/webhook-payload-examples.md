@@ -75,6 +75,41 @@ Detailed payload examples for all webhook event types.
 
 **Note**: The `message.mention` event uses different payload structure than other message events. It includes `form` object instead of `room`, and message uses raw field names (`_id`, `rid`, `msg`).
 
+### Bot Mention (`message.bot_mention`)
+
+Delivered only to the bot(s) that were @mentioned. Uses `deliverToBot()`.
+
+```json
+{
+    "event": "message.bot_mention",
+    "timestamp": "2024-01-05T11:30:00.000Z",
+    "bot": { ... },
+    "room": {
+        "id": "GENERAL",
+        "name": "general",
+        "type": "c"
+    },
+    "form": {
+        "roomId": "GENERAL",
+        "roomName": "general",
+        "roomSessionKey": "eyJhbGciOiJIUzI1NiIs...",
+        "privosEndpointUrl": "https://your-privos-chat.com"
+    },
+    "message": {
+        "_id": "msg123",
+        "rid": "GENERAL",
+        "msg": "Hey @Bot11 what's the weather?",
+        "userId": "user123",
+        "username": "john",
+        "mentions": [
+            { "_id": "694b67f394ee87bd045c2ad1", "username": "Bot11" }
+        ]
+    }
+}
+```
+
+**Note**: Unlike `message.mention`, this event includes both `room` and `form` objects. The `message` includes `userId` and `username` of the sender. Only bots that are explicitly @mentioned receive this event.
+
 ### Inline Button Click (`message.mention` with metadata)
 
 When an inline button with `bot-event` action is clicked:

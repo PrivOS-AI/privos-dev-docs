@@ -83,6 +83,24 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `privos.rooms.getMembers` | rooms:read | Room member list |
 | `privos.users.get` | users:read | User profile by ID |
 | `privos.users.getCurrent` | users:read | Current user profile |
+| `privos.db.registerCollection` | db:schema:write | Register app DB collection with schema |
+| `privos.db.updateSchema` | db:schema:write | Update collection schema fields |
+| `privos.db.getSchema` | db:schema:read | Get collection schema definition |
+| `privos.db.listCollections` | db:schema:read | List all app collections |
+| `privos.db.dropCollection` | db:schema:write | Drop collection and schema |
+| `privos.db.create` | db:write | Create record in collection |
+| `privos.db.createMany` | db:write | Batch create records (max 100) |
+| `privos.db.get` | db:read | Get record by ID |
+| `privos.db.update` | db:write | Update record by ID |
+| `privos.db.updateMany` | db:write | Update records matching filter |
+| `privos.db.delete` | db:write | Soft-delete record by ID |
+| `privos.db.deleteMany` | db:write | Soft-delete records matching filter |
+| `privos.db.query` | db:read | Query with filters, sort, pagination |
+| `privos.db.count` | db:read | Count records matching filter |
+| `privos.db.aggregate` | db:read | Aggregation (count/sum/avg/min/max) |
+| `privos.db.populate` | db:read | Resolve reference fields (1-level) |
+
+> **Database API:** See [apis/tools-database.md](./apis/tools-database.md) for full database tool documentation with examples.
 
 ## Tool Details
 

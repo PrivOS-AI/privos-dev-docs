@@ -200,6 +200,34 @@ interface IRoom {
 | Private Group | `p` | Private group |
 | Direct Message | `d` | Direct message |
 
+### Test Brain Connection
+
+```http
+POST /api/v1/rooms.testBrainConnection
+```
+
+Validate a Privos Brain endpoint and fetch available providers/models. Used by the Edit Room UI to test room-level Brain configuration before saving.
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `rid` | string | Yes | Room ID |
+| `brainUrl` | string | Yes | Brain endpoint URL (must be http/https, no private IPs) |
+| `brainApiKey` | string | Yes | API key for the Brain instance. Use `__use_existing__` to reuse stored key. |
+
+**Response (200):**
+
+```json
+{
+  "providers": [{ "id": "anthropic", "name": "Anthropic" }],
+  "models": [{ "id": "claude-sonnet-4-20250514", "name": "Claude Sonnet", "providerId": "anthropic" }],
+  "success": true
+}
+```
+
+**Permission:** `edit-room` on the target room.
+
 ## Error Responses
 
 | Error Code | Description |

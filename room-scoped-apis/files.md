@@ -2,7 +2,7 @@
 
 ## Overview
 
-Manage files in MinIO object storage within a specific room context. Provides presigned URLs for direct browser uploads/downloads, file listing with manifest, and file deletion.
+Manage files in MinIO object storage within a specific room context. Provides presigned URLs for direct browser uploads/downloads, file listing with manifest, file deletion, and file sync.
 
 Supports multiple storage roots via the `root` parameter:
 
@@ -270,6 +270,58 @@ curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/move" \
 
 ---
 
+### Sync File Changes
+
+```http
+POST /api/v1/internal/rooms/:roomId/files/sync
+```
+
+**Description:** Synchronize MinIO state → database. Called by external services (AI Service, MCP Tools, etc.) after writing files directly to MinIO. The server always reads MinIO as the source of truth — the payload is a hint about which paths changed.
+
+For full documentation, see [file-sync.md](./file-sync.md).
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `paths` | string[] | Yes | Non-empty list of paths relative to `{roomId}/` on MinIO |
+
+**Path detection:**
+
+| Rule | Example | Result |
+|------|---------|--------|
+| Trailing `/` | `"Agent Artifacts/session1/"` | Folder → `syncFolder()` against MinIO |
+| No trailing `/` | `"Agent Artifacts/session1/report.md"` | File → stat MinIO → upsert or delete DB record |
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "created": 2,
+  "updated": 1,
+  "deleted": 1,
+  "errors": []
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/sync" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paths": [
+      "Agent Artifacts/session1/",
+      "Documents/summary.md"
+    ]
+  }'
+```
+
+---
+
 ### List File Versions
 
 ```http
@@ -414,52 +466,64 @@ curl -X POST "https://your-domain.com/api/v1/fileManagement/restore/v1234567800"
 
 ---
 
-### Sync File Changes
+### List Incoming Shared Folders
 
 ```http
-POST /api/v1/internal/rooms/:roomId/files/sync
+GET /api/v1/internal/rooms/:roomId/files/shared-folders/incoming
 ```
 
-**Description:** Synchronize file/folder changes from MinIO to the database. Called by external services (AI Service, MCP Tools, etc.) after writing files directly to MinIO, so the database catalog stays in sync with MinIO state.
+**Description:** List all folders shared TO this room from other rooms. Use `detail=true` to include the full file manifest per folder.
 
-For full documentation, see [file-sync.md](./file-sync.md).
+For full documentation, response fields, and examples, see [Shared Folders API](./shared-folders.md).
 
-**Body Parameters:**
+**Query Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `changes` | array | Yes | List of file/folder changes to sync |
-| `changes[].path` | string | Yes | Path relative to `{roomId}/` (e.g., `Agent Artifacts/session1/report.md`) |
-| `changes[].action` | string | Yes | One of: `created`, `deleted`, `updated` |
-| `changes[].type` | string | No | Explicit hint: `file` or `folder`. If omitted, auto-detected via trailing `/` or file extension |
+| `detail` | string | No | Set to `true` to include `files` array with presigned URLs per folder |
 
-**Path detection:** Trailing `/` or no file extension = folder. Has extension = file.
-
-**Response:**
-
-```json
-{
-  "status": "success",
-  "created": 2,
-  "updated": 1,
-  "deleted": 1,
-  "errors": []
-}
-```
-
-**Example:**
+**Examples:**
 
 ```bash
-curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/sync" \
+# Metadata only
+curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/shared-folders/incoming" \
   -H "x-api-key: YOUR_API_KEY" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "changes": [
-      { "path": "Agent Artifacts/session1/report.md", "action": "created" },
-      { "path": "Agent Artifacts/session1/old.md", "action": "deleted" }
-    ]
-  }'
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# With files manifest
+curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/shared-folders/incoming?detail=true" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+---
+
+### List Outgoing Shared Folders
+
+```http
+GET /api/v1/internal/rooms/:roomId/files/shared-folders/outgoing
+```
+
+**Description:** List all folders shared FROM this room to other rooms. Same response structure as incoming.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `detail` | string | No | Set to `true` to include `files` array with presigned URLs per folder |
+
+**Examples:**
+
+```bash
+# Metadata only
+curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/shared-folders/outgoing" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# With files manifest
+curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/shared-folders/outgoing?detail=true" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 ---
@@ -476,6 +540,7 @@ curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/files/sync" 
 | `error-delete-failed` | 400 | Failed to delete file from MinIO |
 | `error-move-failed` | 400 | Failed to move/rename file in MinIO |
 | `error-sync-failed` | 400 | Failed to sync file changes to database |
+| `error-shared-folders-failed` | 400 | Failed to list shared folders |
 
 ---
 

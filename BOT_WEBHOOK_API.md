@@ -98,6 +98,7 @@ All webhook payloads include these fields:
 | `message.edited` | Message edited | `bot`, `room`, `message` |
 | `message.deleted` | Message deleted | `bot`, `room`, `message` |
 | `message.mention` | Message with @mentions | `bot`, `form`, `message` |
+| `message.bot_mention` | Bot specifically @mentioned | `bot`, `room`, `form`, `message` |
 
 **Room Events**
 
@@ -141,7 +142,7 @@ All webhook payloads include these fields:
 ### Payload Examples
 
 See [Detailed Payload Examples](./bot-webhooks/webhook-payload-examples.md) for comprehensive examples of all event types including:
-- Message events (new, edited, deleted, mention, inline buttons)
+- Message events (new, edited, deleted, mention, bot mention, inline buttons)
 - List item events (created, deleted, stage changed, attributes changed)
 - File events (created, updated, deleted)
 - Folder events (created, deleted, renamed)
@@ -149,6 +150,8 @@ See [Detailed Payload Examples](./bot-webhooks/webhook-payload-examples.md) for 
 #### Key Notes
 
 **message.mention**: Uses `form` object (with `roomSessionKey` and `privosEndpointUrl`) instead of standard `room` object. Message uses raw field names (`_id`, `rid`, `msg`) with `mentions` array.
+
+**message.bot_mention**: Delivered only to the bot(s) explicitly mentioned in the message. Unlike `message.mention`, it includes both `room` and `form`, and the message payload includes sender fields such as `userId` and `username`.
 
 **Inline Button Clicks**: When a button with `bot-event` action is clicked, webhook receives `message.mention` event with `metadata` in the `form` object for identifying the action.
 

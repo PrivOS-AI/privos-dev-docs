@@ -31,7 +31,7 @@ This implementation provides a complete Bot API system similar to Telegram's Bot
 
 ### 3. Webhook System
 
-- **Event Filtering**: Subscribe to specific events (18 event types available)
+- **Event Filtering**: Subscribe to specific events (20 event types available)
 - **Room-based Filtering**: Only receive events from rooms where the bot is added
 - **HMAC Signatures**: Webhook payloads signed with SHA256 for security
 - **Retry Logic**: Automatic retry with exponential backoff (up to 24 attempts)
@@ -39,9 +39,9 @@ This implementation provides a complete Bot API system similar to Telegram's Bot
 
 #### Supported Event Types
 
-18 total event types across 6 categories:
+20 total event types across 6 categories:
 
-- **Message Events** (4): `message.new`, `message.edited`, `message.deleted`, `message.mention`
+- **Message Events** (5): `message.new`, `message.edited`, `message.deleted`, `message.mention`, `message.bot_mention`
 - **Room Events** (2): `room.joined`, `room.left`
 - **User Events** (2): `user.joined`, `user.left`
 - **List Item Events** (4): `list.item.created`, `list.item.deleted`, `list.item.stage_changed`, `list.item.attributes_changed`

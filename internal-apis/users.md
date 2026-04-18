@@ -134,6 +134,7 @@ GET /api/v1/internal/users.info?userId=USER_1&fields={"username":1,"name":1,"pos
           "name": "TypeScript"
         }
       ],
+      "__rooms": ["room_1", "room_2", "room_3"],
       "leaders": [
         {
           "_id": "leader_1",
@@ -175,6 +176,7 @@ interface IUser {
   language?: string;
   position?: IPosition['_id'];
   skills?: ISkillReference[];
+  __rooms?: string[];            // Room IDs the user belongs to (only in users.info)
   leaders?: ILeader[];           // Only in users.info
   nameInsensitive?: string;      // Lowercase name for searching
 }
@@ -221,7 +223,9 @@ Use the `fields` parameter to limit returned data:
 }
 ```
 
-Returns only specified fields. Position and skills are automatically included and enriched.
+Returns only specified fields. Position, skills, and `__rooms` are automatically included and enriched.
+
+> **Note:** The `fields` query parameter is parsed by the system but overridden by default field projections. Fields like `position`, `skills`, and `__rooms` are always force-included in `users.info` regardless of the `fields` parameter.
 
 ## Common Queries
 

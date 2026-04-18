@@ -53,8 +53,9 @@ Privos Chat Host
 
 | Doc | Description |
 |-----|-------------|
-| [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, run |
+| [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
-| [React SDK](./react-sdk-reference.md) | `@privos/app-react` hooks |
+| [React SDK](./react-sdk-reference.md) | `@privos/app-react` hooks (`useAppDb`, `useLists`, etc.) |
+| [Database API](./apis/tools-database.md) | `privos.db.*` tools — schema, CRUD, query, references |
 | [Admin Guide](./admin-guide.md) | Register direct/relay apps, configure install perms |
 | [Security & Data Model](./security-and-data-model.md) | Sandbox, OAuth, relay security, schema |

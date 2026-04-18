@@ -1,8 +1,8 @@
 # Supported Webhook Events Reference
 
-Complete reference of all 18 webhook event types organized by category.
+Complete reference of all 19 webhook event types organized by category.
 
-## Message Events (4)
+## Message Events (5)
 
 | Event | Description | Triggered When |
 |-------|-------------|----------------|
@@ -10,6 +10,7 @@ Complete reference of all 18 webhook event types organized by category.
 | `message.edited` | Message edited | A user edits their message in a room with the bot |
 | `message.deleted` | Message deleted | A user deletes their message in a room with the bot |
 | `message.mention` | Message with mention | A user sends a message with @mentions in a room with the bot |
+| `message.bot_mention` | Bot specifically mentioned | A user @mentions the bot directly in a message. Delivered only to the mentioned bot(s) via `deliverToBot()` |
 
 ## Room Events (2)
 
@@ -59,5 +60,7 @@ Complete reference of all 18 webhook event types organized by category.
 **File Paths**: File events use `folderPath` (display path) instead of internal MinIO paths for security reasons.
 
 **Mention Event Structure**: The `message.mention` event uses a different payload structure with a `form` object instead of `room`, and raw field names (`_id`, `rid`, `msg`).
+
+**Bot Mention vs Mention**: `message.mention` broadcasts to all bots in the room when any user is mentioned. `message.bot_mention` delivers only to the specific bot(s) that were @mentioned, using `deliverToBot()` (not affected by `globalListener`).
 
 **Inline Buttons**: Buttons with `bot-event` action trigger `message.mention` webhooks with `metadata` in the `form` object.

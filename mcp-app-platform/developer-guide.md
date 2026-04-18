@@ -251,7 +251,7 @@ If the pairing URL is lost, retrieve credentials from admin:
 
 ### Handling MCP Messages
 
-Relay receives the same JSON-RPC 2.0 messages as direct apps:
+Relay receives the same JSON-RPC 2.0 messages as direct apps, and can also receive server-initiated `tools/call` requests when the relay app invokes Privos server tools via `callServerTool()`:
 
 ```typescript
 function handleMcpMessage(msg) {
@@ -357,3 +357,217 @@ Include `/.well-known/mcp/manifest.json` served locally:
   "author": { "name": "Your Name" }
 }
 ```
+
+---
+
+## 9. App Database (privos.db.*)
+
+Give your app a full database with schema registration, CRUD, queries, references, and migrations — all without managing your own database server.
+
+> **When to use:** App needs to store structured, queryable data (CRM contacts, inventory, form submissions, etc.). For simple tabular data, consider `privos.lists.*` instead.
+
+### Quick Start
+
+**Step 1 — Request scopes** in your manifest:
+
+```json
+{
+  "name": "com.example.crm",
+  "scopes": ["db:read", "db:write", "db:schema:read", "db:schema:write"]
+}
+```
+
+**Step 2 — Register schema on first load:**
+
+```tsx
+import { useAppDb } from '@privos/app-react';
+import { useEffect, useRef } from 'react';
+
+function App() {
+  const db = useAppDb();
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Register collections (idempotent — errors if already exists, so catch)
+    db.registerCollection('companies', [
+      { name: 'name', type: 'string', required: true, maxLength: 200 },
+      { name: 'industry', type: 'string', enum: ['tech', 'finance', 'healthcare', 'other'] },
+      { name: 'size', type: 'number', min: 1 },
+    ]).catch(() => {}); // already registered — ok
+
+    db.registerCollection('contacts', [
+      { name: 'name', type: 'string', required: true },
+      { name: 'email', type: 'string', maxLength: 254 },
+      { name: 'phone', type: 'string' },
+      { name: 'tags', type: 'array', itemType: 'string', maxItems: 10 },
+      { name: 'company', type: 'reference', refCollection: 'companies', onDelete: 'set-null' },
+    ], [
+      { fields: { email: 1 }, unique: true },
+    ]).catch(() => {});
+  }, []);
+
+  return <ContactList />;
+}
+```
+
+**Step 3 — CRUD operations:**
+
+```tsx
+function ContactList() {
+  const db = useAppDb();
+  const [contacts, setContacts] = useState([]);
+
+  // Load contacts
+  const loadContacts = async () => {
+    const { records } = await db.query('contacts')
+      .where('tags', 'array-contains', 'vip')
+      .orderBy('name', 'asc')
+      .limit(50)
+      .execute();
+    setContacts(records);
+  };
+
+  // Create
+  const addContact = async () => {
+    const contact = await db.create('contacts', {
+      name: 'Alice Nguyen',
+      email: 'alice@example.com',
+      tags: ['vip', 'partner'],
+      company: { _ref: 'companies/507f1f77bcf86cd799439011' },
+    });
+    setContacts(prev => [...prev, contact]);
+  };
+
+  // Update
+  const updateContact = async (id, data) => {
+    const updated = await db.update('contacts', id, data);
+    setContacts(prev => prev.map(c => c._id === id ? updated : c));
+  };
+
+  // Delete (soft-delete)
+  const deleteContact = async (id) => {
+    await db.delete('contacts', id);
+    setContacts(prev => prev.filter(c => c._id !== id));
+  };
+
+  useEffect(() => { loadContacts(); }, []);
+
+  return (
+    <ul>
+      {contacts.map(c => (
+        <li key={c._id}>
+          {c.name} — {c.email}
+          <button onClick={() => deleteContact(c._id)}>Delete</button>
+        </li>
+      ))}
+      <button onClick={addContact}>Add Contact</button>
+    </ul>
+  );
+}
+```
+
+### Data Scope: Global vs Room
+
+| Scope | Collection Name | Use Case |
+|-------|----------------|----------|
+| `global` (default) | `app_{appId}_{collection}` | Shared data across all rooms (user profiles, settings, catalogs) |
+| `room` | `app_{appId}_{roomId}_{collection}` | Per-room isolation (project tasks, team notes, channel polls) |
+
+```tsx
+// Global — same data in every room
+db.registerCollection('products', [
+  { name: 'sku', type: 'string', required: true },
+  { name: 'price', type: 'number' },
+]);
+
+// Room-scoped — each room has its own data
+db.registerCollection('poll_votes', [
+  { name: 'userId', type: 'string', required: true },
+  { name: 'choice', type: 'string', required: true },
+], undefined, 'room');
+```
+
+### Query Builder
+
+Chainable, Firestore-style query builder:
+
+```tsx
+// Basic filter + sort + pagination
+const page1 = await db.query('contacts')
+  .where('industry', '==', 'tech')
+  .where('size', '>=', 50)
+  .orderBy('name', 'asc')
+  .limit(20)
+  .offset(0)
+  .execute();
+// → { records: [...], total: 142 }
+
+// Count without fetching records
+const { count } = await db.query('contacts')
+  .where('tags', 'array-contains', 'vip')
+  .count();
+
+// Aggregation
+const stats = await db.aggregate('contacts', 'count');
+const avgSize = await db.aggregate('companies', 'avg', 'size',
+  [{ field: 'industry', op: '==', value: 'tech' }]
+);
+const byIndustry = await db.aggregate('companies', 'count', undefined,
+  undefined, 'industry'  // groupBy
+);
+```
+
+**Available operators:** `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not-in`, `array-contains`, `array-contains-any`
+
+### References & Population
+
+Link documents across collections:
+
+```tsx
+// 1. Create a company
+const company = await db.create('companies', { name: 'ACME Inc', industry: 'tech' });
+
+// 2. Create a contact referencing that company
+const contact = await db.create('contacts', {
+  name: 'Bob',
+  company: { _ref: `companies/${company._id}` },
+});
+
+// 3. Populate — resolve references to full documents (1-level deep)
+const populated = await db.populate('contacts', [contact._id], ['company']);
+// populated[0].company → { _id: '...', name: 'ACME Inc', industry: 'tech', ... }
+```
+
+**Cascade delete rules** — set on the reference field at schema registration:
+
+| Rule | Behavior when referenced doc is deleted |
+|------|----------------------------------------|
+| `cascade` | Auto soft-delete all referencing records |
+| `set-null` | Set reference field to null |
+| `restrict` | Block deletion if references exist |
+| `no-action` | Do nothing (orphan refs allowed) |
+
+### Limits & Security
+
+| Constraint | Value |
+|-----------|-------|
+| Collections per app | 20 max |
+| Query result size | 1000 docs max |
+| Batch create | 100 records max |
+| Query timeout | 10 seconds |
+| Populate fields | 5 per call |
+| Populate records | 1000 per call |
+| Collection name | `^[a-zA-Z][a-zA-Z0-9_]{0,63}$` |
+| Field names | No `$` or `.` allowed |
+
+- `appId` is server-set from OAuth token — apps cannot impersonate each other
+- Schema validation via MongoDB `$jsonSchema` rejects malformed writes at the database level
+- All queries go through a safe operator whitelist — no raw MongoDB operators exposed
+- Soft-delete: `privos.db.delete` sets `_deletedAt`, records are excluded from queries automatically
+
+### Full API Reference
+
+See [Database Tools API Reference](./apis/tools-database.md) for all 16 tools with full input schemas and response formats.
