@@ -6,6 +6,70 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-04-20
+
+### Authorization
+
+#### View Room Hidden Files Permission
+**Summary:** New room-scoped permission `view-room-hidden-files` gates visibility of files and folders whose names start with `.` (e.g. `.env`, `.gitignore`). Default roles: `admin`, `owner`, `leader`. Members lose access to dot-prefixed files unless explicitly granted.
+
+**Implementation:**
+- `apps/meteor/app/authorization/server/constant/permissions.ts` — registers the permission (auto-loaded on startup; no migration required).
+- `apps/meteor/app/api/server/v1/fileManagement.ts` — shared `HIDDEN_NAME_RE = /^\./` + `canSeeHidden(userId, roomId)` helper; enforced on:
+  - List files (`GET /file-management.files.channel/:channelId`)
+  - List folders (`GET /file-management.folders.channel/:channelId`) and `folders.all`
+  - Folder content (`GET /file-management.folders/content/:fatherId`) — also blocks direct entry into a hidden folder
+  - Root content (`GET /file-management.channels/:channelId/root`)
+  - Stats (`GET /file-management.stats/:channelId`)
+  - Single file / folder GET — returns `not found` to avoid leaking existence
+  - Path resolve (`GET /file-management.resolve-path/:channelId`) — any hidden segment in the path is treated as unresolved
+- `apps/meteor/server/models/Files.ts` & `Folders.ts` — `findFilesByChannel`, `countFilesByChannel`, `findFoldersByChannel`, `countFoldersByChannel`, `getFolderContent` accept optional `excludeHiddenRegex` that adds `{ name: { $not: regex } }` to the Mongo query (keeps paginated `total` consistent with filtered page).
+- `packages/i18n/src/locales/en.i18n.json` — permission label + description.
+- Tests: `apps/meteor/tests/unit/server/models/files-hidden-filter.tests.ts` — regex and query-shape coverage (7 passing).
+
+**Behavior:** Recursion is intrinsic — every nested list call re-checks, so walking into a non-hidden folder still hides dot-prefixed children.
+
+**Risk:** LOW — additive permission, default roles preserve existing UX for owners/leaders/admins.
+
+---
+
+## 2026-04-18
+
+### UX Improvements
+
+#### 1. Room Tab State Preservation
+**Summary:** Switching between room tabs (Lists, Files, Documents, File Viewer, MCP Apps, Agent Settings) no longer unmounts the previous tab. Scroll position, form state, iframe contents, and in-memory data are preserved.
+
+**Implementation:**
+- `Room.tsx` caches every visited `mainContentTab` component in a `useRef<Map>` and toggles visibility via `display: contents | none` instead of swapping children on `createElement`.
+- `McpAppTabWrapper.tsx` keeps every visited MCP app mounted per room session; only the active `mcpAppId` is visible. Iframe state and `postMessage` bridge survive tab switches.
+- Messages view uses the same visibility-toggle pattern so returning from a tab does not re-render the message list.
+
+**Trade-off:** Memory grows with the number of distinct tabs opened in a room; tabs are cleared when the room unmounts.
+
+#### 2. "Open in New Window" for Rooms and Room Tabs
+**Summary:** Rooms and room tabs can be opened in a standalone browser window.
+
+**Features:**
+- Sidebar (v1 + v2) `RoomMenu` kebab and `RoomContextMenu` right-click gain an **Open in new window** item when an `href` is provided by the caller (`SideBarItemTemplateWithData`, `TeamChannelItem`).
+- Room tabs (`RoomTabs.tsx`) support **Shift+Click** and **right-click → Open in new window** on Messages, Files, Agent Settings, Lists, File Viewer, Documents, and MCP app tabs. The URL is computed via `router.buildRoutePath` preserving current route params and search.
+- New window size matches current window dimensions with `noopener,noreferrer`.
+- New i18n key: `Open_in_new_window`.
+
+#### 3. MCP App Persistent Storage Proxy
+**Summary:** MCP apps can now persist values across reloads via two new PostMessage bridge methods.
+
+**Bridge methods (JSON-RPC 2.0):**
+- `host/storage.get` → `{ key }` → `{ value }`
+- `host/storage.set` → `{ key, value }` → `{ ok: true }`
+
+**Security:** Values are stored in the host's `localStorage` under a fixed `mcp-app:` prefix. Apps cannot read/write host keys such as `Meteor.loginToken`. There is currently no per-app namespace — apps should self-prefix with their app id to avoid collisions.
+
+**Related Documentation:**
+- [Developer Guide — Host PostMessage Bridge](./mcp-app-platform/developer-guide.md#8-host-postmessage-bridge)
+
+---
+
 ## 2026-04-16
 
 ### Completed Features

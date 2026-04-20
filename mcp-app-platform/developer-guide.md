@@ -191,7 +191,38 @@ When running inside the Privos iframe, `--rcx-color-*` variables are inherited f
 
 ---
 
-## 8. Relay Apps (WebSocket Connection)
+## 8. Host PostMessage Bridge
+
+Apps running in a sandboxed iframe communicate with the Privos host via `window.postMessage` using JSON-RPC 2.0. `@privos/app-react` wraps most of this, but these are the raw host-exposed methods:
+
+| Method | Direction | Params | Returns | Purpose |
+|--------|-----------|--------|---------|---------|
+| `HOST_CONTEXT_CHANGED` | Host → app | `{ theme }` | — | Notify app of theme switch |
+| `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |
+| `host/storage.get` | App → host | `{ key }` | `{ value }` | Read persistent value |
+| `host/storage.set` | App → host | `{ key, value }` | `{ ok: true }` | Write persistent value |
+
+### Persistent Storage
+
+`host/storage.get` / `host/storage.set` proxy to the host's `localStorage` under a sandboxed `mcp-app:` prefix. Apps cannot read or write host keys (e.g. Meteor login tokens).
+
+- Keys are stored as `mcp-app:<your-key>` in host storage — apps see only their key, not the prefix.
+- Values are strings; serialize JSON yourself (`JSON.stringify` before `set`, `JSON.parse` after `get`).
+- Storage is scoped to the Privos host origin and shared across app instances on that origin. There is **no per-app isolation yet** — collisions between apps on the same key are possible. Use a unique prefix such as `<appId>:`.
+- Missing keys return `{ value: null }`.
+
+Example (raw):
+
+```js
+// Write
+parent.postMessage({ jsonrpc: '2.0', id: 1, method: 'host/storage.set', params: { key: 'my-app:prefs', value: JSON.stringify({ theme: 'dark' }) } }, '*');
+// Read
+parent.postMessage({ jsonrpc: '2.0', id: 2, method: 'host/storage.get', params: { key: 'my-app:prefs' } }, '*');
+```
+
+---
+
+## 9. Relay Apps (WebSocket Connection)
 
 For apps behind NAT, firewall, or private networks, use the relay connection type. Your app connects outbound to Privos via WebSocket with OAuth credentials obtained through a one-click pairing flow.
 
@@ -360,7 +391,7 @@ Include `/.well-known/mcp/manifest.json` served locally:
 
 ---
 
-## 9. App Database (privos.db.*)
+## 10. App Database (privos.db.*)
 
 Give your app a full database with schema registration, CRUD, queries, references, and migrations — all without managing your own database server.
 
