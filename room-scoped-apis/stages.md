@@ -27,6 +27,7 @@ GET /api/v1/internal/rooms/:roomId/stages
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `listId` | string | Yes | Parent list ID |
+| `teamId` | string | No | Filter stages by assigned team (for cross-team workflow) |
 
 **Response:**
 
@@ -81,6 +82,7 @@ POST /api/v1/internal/rooms/:roomId/stages
 | `listId` | string | Yes | Parent list ID |
 | `color` | string | No | Hex color (default: #6b7280) |
 | `order` | number | No | Display order (default: appended to end) |
+| `assignedTeamId` | string | No | Assign this stage to a team for cross-team workflow |
 
 **Response:**
 
@@ -110,7 +112,8 @@ curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/stages" \
     "name": "Code Review",
     "listId": "LIST_ID",
     "color": "#8b5cf6",
-    "order": 2
+    "order": 2,
+    "assignedTeamId": "TEAM_ID"
   }'
 ```
 
@@ -163,6 +166,7 @@ PUT /api/v1/internal/rooms/:roomId/stages/:stageId
 | `name` | string | No | New stage name |
 | `color` | string | No | New hex color |
 | `order` | number | No | New display order |
+| `assignedTeamId` | string | No | Assign this stage to a team for cross-team workflow |
 
 **Response:**
 
@@ -190,7 +194,8 @@ curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/stages/STAGE_
   -H "Content-Type: application/json" \
   -d '{
     "name": "In Review",
-    "color": "#f59e0b"
+    "color": "#f59e0b",
+    "assignedTeamId": "TEAM_ID"
   }'
 ```
 
@@ -262,7 +267,8 @@ POST /api/v1/internal/rooms/:roomId/stages/batch-create
   stages: Array<{
     name: string,
     color?: string,
-    order?: number
+    order?: number,
+    assignedTeamId?: string
   }>
 }
 ```
@@ -299,7 +305,7 @@ curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/stages/batch
     "listId": "LIST_ID",
     "stages": [
       { "name": "To Do", "color": "#6b7280", "order": 0 },
-      { "name": "In Progress", "color": "#3b82f6", "order": 1 },
+      { "name": "In Progress", "color": "#3b82f6", "order": 1, "assignedTeamId": "TEAM_ID" },
       { "name": "Done", "color": "#10b981", "order": 2 }
     ]
   }'
@@ -352,6 +358,20 @@ curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/stages/batch
 ```
 
 ---
+
+## Cross-Team Workflow
+
+When a list has `crossTeamWorkflow: true`, stages can be assigned to specific teams:
+
+- **Assigned stages**: Only visible and the assigned team
+- **Unassigned stages**: Visible to all teams with access to the list
+- **Filtering**: Use `teamId` query parameter to filter stages by assigned team
+
+Example:
+```bash
+# Get only stages assigned to a specific team
+GET /api/v1/internal/rooms/:roomId/stages?listId=LIST_ID&teamId=TEAM_ID
+```
 
 ## Error Codes
 

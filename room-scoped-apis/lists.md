@@ -4,6 +4,8 @@
 
 Manage Kanban-style lists within a specific room. Lists contain custom field definitions and stages for organizing items.
 
+When the target room belongs to a team, the GET endpoints can also surface cross-team workflow lists shared into that team context. Those shared lists are marked with `isCrossTeamFromOtherRoom: true`.
+
 **Base Path:** `/api/v1/internal/rooms/:roomId/lists`
 
 ## Authentication
@@ -26,9 +28,18 @@ GET /api/v1/internal/rooms/:roomId/lists
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `text` | string | No | Filter lists by name |
+| `text` | string | No | Filter lists by name or description |
 | `offset` | number | No | Pagination offset (default: 0) |
 | `count` | number | No | Items per page (default: 50, max: 100) |
+
+**Behavior:**
+
+- If `roomId` is a standalone room, this endpoint returns lists that belong directly to that room.
+- If `roomId` belongs to a team, this endpoint returns:
+  - lists from the team main room and team child rooms
+  - cross-team lists shared into that team via stage assignment
+- Shared lists are marked with `isCrossTeamFromOtherRoom: true`.
+- Local/team-owned lists are marked with `isCrossTeamFromOtherRoom: false`.
 
 **Response:**
 
@@ -46,6 +57,8 @@ GET /api/v1/internal/rooms/:roomId/lists
         "templateKey": "sprint-backlog",
         "templateListKey": "sprint-backlog-v1",
         "description": "Current sprint items",
+        "crossTeamWorkflow": true,
+        "isCrossTeamFromOtherRoom": false,
         "fieldDefinitions": [
           {
             "_id": "FIELD_ID",
@@ -92,6 +105,7 @@ POST /api/v1/internal/rooms/:roomId/lists
 | `name` | string | Yes | List name |
 | `description` | string | No | List description |
 | `fieldDefinitions` | array | No | Array of field definition objects |
+| `crossTeamWorkflow` | boolean | No | Enable cross-team workflow for the list. Requires `manage-cross-team-workflow` permission when set to `true`. |
 | `stages` | array | No | Array of stage objects |
 
 **Field Definition Object:**
@@ -148,6 +162,7 @@ curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/lists" \
   -d '{
     "name": "Sprint Backlog",
     "description": "Current sprint items",
+    "crossTeamWorkflow": true,
     "fieldDefinitions": [
       {
         "name": "Priority",
@@ -175,6 +190,13 @@ curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/lists" \
 GET /api/v1/internal/rooms/:roomId/lists/:listId
 ```
 
+**Behavior:**
+
+- Returns a local list when the list belongs directly to `roomId`.
+- When `roomId` belongs to a team, this endpoint can also return a cross-team list shared into that team.
+- Cross-team shared lists are marked with `isCrossTeamFromOtherRoom: true`.
+- For cross-team shared lists, the returned `stages` are filtered to the current team context.
+
 **Response:**
 
 ```json
@@ -186,6 +208,8 @@ GET /api/v1/internal/rooms/:roomId/lists/:listId
       "name": "Sprint Backlog",
       "key": "sprint-backlog",
       "roomId": "ROOM_ID",
+      "crossTeamWorkflow": true,
+      "isCrossTeamFromOtherRoom": false,
       "fieldDefinitions": [...]
     },
     "stages": [...],
@@ -216,8 +240,11 @@ PUT /api/v1/internal/rooms/:roomId/lists/:listId
 |-----------|------|----------|-------------|
 | `name` | string | No | New list name |
 | `description` | string | No | New description |
+| `crossTeamWorkflow` | boolean | No | Enable or disable cross-team workflow. Changing this value requires `manage-cross-team-workflow` permission. |
 
 **Note:** If name is changed and list has no items, the `key` is auto-regenerated.
+
+**Important:** This update route still applies only to lists whose `roomId` matches the room in the URL. Cross-team shared lists are readable through team context, but are not updated through the shared room-scoped route.
 
 **Response:**
 
@@ -244,7 +271,8 @@ curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/lists/LIST_ID
   -H "Content-Type: application/json" \
   -d '{
     "name": "Updated Sprint Backlog",
-    "description": "Updated description"
+    "description": "Updated description",
+    "crossTeamWorkflow": false
   }'
 ```
 
@@ -677,9 +705,10 @@ POST /api/v1/internal/rooms/:roomId/lists/batch-delete
 
 | Error Code | Description |
 |------------|-------------|
-| `error-list-not-found` | List not found or doesn't belong to this room |
+| `error-list-not-found` | List not found |
 | `error-invalid-params` | Missing or invalid parameters |
-| `error-forbidden` | List doesn't belong to this room |
+| `error-forbidden` | List is not visible in this room or team context |
+| `error-unauthorized` | Missing permission to enable or modify cross-team workflow |
 | `error-field-not-found` | Field definition not found |
 | `error-option-not-found` | Field option not found |
 | `error-invalid-field-type` | Field doesn't support the operation |
