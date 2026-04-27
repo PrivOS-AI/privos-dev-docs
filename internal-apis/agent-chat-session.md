@@ -1,6 +1,6 @@
 # Agent Chat Session API
 
-Agent Chat Session API manages AI chat sessions with context-aware session resume and canvas artifacts (Markdown and HTML).
+Agent Chat Session API manages AI chat sessions with context-aware session resume. Session artifacts are served via the File Management system (see `/v1/ai-chat-session.artifacts`).
 
 ## Base URL
 
@@ -214,213 +214,38 @@ Remove entity context from a session (unlinks the session from a specific entity
 
 ---
 
-### Get Artifacts
+### Get Artifact Files
 
 ```http
-GET /api/v1/internal/agent-chat-session.getArtifacts?entityType=item&entityId=ITEM_ID&itemId=ITEM_ID
+GET /api/v1/ai-chat-session.artifacts?sessionId=SESSION_ID
 ```
 
-Retrieve canvas artifacts for a specific entity or item.
+List artifact files attached to an AI chat session. Files are stored in
+File Management under the `Agent Artifacts/{sessionId}` folder and include
+any assets produced during the session (markdown, HTML, uploads, etc.).
 
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `entityType` | string | Yes | Entity type (e.g., "item", "list", "room") |
-| `entityId` | string | Yes | Entity ID |
-| `itemId` | string | No | Item ID (for item-specific sessions) |
-
-**Request Examples:**
-
-```bash
-# Get session for an entity
-GET /api/v1/internal/agent-chat-session.getArtifacts?entityType=item&entityId=ITEM_123
-
-# Get session for a specific item
-GET /api/v1/internal/agent-chat-session.getArtifacts?entityType=item&entityId=ITEM_123&itemId=ITEM_456
-```
+| `sessionId` | string | Yes | AI chat session ID |
 
 **Response:**
 
 ```json
 {
   "success": true,
-  "data": {
-    "artifacts": {
-      "markdownCanvas": {
-        "_id": "canvas_1",
-        "title": "Project Plan",
-        "content": "# Project Plan\n\n## Overview\n...",
-        "description": "",
-        "canvasType": "markdown",
-        "currentVersion": 2,
-        "versions": [...],
-        "createdAt": "2024-01-15T10:00:00.000Z",
-        "updatedAt": "2024-01-17T14:30:00.000Z"
-      },
-      "htmlCanvas": {
-        "_id": "canvas_2",
-        "title": "Landing Page",
-        "content": "<!DOCTYPE html>...",
-        "description": "",
-        "canvasType": "html",
-        "currentVersion": 1,
-        "versions": [...],
-        "createdAt": "2024-01-15T11:00:00.000Z",
-        "updatedAt": "2024-01-16T09:00:00.000Z"
-      }
+  "files": [
+    {
+      "_id": "FILE_ID",
+      "name": "project-plan.md",
+      "file_type": "text/markdown",
+      "file_size": 2048,
+      "created_at": "2024-01-15T10:00:00.000Z",
+      "updated_at": "2024-01-17T14:30:00.000Z"
     }
-  }
+  ]
 }
-```
-
----
-
-### Update Canvas
-
-```http
-POST /api/v1/internal/agent-chat-session.canvas-update
-```
-
-Update or create a canvas artifact for an AI chat session.
-
-**Body Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `entityId` | string | Yes | Entity ID |
-| `itemId` | string | No | Item ID (for item-specific sessions) |
-| `roomId` | string | Yes | Room ID |
-| `canvasType` | string | Yes | Canvas type: `markdown` or `html` |
-| `canvasContent` | string | Yes | Canvas content |
-| `title` | string | No | Canvas title (default: "Canvas" or "Landing Page") |
-
-**Request:**
-
-```json
-{
-  "entityId": "ITEM_123",
-  "roomId": "ROOM_456",
-  "canvasType": "markdown",
-  "canvasContent": "# Updated Content\n\n## Changes\n...",
-  "title": "Updated Plan"
-}
-```
-
-**Response:**
-
-```json
-{
-  "success": true
-}
-```
-
-**Behavior:**
-
-1. **New Canvas**: If no canvas exists, creates one with version 1
-2. **Update Canvas**: If canvas exists, creates new version with updated content
-3. **Version Tracking**: All versions are preserved in `versions` array
-4. **WebSocket Event**: Emits `canvas-updated` event for real-time updates
-
----
-
-## Canvas Types
-
-### Markdown Canvas
-
-```typescript
-interface IMarkdownCanvas {
-  _id: string;
-  title: string;
-  content: string;              // Markdown content
-  description: string;
-  canvasType: 'markdown';
-  currentVersion: number;
-  versions: IMarkdownCanvasVersion[];
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy: IUserReference;
-  updatedBy: IUserReference;
-}
-```
-
-**Use Cases:**
-- Project documentation
-- Meeting notes
-- Requirement specs
-- Knowledge base articles
-
-### HTML Canvas
-
-```typescript
-interface IHtmlCanvas {
-  _id: string;
-  title: string;
-  content: string;              // HTML content
-  description: string;
-  canvasType: 'html';
-  currentVersion: number;
-  versions: IHtmlCanvasVersion[];
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy: IUserReference;
-  updatedBy: IUserReference;
-}
-```
-
-**Use Cases:**
-- Landing pages
-- Web prototypes
-- UI mockups
-- HTML reports
-
----
-
-## Versioning
-
-Each canvas maintains a version history:
-
-```typescript
-interface ICanvasVersion {
-  version: number;
-  content: string;
-  createdAt: Date;
-  createdBy: IUserReference;
-}
-```
-
-**Version Creation:**
-
-- First update → Version 1
-- Subsequent updates → Version incremented
-- All versions preserved in `versions` array
-
----
-
-## WebSocket Events
-
-### canvas-updated
-
-Emitted when a canvas is updated:
-
-```typescript
-{
-  entityType: string;
-  entityId: string;
-  itemId?: string;
-  sessionId: string;
-  canvasType: 'markdown' | 'html';
-  canvas: IMarkdownCanvas | IHtmlCanvas;
-}
-```
-
-**Example Client:**
-
-```javascript
-RocketChat.streams.subscribe('canvas-updated', roomId, (data) => {
-  console.log('Canvas updated:', data.canvas.title);
-  console.log('Version:', data.canvas.currentVersion);
-});
 ```
 
 ---
@@ -449,7 +274,6 @@ When a user opens AI chat with an entity context, the system automatically resol
 | Error Code | Description |
 |------------|-------------|
 | `error-invalid-params` | Missing required parameters |
-| `error-invalid-params` | Invalid canvas type (must be "markdown" or "html") |
 | `error-invalid-session` | Session not found |
 | `Failed to get artifacts` | Failed to retrieve artifacts |
 
@@ -501,10 +325,6 @@ interface IAIChatSession {
   flowChatId: string;
   flowSessionId?: string;
 
-  // Canvas artifacts
-  markdownCanvas?: IMarkdownCanvas;
-  htmlCanvas?: IHtmlCanvas;
-
   // Timestamps
   createdAt: Date;
   createdBy?: {
@@ -513,58 +333,6 @@ interface IAIChatSession {
     name?: string;
   };
 }
-```
-
----
-
-## Canvas Object Structure
-
-```typescript
-interface IUserReference {
-  _id: string;
-  username: string;
-  name?: string;
-}
-
-interface IMarkdownCanvas {
-  _id: string;
-  title: string;
-  content: string;
-  description: string;
-  canvasType: 'markdown';
-  versions: Array<{
-    version: number;
-    content: string;
-    createdAt: Date;
-    createdBy: IUserReference;
-  }>;
-  currentVersion: number;
-  createdAt: Date;
-  createdBy: IUserReference;
-  updatedAt: Date;
-  updatedBy: IUserReference;
-}
-
-interface IHtmlCanvas {
-  _id: string;
-  title: string;
-  content: string;
-  description: string;
-  canvasType: 'html';
-  versions: Array<{
-    version: number;
-    content: string;
-    createdAt: Date;
-    createdBy: IUserReference;
-  }>;
-  currentVersion: number;
-  createdAt: Date;
-  createdBy: IUserReference;
-  updatedAt: Date;
-  updatedBy: IUserReference;
-}
-
-type CanvasType = 'markdown' | 'html';
 ```
 
 ---

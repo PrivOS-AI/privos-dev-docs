@@ -2,7 +2,7 @@
 
 ## Overview
 
-Manage AI chat sessions with context-aware resume capabilities and canvas artifacts within a specific room. Sessions can be filtered by entity context, and attached contexts persist across messages to enable intelligent session recovery.
+Manage AI chat sessions with context-aware resume capabilities within a specific room. Sessions can be filtered by entity context, and attached contexts persist across messages to enable intelligent session recovery. Session artifact files are served from the File Management system.
 
 **Base Path:** `/api/v1/internal/rooms/:roomId/ai-chat-sessions`
 
@@ -212,11 +212,14 @@ POST /api/v1/internal/rooms/:roomId/ai-chat-sessions/:sessionId/update-contexts
 
 ---
 
-### Get Canvas Artifacts
+### Get Artifact Files
 
 ```http
-GET /api/v1/internal/rooms/:roomId/ai-chat-sessions/artifacts
+GET /api/v1/ai-chat-session.artifacts?sessionId=SESSION_ID
 ```
+
+**Description:** List artifact files attached to an AI chat session. Files
+are stored in File Management under `Agent Artifacts/{sessionId}`.
 
 **Query Parameters:**
 
@@ -224,54 +227,22 @@ GET /api/v1/internal/rooms/:roomId/ai-chat-sessions/artifacts
 |-----------|------|----------|-------------|
 | `sessionId` | string | Yes | AI chat session ID |
 
-**Description:** Get canvas artifacts (markdown and HTML) from an AI chat session.
-
 **Response:**
 
 ```json
 {
   "success": true,
-  "data": {
-    "artifacts": {
-      "markdownCanvas": {
-        "_id": "CANVAS_ID",
-        "title": "Project Plan",
-        "content": "# Project Plan\n\n## Overview\n...",
-        "description": "Generated project plan",
-        "canvasType": "markdown",
-        "versions": [
-          {
-            "version": 1,
-            "content": "Initial content...",
-            "createdAt": "2024-01-01T00:00:00Z"
-          }
-        ],
-        "currentVersion": 1,
-        "createdAt": "2024-01-01T00:00:00Z",
-        "updatedAt": "2024-01-02T00:00:00Z"
-      },
-      "htmlCanvas": {
-        "_id": "CANVAS_ID_2",
-        "title": "Landing Page",
-        "content": "<!DOCTYPE html>...",
-        "description": "Generated landing page",
-        "canvasType": "html",
-        "versions": [...],
-        "currentVersion": 1,
-        "createdAt": "2024-01-01T00:00:00Z",
-        "updatedAt": "2024-01-02T00:00:00Z"
-      }
+  "files": [
+    {
+      "_id": "FILE_ID",
+      "name": "project-plan.md",
+      "file_type": "text/markdown",
+      "file_size": 2048,
+      "created_at": "2024-01-15T10:00:00.000Z",
+      "updated_at": "2024-01-17T14:30:00.000Z"
     }
-  }
+  ]
 }
-```
-
-**Example:**
-
-```bash
-curl -X GET "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/ai-chat-sessions/artifacts?sessionId=SESSION_ID" \
-  -H "x-api-key: YOUR_API_KEY" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 ---
@@ -316,8 +287,6 @@ GET /api/v1/internal/rooms/:roomId/ai-chat-sessions/:sessionId
       ],
       "flowChatId": "flow_abc123",
       "flowSessionId": "flow_session_xyz",
-      "markdownCanvas": { ... },
-      "htmlCanvas": { ... },
       "createdAt": "2024-03-24T10:00:00Z",
       "createdBy": {
         "_id": "USER_ID",
@@ -369,148 +338,13 @@ curl -X DELETE "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/ai-chat-se
 
 ---
 
-### Update Canvas Content
-
-```http
-POST /api/v1/internal/rooms/:roomId/ai-chat-sessions/canvas-update
-```
-
-**Body Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `sessionId` | string | Yes | AI chat session ID |
-| `canvasType` | string | Yes | Canvas type: `markdown` or `html` |
-| `canvasContent` | string | Yes | Canvas content |
-| `title` | string | No | Canvas title (optional, uses default if not provided) |
-
-**Description:** Update canvas content for a session. Creates a new version with each update.
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "success": true,
-    "canvas": {
-      "_id": "CANVAS_ID",
-      "title": "Updated Project Plan",
-      "content": "# Updated Project Plan\n\n## Changes\n...",
-      "description": "",
-      "canvasType": "markdown",
-      "versions": [
-        {
-          "version": 1,
-          "content": "Original content...",
-          "createdAt": "2024-01-01T00:00:00Z",
-          "createdBy": {
-            "_id": "ai-assistant",
-            "username": "ai-assistant",
-            "name": "AI Assistant"
-          }
-        },
-        {
-          "version": 2,
-          "content": "Updated content...",
-          "createdAt": "2024-01-02T12:00:00Z",
-          "createdBy": {
-            "_id": "ai-assistant",
-            "username": "ai-assistant",
-            "name": "AI Assistant"
-          }
-        }
-      ],
-      "currentVersion": 2,
-      "createdAt": "2024-01-01T00:00:00Z",
-      "updatedAt": "2024-01-02T12:00:00Z",
-      "updatedBy": {
-        "_id": "ai-assistant",
-        "username": "ai-assistant",
-        "name": "AI Assistant"
-      }
-    }
-  }
-}
-```
-
-**Example:**
-
-```bash
-curl -X POST "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/ai-chat-sessions/canvas-update" \
-  -H "x-api-key: YOUR_API_KEY" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sessionId": "SESSION_ID",
-    "canvasType": "markdown",
-    "canvasContent": "# Updated Project Plan\n\n## Phase 1\n\n...",
-    "title": "Updated Project Plan"
-  }'
-```
-
----
-
 ## Error Codes
 
 | Error Code | Description |
 |------------|-------------|
 | `error-session-not-found` | AI chat session not found in this room |
-| `error-invalid-canvas-type` | Invalid canvas type (must be `markdown` or `html`) |
 | `error-forbidden` | Session doesn't belong to this room |
 | `error-invalid-params` | Missing or invalid parameters |
-
----
-
-## Canvas Types
-
-### Markdown Canvas
-- **Type:** `markdown`
-- **Content Format:** Markdown text
-- **Use Case:** Documentation, project plans, notes
-- **Default Title:** "Canvas"
-
-### HTML Canvas
-- **Type:** `html`
-- **Content Format:** HTML markup
-- **Use Case:** Landing pages, UI mockups, web content
-- **Default Title:** "Landing Page"
-
----
-
-## Canvas Versioning
-
-Each canvas maintains a version history:
-
-```typescript
-{
-  versions: [
-    {
-      version: 1,
-      content: "Initial content...",
-      createdAt: Date,
-      createdBy: {
-        _id: string,
-        username: string,
-        name: string
-      }
-    },
-    {
-      version: 2,
-      content: "Updated content...",
-      createdAt: Date,
-      createdBy: { ... }
-    }
-  ],
-  currentVersion: 2
-}
-```
-
-**Versioning Rules:**
-- Each update creates a new version
-- Versions are immutable once created
-- `currentVersion` tracks the active version
-- All versions are preserved in history
 
 ---
 
@@ -571,18 +405,3 @@ When a user opens AI chat with an entity context, the following flow occurs:
 5. **Message Context Update**: Each message send includes current `attachedContexts`
 6. **Session Switching**: Users can switch to different sessions; switching restores that session's saved contexts
 
----
-
-## Real-time Updates
-
-When canvas content is updated, the server emits a real-time event:
-
-```typescript
-AIChatStreamer.emit('canvas-updated', {
-  sessionId: string,
-  canvasType: 'markdown' | 'html',
-  canvas: CanvasObject
-});
-```
-
-Clients can subscribe to these events to receive real-time updates when canvas content changes.

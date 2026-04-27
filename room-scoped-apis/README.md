@@ -249,7 +249,7 @@ this.room = room;
 | **Documents** | [documents.md](./documents.md) | Document management with versioning |
 | **Rooms** | [rooms.md](./rooms.md) | Room info and member listing |
 | **Files** | [files.md](./files.md) | MinIO file storage with presigned URLs |
-| **AI Chat Sessions** | [ai-chat-sessions.md](./ai-chat-sessions.md) | Context-aware session resume and canvas artifacts management |
+| **AI Chat Sessions** | [ai-chat-sessions.md](./ai-chat-sessions.md) | Context-aware session resume and artifact file listing |
 
 ## Session Management Endpoints
 
