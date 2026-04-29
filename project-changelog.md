@@ -6,6 +6,35 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-04-29
+
+### Agent Selector & Bot Key
+
+#### Per-Agent Bot Key Validation
+**Summary:** AI chat now re-validates the "Push bot key to Privos Brain" CTA per-agent. Switching agents in the selector triggers a fresh status fetch for the new bot, dismissals are scoped to `(roomId, botId)`, and pushes target the selected agent instead of always the room's default bot.
+
+**Implementation:**
+- `apps/meteor/app/api/server/v1/agent-privos-brain-bot-key.ts` — `agents.brain.botKeyStatus` (GET) and `agents.brain.pushBotKey` (POST) accept optional `botId`. `resolveTargetBotId` validates the bot is `type: 'bot'` and subscribed to the room before falling back to the default.
+- `apps/meteor/server/services/privos-brain-bot-key-service.ts` — relaxed default-bot gate; now allows any bot subscribed to the room (membership-not-default-bot). Resolves `400 bot-not-room-default` when pushing for non-default agent bots.
+- `apps/meteor/client/hooks/aiChat/useBotPrivosBrainKeyStatus.ts` — accepts `botId`, includes it in the React Query key and request params.
+- `apps/meteor/client/components/AIChatBox/ChatBoxInput.tsx` — passes `selectedAgent.botUserId`; dismissal state keyed by `${roomId}:${botId}`.
+
+#### Mid-Session Agent Switch — Full History Push
+**Summary:** When the user changes agents during an active session, the next attempt force-pushes summary + activeMessages to the new agent's brain task. Previously, agent-room sessions used a botId-less `taskId` and fell into delta mode, leaving the new agent blind to prior conversation.
+
+**Implementation:**
+- `apps/meteor/app/agent-chat/server/contextCompaction.ts` — added `agentChanged = !!lastBotId && lastBotId !== botId`. Bypasses resume/delta short-circuits when an agent switch is detected. Per-bot scope (`${roomId}:${botId}`) and `lastBotId` updates after stream completion let resume mode kick in normally on subsequent same-agent turns.
+
+#### Bot Self-Management Authorization
+**Summary:** `agents.triggers.*` endpoints (list/add/update/remove/run) now accept calls from the bot itself when the bot has `owner` or `leader` role on its agent room. Skills running in Privos Brain authenticate with the bot's bearer token; previously the route required the *human* creator or admin permission, which broke autonomous trigger management.
+
+**Implementation:**
+- `apps/meteor/app/api/server/v1/agent-trigger-endpoints.ts` — `verifyBotOwnership` now also checks `Subscriptions.findOneByRoomIdAndUserId(agentRoomId, userId).roles` for `owner`/`leader` before falling back to admin permission. Scope is limited to this file's five trigger routes; other endpoints unchanged.
+
+**Docs:** [Bot Key & Agent Switching](./agent-system/bot-key-and-agent-switching.md) — full lifecycle, failure modes, last-agent restoration logic.
+
+---
+
 ## 2026-04-20
 
 ### Authorization

@@ -11,6 +11,7 @@ AI agents in Privos Chat — conversational bots powered by Privos Brain (Claude
 - [Trigger API Reference](./trigger-api-reference.md) — REST endpoints for trigger CRUD + webhook receiver
 - [Agent Settings UI](./agent-settings-ui.md) — Room tab for managing triggers
 - [Self-Management Skills](./self-management-skills.md) — Skill files agents use to manage their own triggers
+- [Bot Key & Agent Switching](./bot-key-and-agent-switching.md) — Bot-key push to Privos Brain, agent selector re-validation, mid-session context handover
 
 ## Concepts
 
