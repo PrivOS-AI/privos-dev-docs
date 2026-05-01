@@ -1,4 +1,4 @@
-# Privos MCP Tools — Users
+# PrivOS MCP Tools — Users
 
 Only public profile fields are returned for privacy protection.
 

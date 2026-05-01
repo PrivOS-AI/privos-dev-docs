@@ -13,7 +13,7 @@ Detailed API reference organized by category.
 | [Tool Execution](./rest-tool-call.md) | Execute MCP tools via REST |
 | [UI Resources](./rest-ui-resource.md) | Fetch app UI HTML resources |
 
-## Privos MCP Tools
+## PrivOS MCP Tools
 
 | Document | Description |
 |----------|-------------|

@@ -2,7 +2,7 @@
 
 ## Execute Tool Call
 
-Execute an MCP tool on a specific app. This is the primary way to invoke Privos MCP tools from the client.
+Execute an MCP tool on a specific app. This is the primary way to invoke PrivOS MCP tools from the client.
 
 | | |
 |---|---|
@@ -31,7 +31,7 @@ Execute an MCP tool on a specific app. This is the primary way to invoke Privos 
 
 ### Response
 
-The response depends on the tool being called. See the [Privos MCP Tools documentation](./README.md) for tool-specific responses.
+The response depends on the tool being called. See the [PrivOS MCP Tools documentation](./README.md) for tool-specific responses.
 
 ```json
 {

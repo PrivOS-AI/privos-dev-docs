@@ -1,6 +1,6 @@
 # Brain Proxy API
 
-Lets trusted external services (e.g. **privos-crm**) invoke Privos Brain through privos-chat instead of holding their own Brain credentials. Brain config is read from the room (`customFields.privosBrain.{url,apiKey,defaultProvider,defaultModel}`) with fallback to global admin settings (`PrivosBrain_URL` / `PrivosBrain_API_Key`).
+Lets trusted external services (e.g. **privos-crm**) invoke PrivOS Sandbox through privos-hub instead of holding their own Brain credentials. Brain config is read from the room (`customFields.privosBrain.{url,apiKey,defaultProvider,defaultModel}`) with fallback to global admin settings (`PrivOSBrain_URL` / `PrivOSBrain_API_Key`).
 
 **Auth:** standard Rocket.Chat user auth (`X-Auth-Token` + `X-User-Id`, or `Authorization: Bearer <botToken>`). The caller must be a member of the target `roomId` (verified via Subscriptions).
 
@@ -31,7 +31,7 @@ Upload a base64-encoded file to Brain's `/api/uploads`, return a `tempId` that c
 
 - `No access to target room` — caller is not a member of `roomId`
 - `Brain not configured` — neither room nor global Brain settings present
-- `Invalid base64 payload`, `Privos Brain upload <status>: <body>` — propagated from Brain
+- `Invalid base64 payload`, `PrivOS Sandbox upload <status>: <body>` — propagated from Brain
 
 ---
 
@@ -64,8 +64,8 @@ One-shot synchronous Brain generation (`POST /api/attempts` with `request_method
 
 - `No access to target room`
 - `Brain not configured`
-- `Privos Brain <status>: <body>` — Brain non-2xx
-- `Privos Brain attempt <id> did not complete within 900000ms after sync 408` — long-running attempt didn't finish within poll cap
+- `PrivOS Sandbox <status>: <body>` — Brain non-2xx
+- `PrivOS Sandbox attempt <id> did not complete within 900000ms after sync 408` — long-running attempt didn't finish within poll cap
 
 ---
 

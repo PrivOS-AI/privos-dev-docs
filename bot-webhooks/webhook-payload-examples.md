@@ -59,7 +59,7 @@ Detailed payload examples for all webhook event types.
         "roomId": "GENERAL",
         "roomName": "general",
         "roomSessionKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-        "privosEndpointUrl": "https://your-privos-chat.com"
+        "privosEndpointUrl": "https://your-privos-hub.com"
     },
     "message": {
         "_id": "msg123",
@@ -93,7 +93,7 @@ Delivered only to the bot(s) that were @mentioned. Uses `deliverToBot()`.
         "roomId": "GENERAL",
         "roomName": "general",
         "roomSessionKey": "eyJhbGciOiJIUzI1NiIs...",
-        "privosEndpointUrl": "https://your-privos-chat.com"
+        "privosEndpointUrl": "https://your-privos-hub.com"
     },
     "message": {
         "_id": "msg123",
@@ -123,7 +123,7 @@ When an inline button with `bot-event` action is clicked:
         "roomId": "GENERAL",
         "roomName": "general",
         "roomSessionKey": "...",
-        "privosEndpointUrl": "https://your-privos-chat.com",
+        "privosEndpointUrl": "https://your-privos-hub.com",
         "metadata": {
             "action": "approve",
             "requestId": "req_001",

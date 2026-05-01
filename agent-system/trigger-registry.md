@@ -30,7 +30,7 @@ Unified automation system for agents. Three trigger types share a single executi
                            ▼
               agent-room-reply-handler (existing)
                            ▼
-                    Privos Brain → response
+                    PrivOS Sandbox → response
 ```
 
 ## Trigger Schema

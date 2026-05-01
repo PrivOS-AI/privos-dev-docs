@@ -2,7 +2,7 @@
 
 ## Overview
 
-Room-Scoped Internal APIs provide a secure, room-specific way to interact with PrivOS Chat resources. Unlike the standard Internal APIs that use a global API key, Room-Scoped APIs require both an internal API key AND a room-specific session token, ensuring that operations are strictly limited to a specific room context.
+Room-Scoped Internal APIs provide a secure, room-specific way to interact with PrivOS Hub resources. Unlike the standard Internal APIs that use a global API key, Room-Scoped APIs require both an internal API key AND a room-specific session token, ensuring that operations are strictly limited to a specific room context.
 
 **Key Benefits:**
 - **Room Isolation**: Each token is bound to a specific room, preventing cross-room access
@@ -399,5 +399,5 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/PrivOS-AI/privos-chat/issues
+- GitHub Issues: https://github.com/PrivOS-AI/privos-hub/issues
 - Documentation: https://docs.privos.ai

@@ -1,4 +1,4 @@
-# Privos MCP Tools — Lists & Items
+# PrivOS MCP Tools — Lists & Items
 
 ## `privos.lists.create`
 

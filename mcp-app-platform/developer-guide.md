@@ -47,16 +47,16 @@ tools: [{
 Use `@privos/app-react` hooks (see [React SDK Reference](./react-sdk-reference.md)):
 
 ```tsx
-import { PrivosAppProvider, usePrivosContext, useLists } from '@privos/app-react';
+import { PrivOSAppProvider, usePrivOSContext, useLists } from '@privos/app-react';
 
 function Dashboard() {
-  const ctx = usePrivosContext();
+  const ctx = usePrivOSContext();
   const { data: lists, loading } = useLists(ctx.roomId);
   return <div>{lists?.map(l => <div key={l._id}>{l.name}</div>)}</div>;
 }
 
 export default function App() {
-  return <PrivosAppProvider><Dashboard /></PrivosAppProvider>;
+  return <PrivOSAppProvider><Dashboard /></PrivOSAppProvider>;
 }
 ```
 
@@ -98,16 +98,16 @@ npm run dev
 ## 6. App Server Requirements
 
 ### HTTP Headers
-- **Must NOT** set `X-Frame-Options: DENY` or `SAMEORIGIN` — the app UI renders inside a sandboxed iframe on the Privos domain
+- **Must NOT** set `X-Frame-Options: DENY` or `SAMEORIGIN` — the app UI renders inside a sandboxed iframe on the PrivOS domain
 - **Must** allow framing via CSP: `frame-ancestors https://your-privos-domain.com` (or `frame-ancestors *` for dev)
 
-**Note:** Privos automatically **exempts** app UI resource endpoints (`/api/v1/mcp-apps.ui-resource`) from `X-Frame-Options` restrictions.
+**Note:** PrivOS automatically **exempts** app UI resource endpoints (`/api/v1/mcp-apps.ui-resource`) from `X-Frame-Options` restrictions.
 
 ### Rendering Modes
 
-1. **MCP Protocol mode** (preferred) — app provides tools with `_meta.ui.resourceUri`, Privos fetches HTML via `resources/read` and renders in sandboxed iframe with PostMessage bridge. No frame headers needed since HTML is loaded via `srcdoc`.
+1. **MCP Protocol mode** (preferred) — app provides tools with `_meta.ui.resourceUri`, PrivOS fetches HTML via `resources/read` and renders in sandboxed iframe with PostMessage bridge. No frame headers needed since HTML is loaded via `srcdoc`.
 
-2. **Direct iframe mode** (fallback) — when no MCP tool entry points exist, Privos renders `serverUrl` directly in an iframe. **Requires server to allow framing.**
+2. **Direct iframe mode** (fallback) — when no MCP tool entry points exist, PrivOS renders `serverUrl` directly in an iframe. **Requires server to allow framing.**
 
 ### Endpoints Required
 
@@ -119,18 +119,18 @@ npm run dev
 
 ### Common Issues
 - **Blank iframe**: Check `X-Frame-Options` and CSP `frame-ancestors` headers
-- **Mixed content**: If Privos runs on HTTPS, app server must also use HTTPS
-- **CORS**: Not needed for iframe embedding, but needed if app calls Privos API directly
+- **Mixed content**: If PrivOS runs on HTTPS, app server must also use HTTPS
+- **CORS**: Not needed for iframe embedding, but needed if app calls PrivOS API directly
 
 ## 7. Theme Sync (Light/Dark Mode)
 
-Privos pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` PostMessage.
+PrivOS pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` PostMessage.
 
 ### How It Works
 
-1. Privos host detects theme change (user toggles light/dark/auto)
+1. PrivOS host detects theme change (user toggles light/dark/auto)
 2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark' } }` to iframe
-3. `usePrivosContext()` hook receives updated `theme` value
+3. `usePrivOSContext()` hook receives updated `theme` value
 4. App sets `data-theme` attribute on `<html>` → CSS variables switch between light/dark palettes
 
 ### Recommended Pattern
@@ -139,12 +139,12 @@ Use a `ThemeProvider` with three modes:
 
 | Mode | Behavior |
 |------|----------|
-| **Auto** | Follows Privos host `theme` in real-time |
+| **Auto** | Follows PrivOS host `theme` in real-time |
 | **Light** | Forces light regardless of host |
 | **Dark** | Forces dark regardless of host |
 
 ```tsx
-const { theme } = usePrivosContext();
+const { theme } = usePrivOSContext();
 <ThemeProvider hostTheme={theme}>
   <App />
 </ThemeProvider>
@@ -154,7 +154,7 @@ The `ThemeProvider` sets `data-theme="light"` or `data-theme="dark"` on `<html>`
 
 ### CSS Variables
 
-Define light and dark palettes with hardcoded values. Sandboxed iframes cannot access the parent's CSS variables, so use standalone colors that match the Privos palette:
+Define light and dark palettes with hardcoded values. Sandboxed iframes cannot access the parent's CSS variables, so use standalone colors that match the PrivOS palette:
 
 ```css
 :root, [data-theme="light"] {
@@ -176,7 +176,7 @@ body { background: var(--bg); color: var(--text); }
 
 ### Key Token Mappings
 
-| App Variable | Privos Token | Light | Dark |
+| App Variable | PrivOS Token | Light | Dark |
 |-------------|-------------|-------|------|
 | `--bg` | `--rcx-color-surface-room` | #F7F8FA | #1F2329 |
 | `--bg-card` | `--rcx-color-surface-light` | #FFFFFF | #262931 |
@@ -187,13 +187,13 @@ body { background: var(--bg); color: var(--text); }
 | `--accent` | `--rcx-color-button-background-primary-default` | #156FF5 | #095AD2 |
 | `--danger` | `--rcx-color-button-background-danger-default` | #EC0D2A | #BB0B21 |
 
-When running inside the Privos iframe, `--rcx-color-*` variables are inherited from the host — colors match automatically. Fallback values used when running standalone.
+When running inside the PrivOS iframe, `--rcx-color-*` variables are inherited from the host — colors match automatically. Fallback values used when running standalone.
 
 ---
 
 ## 8. Host PostMessage Bridge
 
-Apps running in a sandboxed iframe communicate with the Privos host via `window.postMessage` using JSON-RPC 2.0. `@privos/app-react` wraps most of this, but these are the raw host-exposed methods:
+Apps running in a sandboxed iframe communicate with the PrivOS host via `window.postMessage` using JSON-RPC 2.0. `@privos/app-react` wraps most of this, but these are the raw host-exposed methods:
 
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
@@ -208,7 +208,7 @@ Apps running in a sandboxed iframe communicate with the Privos host via `window.
 
 - Keys are stored as `mcp-app:<your-key>` in host storage — apps see only their key, not the prefix.
 - Values are strings; serialize JSON yourself (`JSON.stringify` before `set`, `JSON.parse` after `get`).
-- Storage is scoped to the Privos host origin and shared across app instances on that origin. There is **no per-app isolation yet** — collisions between apps on the same key are possible. Use a unique prefix such as `<appId>:`.
+- Storage is scoped to the PrivOS host origin and shared across app instances on that origin. There is **no per-app isolation yet** — collisions between apps on the same key are possible. Use a unique prefix such as `<appId>:`.
 - Missing keys return `{ value: null }`.
 
 Example (raw):
@@ -224,7 +224,7 @@ parent.postMessage({ jsonrpc: '2.0', id: 2, method: 'host/storage.get', params: 
 
 ## 9. Relay Apps (WebSocket Connection)
 
-For apps behind NAT, firewall, or private networks, use the relay connection type. Your app connects outbound to Privos via WebSocket with OAuth credentials obtained through a one-click pairing flow.
+For apps behind NAT, firewall, or private networks, use the relay connection type. Your app connects outbound to PrivOS via WebSocket with OAuth credentials obtained through a one-click pairing flow.
 
 ### Setup — Auto-Pairing Flow
 
@@ -282,7 +282,7 @@ If the pairing URL is lost, retrieve credentials from admin:
 
 ### Handling MCP Messages
 
-Relay receives the same JSON-RPC 2.0 messages as direct apps, and can also receive server-initiated `tools/call` requests when the relay app invokes Privos server tools via `callServerTool()`:
+Relay receives the same JSON-RPC 2.0 messages as direct apps, and can also receive server-initiated `tools/call` requests when the relay app invokes PrivOS server tools via `callServerTool()`:
 
 ```typescript
 function handleMcpMessage(msg) {
@@ -368,7 +368,7 @@ connectRelay();
 ### Relay App Architecture
 
 **No HTTP server needed.** Relay apps:
-- Use `npm start` to connect to Privos via WebSocket
+- Use `npm start` to connect to PrivOS via WebSocket
 - Serve manifest via Node.js/Express embedded in the relay app package
 - UI is built with Vite, compiled to static HTML, sent via `resources/read` JSON-RPC
 - Admin portal inlines UI via data URI in pairing metadata

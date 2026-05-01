@@ -2,12 +2,12 @@
 
 ## Overview
 
-The Internal API provides endpoints for server-to-server communication within the PrivOS Chat application. These APIs are designed for internal services, AI agents, and trusted integrations to manage core resources like Lists, Items, Stages, Documents, Rooms, and Users.
+The Internal API provides endpoints for server-to-server communication within the PrivOS Hub application. These APIs are designed for internal services, AI agents, and trusted integrations to manage core resources like Lists, Items, Stages, Documents, Rooms, and Users.
 
 ## Base URL
 DEV:  
 
-BASE_URL= https://privos-chat-dev.roxane.one/
+BASE_URL= https://privos-hub-dev.roxane.one/
 API_KEY= dwVT6jcM-DI_Cs27nB4gaszG-wsBDvUJAkkuQt4RMuI
 
 PROD:  
@@ -246,5 +246,5 @@ The API is versioned via the URL path: `/api/v1/internal/`.
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/PrivOS-AI/privos-chat/issues
+- GitHub Issues: https://github.com/PrivOS-AI/privos-hub/issues
 - Documentation: https://docs.privos.ai

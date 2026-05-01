@@ -1,4 +1,4 @@
-# Privos MCP Tools — Folders
+# PrivOS MCP Tools — Folders
 
 ## `privos.folders.getByChannel`
 

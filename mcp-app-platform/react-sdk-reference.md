@@ -2,41 +2,41 @@
 
 Package: `@privos/app-react`
 
-Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with Privos-specific convenience hooks.
+Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with PrivOS-specific convenience hooks.
 
 ## Hooks
 
 | Hook | Returns | Description |
 |------|---------|-------------|
-| `usePrivosApp()` | `McpApp` | MCP app instance for direct `callServerTool()` |
-| `usePrivosContext()` | `PrivosContext` | userId, roomId, theme, userRoles |
-| `usePrivosTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call |
+| `usePrivOSApp()` | `McpApp` | MCP app instance for direct `callServerTool()` |
+| `usePrivOSContext()` | `PrivOSContext` | userId, roomId, theme, userRoles |
+| `usePrivOSTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call |
 | `useLists(roomId)` | `{ data, loading, error }` | Lists in room |
 | `useFiles(roomId)` | `{ data, loading, error }` | Files in room |
 | `useRoom(roomId?)` | `{ data, loading, error }` | Room metadata |
 
 ## Provider
 
-Wrap your app with `PrivosAppProvider`:
+Wrap your app with `PrivOSAppProvider`:
 
 ```tsx
-import { PrivosAppProvider } from '@privos/app-react';
+import { PrivOSAppProvider } from '@privos/app-react';
 
 export default function App() {
   return (
-    <PrivosAppProvider>
+    <PrivOSAppProvider>
       <MyComponent />
-    </PrivosAppProvider>
+    </PrivOSAppProvider>
   );
 }
 ```
 
-## usePrivosApp
+## usePrivOSApp
 
 Returns the MCP app instance. Use for mutations (writes) where you call tools directly:
 
 ```tsx
-const app = usePrivosApp();
+const app = usePrivOSApp();
 
 await app.callServerTool({
   name: 'privos.lists.createItem',
@@ -44,24 +44,24 @@ await app.callServerTool({
 });
 ```
 
-## usePrivosContext
+## usePrivOSContext
 
-Subscribes to `HOST_CONTEXT_CHANGED` push + fetches Privos-specific context:
+Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:
 
 ```tsx
-const { roomId, userId, username, roomName, theme, userRoles } = usePrivosContext();
+const { roomId, userId, username, roomName, theme, userRoles } = usePrivOSContext();
 ```
 
 - `theme` (`'light'` | `'dark'`) — updates in real-time when the user toggles theme
 
 Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).
 
-## usePrivosTool
+## usePrivOSTool
 
 Generic hook — auto-fetches on mount and when args change. Best for reads:
 
 ```tsx
-const { data, loading, error, refetch } = usePrivosTool('privos.lists.get', { listId });
+const { data, loading, error, refetch } = usePrivOSTool('privos.lists.get', { listId });
 ```
 
 **Note:** Skips fetch if any arg value is empty/null/undefined.
@@ -145,6 +145,6 @@ db.query('contacts')
 
 ## Pattern: Reads vs Mutations
 
-- **Reads** — use `usePrivosTool` or convenience hooks (`useLists`, `useFiles`, `useRoom`). Auto-fetches.
-- **Mutations** — use `usePrivosApp()` to get the app instance, then call `app.callServerTool()` directly in event handlers.
+- **Reads** — use `usePrivOSTool` or convenience hooks (`useLists`, `useFiles`, `useRoom`). Auto-fetches.
+- **Mutations** — use `usePrivOSApp()` to get the app instance, then call `app.callServerTool()` directly in event handlers.
 - **Database** — use `useAppDb()` for all database operations (both reads and writes).

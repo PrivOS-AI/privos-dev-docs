@@ -19,13 +19,13 @@
 | `mcp-apps.uninstall` | POST | User | Remove from room |
 | `mcp-apps.installations` | GET | User | List room installations |
 | `mcp-apps.updateSettings` | POST | Admin | Update install perms, status, wakeUrl, queueTtl, queueMaxSize |
-| `mcp-apps.tool-call` | POST | User | Execute a Privos MCP tool |
+| `mcp-apps.tool-call` | POST | User | Execute a PrivOS MCP tool |
 | `mcp-apps.ui-resource` | GET | User | Fetch UI HTML (server proxy) |
 | `/apps/{appId}/ui` | GET | User | Per-app namespaced UI endpoint |
 | `/apps/{appId}/mcp` | POST | User | Per-app namespaced JSON-RPC proxy |
 | `wss://host/api/v1/mcp-apps.relay` | WebSocket | OAuth Bearer | Relay endpoint (token in Authorization header) |
 
-## Privos MCP Tools
+## PrivOS MCP Tools
 
 Tools apps can call via `callServerTool()` or React hooks:
 

@@ -207,10 +207,10 @@ GET /api/v1/internal/rooms/:roomId/agentBots
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Agent flow ID (same as flow ID in Privos Studio) |
+| `id` | string | Agent flow ID (same as flow ID in PrivOS Connect) |
 | `name` | string | Agent display name |
 | `description` | string | Agent description |
-| `botUserId` | string | PrivOS Chat bot user ID |
+| `botUserId` | string | PrivOS Hub bot user ID |
 | `botUsername` | string | Bot username |
 | `commands` | array | Array of commands the agent can execute |
 

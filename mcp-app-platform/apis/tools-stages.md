@@ -1,4 +1,4 @@
-# Privos MCP Tools — Stages
+# PrivOS MCP Tools — Stages
 
 Stages represent kanban columns within a list.
 

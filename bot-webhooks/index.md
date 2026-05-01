@@ -1,6 +1,6 @@
 # Bot Webhooks Documentation
 
-Complete reference for webhook events and payload structures in Privos Chat.
+Complete reference for webhook events and payload structures in PrivOS Hub.
 
 ## Quick Links
 
@@ -9,7 +9,7 @@ Complete reference for webhook events and payload structures in Privos Chat.
 
 ## Overview
 
-Privos Chat webhooks enable real-time event notifications to external services. The system supports **18 event types** across 6 categories:
+PrivOS Hub webhooks enable real-time event notifications to external services. The system supports **18 event types** across 6 categories:
 
 - **Message Events** (4): `message.new`, `message.edited`, `message.deleted`, `message.mention`
 - **Room Events** (2): `room.joined`, `room.left`

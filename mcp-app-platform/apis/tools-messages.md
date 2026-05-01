@@ -1,4 +1,4 @@
-# Privos MCP Tools — Messages
+# PrivOS MCP Tools — Messages
 
 ## `privos.messages.getRecent`
 

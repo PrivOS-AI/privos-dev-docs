@@ -1,6 +1,6 @@
 # Agent Rooms
 
-Each agent lives in a dedicated private room. Messages in the room are forwarded to Privos Brain, and responses are streamed back as bot messages.
+Each agent lives in a dedicated private room. Messages in the room are forwarded to PrivOS Sandbox, and responses are streamed back as bot messages.
 
 ## Room Structure
 
@@ -40,9 +40,9 @@ One reply at a time per room. A `Set<string>` tracks active rooms. If a room is 
 ### Reply Pipeline
 
 1. **Read context** — `getContext(roomId)` reads `IDENTITY.md` and `CLAUDE.md` from MinIO (5-min LRU cache, max 500 entries)
-2. **Write CLAUDE.md to disk** — `writeClaudeMdToProjectPath(roomId, claudeMd)` writes to `/tmp/privos-brain/{roomId}/CLAUDE.md` so Privos Brain reads it as project config
+2. **Write CLAUDE.md to disk** — `writeClaudeMdToProjectPath(roomId, claudeMd)` writes to `/tmp/privos-brain/{roomId}/CLAUDE.md` so PrivOS Sandbox reads it as project config
 3. **Start streaming** — `BotMessageService.startStreaming()` creates a placeholder bot message
-4. **Call Privos Brain** — `streamResponse()` → `syncResponse()` → `POST /api/attempts` with:
+4. **Call PrivOS Sandbox** — `streamResponse()` → `syncResponse()` → `POST /api/attempts` with:
    - `prompt`: user message (or trigger prompt + context)
    - `systemContext`: IDENTITY.md content
    - `projectId`: roomId
@@ -52,11 +52,11 @@ One reply at a time per room. A `Set<string>` tracks active rooms. If a room is 
 
 ### Error Handling
 
-If Privos Brain errors, the bot sends: *"Sorry, I encountered an error processing your message. Please try again."*
+If PrivOS Sandbox errors, the bot sends: *"Sorry, I encountered an error processing your message. Please try again."*
 
 ## Context Files
 
-Uploaded to MinIO during agent creation. Privos Brain auto-syncs files from MinIO using `projectId = roomId`.
+Uploaded to MinIO during agent creation. PrivOS Sandbox auto-syncs files from MinIO using `projectId = roomId`.
 
 ### IDENTITY.md
 
@@ -78,7 +78,7 @@ Friendly and professional
 
 ### CLAUDE.md
 
-Project-level config that Privos Brain reads from CWD.
+Project-level config that PrivOS Sandbox reads from CWD.
 
 ```markdown
 # CLAUDE.md
@@ -128,17 +128,17 @@ In-memory LRU cache for MinIO file reads.
 
 Cache reads `IDENTITY.md` and `CLAUDE.md` in parallel via `Promise.all`.
 
-## Privos Brain Service
+## PrivOS Sandbox Service
 
 File: `server/services/privos-brain-agent-service.ts`
 
-HTTP client for Privos Brain `/api/attempts` endpoint.
+HTTP client for PrivOS Sandbox `/api/attempts` endpoint.
 
 ### Configuration
 
 | Source | Setting |
 |--------|---------|
-| Admin UI | `Admin > Bots > Privos Brain URL` / `Privos Brain API Key` |
+| Admin UI | `Admin > Bots > PrivOS Sandbox URL` / `PrivOS Sandbox API Key` |
 | Env vars | `PRIVOS_BRAIN_URL` / `PRIVOS_BRAIN_API_KEY` |
 
 ### Request Payload
@@ -158,7 +158,7 @@ HTTP client for Privos Brain `/api/attempts` endpoint.
 
 ### Response Parsing
 
-The service handles multiple response formats from Privos Brain:
+The service handles multiple response formats from PrivOS Sandbox:
 - Direct `result` or `response` string
 - `formatted_data` — JSON string containing array of events
 - Anthropic-style `message.content` blocks

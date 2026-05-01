@@ -8,7 +8,7 @@ Conversational flow for creating AI agents. Users chat with a builder assistant 
 
 The `CreateBotModal` has two tabs:
 - **Bot** — traditional bot creation (username, token, webhook)
-- **Agent** — conversational builder powered by Privos Brain
+- **Agent** — conversational builder powered by PrivOS Sandbox
 
 ## Builder Chat Flow
 
@@ -27,7 +27,7 @@ User types message → POST /v1/agents.builderChat
 Server builds full prompt (history + current message)
         │
         ▼
-syncResponse() → Privos Brain /api/attempts
+syncResponse() → PrivOS Sandbox /api/attempts
         │  systemContext = AGENT_BUILDER_SYSTEM_PROMPT
         │  projectId = sessionId (UUID)
         │
@@ -74,11 +74,11 @@ When user clicks "Create Agent", the client calls `POST /v1/agents.create`.
 2. **Bot API token** — auto-generated via `BotTokenService.createToken()`
 3. **Agent room** — private room `agent-room-{botId}` with `customFields.isAgentRoom: true`
 4. **Bot as room owner** — full permissions in agent room
-5. **Context files** (uploaded to MinIO → synced to Privos Brain CWD):
+5. **Context files** (uploaded to MinIO → synced to PrivOS Sandbox CWD):
    - `IDENTITY.md` — name, purpose, personality, knowledge areas
    - `MEMORY.md` — empty memory index (builds over time)
    - `CLAUDE.md` — behavior rules, instructions, skills reference
-6. **Skill files** (uploaded to MinIO → synced to Privos Brain CWD):
+6. **Skill files** (uploaded to MinIO → synced to PrivOS Sandbox CWD):
    - `.claude/skills/privos-agent-management/.env` — bot ID, token, chat URL
    - `.claude/skills/privos-agent-management/SKILL.md` — usage docs
    - 5 JS scripts: `trigger-list.js`, `trigger-add.js`, `trigger-update.js`, `trigger-remove.js`, `trigger-run.js`

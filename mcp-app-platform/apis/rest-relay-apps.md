@@ -205,4 +205,4 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 | **Endpoint** | `wss://{host}/api/v1/mcp-apps.relay` |
 | **Auth** | OAuth Bearer token in `Authorization` header |
 
-The WebSocket connection is used for bidirectional JSON-RPC communication between the Privos server and the relay app. Once connected, the relay app receives discovery and resource requests such as `initialize`, `tools/list`, and `resources/read`, and can also receive `tools/call` requests when Privos executes server-side tools on behalf of the relay app. The relay app replies with standard JSON-RPC responses.
+The WebSocket connection is used for bidirectional JSON-RPC communication between the PrivOS server and the relay app. Once connected, the relay app receives discovery and resource requests such as `initialize`, `tools/list`, and `resources/read`, and can also receive `tools/call` requests when PrivOS executes server-side tools on behalf of the relay app. The relay app replies with standard JSON-RPC responses.

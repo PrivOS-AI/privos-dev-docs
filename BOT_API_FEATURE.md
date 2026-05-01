@@ -1,6 +1,6 @@
-# Privos Chat - Bot API Feature
+# PrivOS Hub - Bot API Feature
 
-A Telegram Bot API-like feature for Privos Chat that enables developers to create and manage bots with API tokens, webhooks, and custom functions.
+A Telegram Bot API-like feature for PrivOS Hub that enables developers to create and manage bots with API tokens, webhooks, and custom functions.
 
 ## Overview
 
@@ -69,13 +69,13 @@ See [Supported Webhook Events Reference](./bot-webhooks/supported-webhook-events
 ### 6. Inline Keyboard
 
 - **Keyboard Buttons**: Messages can have interactive inline keyboard buttons displayed below the message content
-- **Button Types**: Supports multiple action types (callback, url, copy, message, bot-event, privos-flow)
+- **Button Types**: Supports multiple action types (callback, url, copy, message, bot-event, privos-connect)
 - **Keyboard Types**: Actions keyboards, single-select, and multi-select keyboards
 - **Visibility States**: Buttons can be active, inactive, or hidden
 - **One-Time**: Keyboards can be configured to collapse after first interaction
 - **Expiration**: Optional keyboard expiration timestamps
 - **bot-event Action**: Special button action that triggers existing BotWebhookEvent webhooks with custom metadata
-- **privos-flow Action**: Button action that calls a PrivOS Studio flow (chatflow/agentflow) with custom data
+- **privos-connect Action**: Button action that calls a PrivOS Connect flow (chatflow/agentflow) with custom data
 - **Style Options**: Buttons support styling, emojis, and icons
 
 ## Database Schema
@@ -237,7 +237,7 @@ Content-Type: application/json
       {
         "id": "button1",
         "text": "Approve",
-        "action": "bot-event",             // Action type: callback, url, copy, message, bot-event, privos-flow
+        "action": "bot-event",             // Action type: callback, url, copy, message, bot-event, privos-connect
         "actionData": "{\"event\": \"message.mention\", \"botUserId\": \"bot123\", \"metadata\": {\"action\": \"approve\"}}"
       }
     ],
@@ -495,21 +495,21 @@ When clicked, the bot's webhook receives:
 }
 ```
 
-**Example privos-flow Button (callPrivosFlow)**:
+**Example privos-connect Button (callPrivOSFlow)**:
 
 A button configured with:
 ```json
 {
   "id": "run_flow_btn",
   "text": "Run Approval Flow",
-  "action": "privos-flow",
+  "action": "privos-connect",
   "actionData": "{\"flowId\": \"flow-abc-123\", \"data\": {\"action\": \"approve\", \"ticketId\": \"T-001\"}}",
   "style": "success",
   "emoji": "✅"
 }
 ```
 
-When clicked, the server calls `callPrivosFlow()` which sends to PrivOS Studio:
+When clicked, the server calls `callPrivOSFlow()` which sends to PrivOS Connect:
 ```
 POST {PRIVOS_FLOW_API_URL}/prediction/flow-abc-123
 Authorization: Bearer {PRIVOS_FLOW_API_KEY}
@@ -527,17 +527,17 @@ The `sender` field (`_id`, `username`) is automatically injected from the user w
 **actionData fields**:
 | Field | Required | Description |
 |-------|----------|-------------|
-| `flowId` | Yes | PrivOS Studio chatflow/agentflow ID |
-| `flowType` | No | `"callPrivosFlow"` (default) or `"chatWithAgentBot"` |
+| `flowId` | Yes | PrivOS Connect chatflow/agentflow ID |
+| `flowType` | No | `"callPrivOSFlow"` (default) or `"chatWithAgentBot"` |
 | `data` | No | Custom data passed to the flow |
 
-**Example privos-flow Button (chatWithAgentBot)**:
+**Example privos-connect Button (chatWithAgentBot)**:
 
 ```json
 {
   "id": "chat_btn",
   "text": "Ask Agent",
-  "action": "privos-flow",
+  "action": "privos-connect",
   "actionData": "{\"flowId\": \"flow-xyz\", \"flowType\": \"chatWithAgentBot\", \"data\": {\"userBotId\": \"bot456\", \"message\": \"Hello agent\"}}",
   "style": "primary"
 }
@@ -596,7 +596,7 @@ Webhooks receive POST requests with the following format:
 
 ### Headers
 
-- `X-Privos-Signature`: HMAC SHA256 signature of payload
+- `X-PrivOS-Signature`: HMAC SHA256 signature of payload
 - `Content-Type`: application/json
 
 ### Basic Structure
@@ -630,7 +630,7 @@ See [Detailed Payload Examples](./bot-webhooks/webhook-payload-examples.md) for 
 ## File Structure
 
 ```
-privos-chat/
+privos-hub/
 ├── packages/
 │   ├── core-typings/src/
 │   │   └── BotTokens.ts          # Type definitions
@@ -788,12 +788,12 @@ Attempt 24: ~23 days
 
 - **User Association**: Easy to identify which user owns the bot
 - **Uniqueness**: User ID + random secret ensures uniqueness
-- **Prefix**: Easy to identify as Privos Chat tokens
+- **Prefix**: Easy to identify as PrivOS Hub tokens
 - **Entropy**: 64-char hex provides 256 bits of randomness
 
 ## Comparison with Telegram Bot API
 
-| Feature | Privos Chat Bot API | Telegram Bot API |
+| Feature | PrivOS Hub Bot API | Telegram Bot API |
 |---------|---------------------|-------------------|
 | **Token Format** | `privos_<userId>_<secret>` | `<bot_id>:<secret>` |
 | **Webhook Retention** | ~24 hours (via Redis queue) | 24 hours (Telegram server) |
@@ -808,15 +808,15 @@ Attempt 24: ~23 days
 ### Key Differences
 
 #### Event Filtering
-- **Privos Chat**: Bots only receive events from rooms they are added to. More secure and private.
+- **PrivOS Hub**: Bots only receive events from rooms they are added to. More secure and private.
 - **Telegram**: Bot receives ALL messages sent to it, must filter client-side.
 
 #### Webhook Reliability
-- **Privos Chat**: Uses persistent Redis queue with exponential backoff. Survives server restarts.
+- **PrivOS Hub**: Uses persistent Redis queue with exponential backoff. Survives server restarts.
 - **Telegram**: Webhooks stored on Telegram servers for max 24h. Lost if not delivered in time.
 
 #### Event Types Comparison
-| Privos Chat | Telegram | Description |
+| PrivOS Hub | Telegram | Description |
 |-------------|----------|-------------|
 | `message.*` (4) | `message`, `edited_message` | Message events |
 | `room.*` (2) | `my_chat_member` | Room membership |
@@ -825,7 +825,7 @@ Attempt 24: ~23 days
 | `file.*` (3) | N/A | File management |
 | `folder.*` (3) | N/A | Folder management |
 
-Privos Chat supports 10 additional event types beyond Telegram's core functionality.
+PrivOS Hub supports 10 additional event types beyond Telegram's core functionality.
 
 ## Security Considerations
 

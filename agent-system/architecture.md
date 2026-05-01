@@ -23,7 +23,7 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │                    SERVER SERVICES                                │
 ├──────────────┬──────────────────┬────────────────────────────────┤
-│ Privos Brain │ Agent Room Reply │ Trigger System                 │
+│ PrivOS Sandbox │ Agent Room Reply │ Trigger System                 │
 │ HTTP Client  │ Handler          │ ┌──────────────────────────┐   │
 │ (sync +      │ (afterSaveMsg    │ │ injectTriggerMessage()   │   │
 │  stream)     │  → Brain → resp) │ │ (shared funnel)          │   │
@@ -41,7 +41,7 @@
        │                │
        ▼                ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│  Privos Brain│  │   MongoDB    │  │    MinIO      │
+│  PrivOS Sandbox│  │   MongoDB    │  │    MinIO      │
 │  (Claude Code│  │  (users,     │  │  (context +   │
 │   instance)  │  │   rooms,     │  │   skill files)│
 │              │  │   triggers)  │  │              │
@@ -75,7 +75,7 @@ writeClaudeMdToProjectPath()  ← writes to /tmp/privos-brain/{roomId}/CLAUDE.md
 BotMessageService.startStreaming()  ← creates placeholder message
         │
         ▼
-streamResponse() → Privos Brain /api/attempts
+streamResponse() → PrivOS Sandbox /api/attempts
         │
         ├─ onTextDelta → BotMessageService.streamChunk() (150ms throttle)
         ├─ onToolActivity → show tool hint
@@ -117,7 +117,7 @@ handleAgentRoomMessage()
 | File | Purpose |
 |------|---------|
 | `server/configuration/bot.ts` | Startup: registers callbacks + heartbeat cron |
-| `server/services/privos-brain-agent-service.ts` | HTTP client for Privos Brain `/api/attempts` |
+| `server/services/privos-brain-agent-service.ts` | HTTP client for PrivOS Sandbox `/api/attempts` |
 | `server/services/agent-room-reply-handler.ts` | Message → Brain → streamed reply |
 | `server/services/agent-context-cache.ts` | MinIO file reader with 5-min LRU cache |
 | `server/services/agent-context-file-generator.ts` | Generates IDENTITY.md, MEMORY.md, CLAUDE.md |
@@ -215,7 +215,7 @@ handleAgentRoomMessage()
 
 | Service | Purpose | Config |
 |---------|---------|--------|
-| **Privos Brain** | Claude Code AI backend | `Admin > Bots > Privos Brain` or env `PRIVOS_BRAIN_URL` + `PRIVOS_BRAIN_API_KEY` |
+| **PrivOS Sandbox** | Claude Code AI backend | `Admin > Bots > PrivOS Sandbox` or env `PRIVOS_BRAIN_URL` + `PRIVOS_BRAIN_API_KEY` |
 | **MinIO** | File storage for context/skill files | Shared MinIO instance (existing) |
 | **MongoDB** | User docs (triggers), room docs | Shared MongoDB (existing) |
 | **Agenda** (`@rocket.chat/cron`) | Cron job scheduling | MongoDB-backed, handles multi-instance locking |

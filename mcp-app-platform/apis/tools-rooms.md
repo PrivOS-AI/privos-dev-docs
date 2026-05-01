@@ -1,4 +1,4 @@
-# Privos MCP Tools — Rooms
+# PrivOS MCP Tools — Rooms
 
 ## `privos.rooms.get`
 

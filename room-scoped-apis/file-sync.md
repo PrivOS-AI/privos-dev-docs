@@ -2,9 +2,9 @@
 
 ## Overview
 
-Synchronize MinIO state → PrivOS Chat file management database (`privos_files`, `privos_folders`).
+Synchronize MinIO state → PrivOS Hub file management database (`privos_files`, `privos_folders`).
 
-When an external service (AI Service, MCP Tools, etc.) writes files **directly to MinIO**, the PrivOS Chat database does not automatically know about them. This API allows the external service to send path hints so PrivOS Chat can sync the database to match MinIO's actual state.
+When an external service (AI Service, MCP Tools, etc.) writes files **directly to MinIO**, the PrivOS Hub database does not automatically know about them. This API allows the external service to send path hints so PrivOS Hub can sync the database to match MinIO's actual state.
 
 **The server always reads MinIO as the source of truth — the payload is just a hint about which areas changed.**
 

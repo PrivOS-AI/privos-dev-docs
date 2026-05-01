@@ -1,4 +1,4 @@
-# Privos MCP Tools — App
+# PrivOS MCP Tools — App
 
 ## `privos.app.getLocalData`
 

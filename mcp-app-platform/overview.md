@@ -1,15 +1,15 @@
 # App Platform — Overview
 
-MCP-compatible platform for embedding third-party apps in Privos Chat rooms via sandboxed iframes. Apps are MCP servers that expose tools with UI capabilities.
+MCP-compatible platform for embedding third-party apps in PrivOS Hub rooms via sandboxed iframes. Apps are MCP servers that expose tools with UI capabilities.
 
 ## Key Concepts
 
-- Apps are external MCP servers — Privos connects via **direct HTTP** or **relay WebSocket**
-- **Direct apps**: Privos connects via HTTP Streamable to your server
-- **Relay apps**: Your app connects via WebSocket relay provided by Privos (ideal for NAT/firewall)
+- Apps are external MCP servers — PrivOS connects via **direct HTTP** or **relay WebSocket**
+- **Direct apps**: PrivOS connects via HTTP Streamable to your server
+- **Relay apps**: Your app connects via WebSocket relay provided by PrivOS (ideal for NAT/firewall)
 - Tool discovery via `initialize` → `tools/list` JSON-RPC
 - Tools with `_meta.ui` render in sandboxed iframes as room tabs
-- Apps call Privos resources (lists, files, messages) via `callServerTool()`
+- Apps call PrivOS resources (lists, files, messages) via `callServerTool()`
 - OAuth scope enforcement on every tool call
 - Deny-by-default iframe sandbox (no `allow-same-origin`)
 
@@ -23,7 +23,7 @@ Developer's MCP App Server (external, HTTPS required)
 │
 ├──────────── Streamable HTTP ──────────
 │
-Privos Chat Host (MCP Client connects directly)
+PrivOS Hub Host (MCP Client connects directly)
 ```
 
 ### Relay Connection
@@ -39,7 +39,7 @@ Developer's MCP App Server → Exchanges token for clientId + clientSecret
                                  ↓
                                  └──────── JSON-RPC 2.0 over WS ────────────
 
-Privos Chat Host
+PrivOS Hub Host
 ├── Pairing endpoint (generate URL, check status)
 ├── WebSocket relay (accepts connections from apps)
 ├── MCP Client (proxies to app via relay)

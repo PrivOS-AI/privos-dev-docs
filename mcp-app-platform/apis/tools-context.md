@@ -1,4 +1,4 @@
-# Privos MCP Tools — Context
+# PrivOS MCP Tools — Context
 
 ## `privos.context.get`
 

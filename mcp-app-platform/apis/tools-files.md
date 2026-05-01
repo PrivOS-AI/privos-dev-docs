@@ -1,4 +1,4 @@
-# Privos MCP Tools — Files
+# PrivOS MCP Tools — Files
 
 ## `privos.files.getByChannel`
 

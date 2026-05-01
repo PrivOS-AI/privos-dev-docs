@@ -8,7 +8,7 @@ Agents can manage their own triggers via natural language. When a user asks an a
 User: "Set up a cron job to check news every hour"
         │
         ▼
-Agent (Privos Brain / Claude Code)
+Agent (PrivOS Sandbox / Claude Code)
         │
         ├─ Reads .claude/skills/privos-agent-management/SKILL.md
         ├─ Understands available trigger management scripts
@@ -26,7 +26,7 @@ Agent confirms: "Done! I'll check trending news every hour."
 
 ## Skill Files
 
-Uploaded to MinIO during agent creation, synced to Privos Brain CWD via `projectId = roomId`.
+Uploaded to MinIO during agent creation, synced to PrivOS Sandbox CWD via `projectId = roomId`.
 
 ### Directory Structure
 

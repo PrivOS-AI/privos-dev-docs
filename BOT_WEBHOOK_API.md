@@ -1,6 +1,6 @@
 # Bot Webhook API Documentation
 
-This document describes the webhook payload format and authentication for handling bot webhooks from Privos Chat.
+This document describes the webhook payload format and authentication for handling bot webhooks from PrivOS Hub.
 
 ## Webhook Authentication
 
@@ -8,10 +8,10 @@ Webhooks use **secret token authentication** (similar to Telegram's approach):
 
 ### Secret Token Header (Required)
 
-Every webhook request includes a `X-Privos-Bot-Api-Secret-Token` header:
+Every webhook request includes a `X-PrivOS-Bot-Api-Secret-Token` header:
 
 ```
-X-Privos-Bot-Api-Secret-Token: your-random-secret-token
+X-PrivOS-Bot-Api-Secret-Token: your-random-secret-token
 ```
 
 This provides a simple static token for basic authentication. The token is configured in your bot settings and should be kept secure.
@@ -43,7 +43,7 @@ app = Flask(__name__)
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    secret_token = request.headers.get('X-Privos-Bot-Api-Secret-Token')
+    secret_token = request.headers.get('X-PrivOS-Bot-Api-Secret-Token')
     expected_token = os.environ.get('WEBHOOK_SECRET_TOKEN')
 
     if secret_token != expected_token:
@@ -208,7 +208,7 @@ Content-Type: application/json
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendMessage \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendMessage \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -H "Content-Type: application/json" \
   -d '{
@@ -221,7 +221,7 @@ curl -X POST https://your-privos-chat.com/api/v1/bot/sendMessage \
 
 ```javascript
 async function sendMessage(roomId, text, options = {}) {
-    const response = await fetch('https://your-privos-chat.com/api/v1/bot/sendMessage', {
+    const response = await fetch('https://your-privos-hub.com/api/v1/bot/sendMessage', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${process.env.BOT_TOKEN}`,
@@ -266,7 +266,7 @@ import requests
 import os
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-API_URL = 'https://your-privos-chat.com/api/v1/bot/sendMessage'
+API_URL = 'https://your-privos-hub.com/api/v1/bot/sendMessage'
 
 def send_message(room_id, text, reply_to_message_id=None):
     """Send a message to a room"""
@@ -320,7 +320,7 @@ reply_to_message_id: Optional message ID to reply to
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendPhoto \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendPhoto \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "photo=@/path/to/photo.jpg" \
@@ -330,7 +330,7 @@ curl -X POST https://your-privos-chat.com/api/v1/bot/sendPhoto \
 **With reply_to_message_id:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendPhoto \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendPhoto \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "photo=@/path/to/photo.jpg" \
@@ -351,7 +351,7 @@ async function sendPhoto(roomId, photoPath, caption = '') {
     form.append('photo', fs.createReadStream(photoPath));
     if (caption) form.append('caption', caption);
 
-    const response = await fetch('https://your-privos-chat.com/api/v1/bot/sendPhoto', {
+    const response = await fetch('https://your-privos-hub.com/api/v1/bot/sendPhoto', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${process.env.BOT_TOKEN}`,
@@ -384,7 +384,7 @@ reply_to_message_id: Optional message ID to reply to
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendAudio \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendAudio \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "audio=@/path/to/audio.mp3"
@@ -393,7 +393,7 @@ curl -X POST https://your-privos-chat.com/api/v1/bot/sendAudio \
 **With reply_to_message_id:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendAudio \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendAudio \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "audio=@/path/to/audio.mp3" \
@@ -420,7 +420,7 @@ reply_to_message_id: Optional message ID to reply to
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendDocument \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendDocument \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "document=@/path/to/document.pdf"
@@ -429,7 +429,7 @@ curl -X POST https://your-privos-chat.com/api/v1/bot/sendDocument \
 **With reply_to_message_id:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendDocument \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendDocument \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "document=@/path/to/document.pdf" \
@@ -456,7 +456,7 @@ reply_to_message_id: Optional message ID to reply to
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendVideo \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendVideo \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "video=@/path/to/video.mp4"
@@ -465,7 +465,7 @@ curl -X POST https://your-privos-chat.com/api/v1/bot/sendVideo \
 **With reply_to_message_id:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendVideo \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendVideo \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "video=@/path/to/video.mp4" \
@@ -492,7 +492,7 @@ reply_to_message_id: Optional message ID to reply to
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendVoice \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendVoice \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "voice=@/path/to/voice.ogg"
@@ -501,7 +501,7 @@ curl -X POST https://your-privos-chat.com/api/v1/bot/sendVoice \
 **With reply_to_message_id:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/sendVoice \
+curl -X POST https://your-privos-hub.com/api/v1/bot/sendVoice \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -F "roomId=GENERAL" \
   -F "voice=@/path/to/voice.ogg" \
@@ -529,7 +529,7 @@ Content-Type: application/json
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/editMessage \
+curl -X POST https://your-privos-hub.com/api/v1/bot/editMessage \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -H "Content-Type: application/json" \
   -d '{
@@ -558,7 +558,7 @@ Content-Type: application/json
 **cURL Example:**
 
 ```bash
-curl -X POST https://your-privos-chat.com/api/v1/bot/deleteMessage \
+curl -X POST https://your-privos-hub.com/api/v1/bot/deleteMessage \
   -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
   -H "Content-Type: application/json" \
   -d '{
@@ -709,8 +709,8 @@ async function handleNewMessage(payload) {
     const { room, message } = payload;
     const response = `Echo: ${message.text}`;
 
-    // Send response back to Privos
-    await fetch('https://your-privos-chat.com/api/v1/bot/sendMessage', {
+    // Send response back to PrivOS
+    await fetch('https://your-privos-hub.com/api/v1/bot/sendMessage', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${BOT_TOKEN}`,
@@ -735,7 +735,7 @@ app.listen(PORT, () => {
 |----------|-------------|---------|
 | `WEBHOOK_SECRET_TOKEN` | Your webhook secret token for authentication | `my-random-token` |
 | `BOT_TOKEN` | Your bot API token for sending messages | `privos_694b67f3...` |
-| `API_URL` | Privos Chat API base URL | `https://your-privos-chat.com` |
+| `API_URL` | PrivOS Hub API base URL | `https://your-privos-hub.com` |
 
 ## Security Considerations
 
@@ -760,7 +760,7 @@ app.listen(PORT, () => {
 ### Token verification failing?
 
 1. Check you're using the correct **secret token** from bot configuration
-2. Verify the token is being sent in the `X-Privos-Bot-Api-Secret-Token` header
+2. Verify the token is being sent in the `X-PrivOS-Bot-Api-Secret-Token` header
 3. Ensure the token matches exactly (case-sensitive)
 
 ### Messages not sending back?

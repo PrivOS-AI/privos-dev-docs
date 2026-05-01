@@ -1,4 +1,4 @@
-# Privos MCP Tools — Database
+# PrivOS MCP Tools — Database
 
 ## Overview
 

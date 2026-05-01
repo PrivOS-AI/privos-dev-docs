@@ -1,8 +1,8 @@
-# PrivOS Chat - Project Changelog
+# PrivOS Hub - Project Changelog
 
 ## Overview
 
-This document tracks significant features, improvements, and bug fixes released in PrivOS Chat. Changes are organized by date with associated commit references.
+This document tracks significant features, improvements, and bug fixes released in PrivOS Hub. Changes are organized by date with associated commit references.
 
 ---
 
@@ -11,12 +11,12 @@ This document tracks significant features, improvements, and bug fixes released 
 ### Agent Selector & Bot Key
 
 #### Per-Agent Bot Key Validation
-**Summary:** AI chat now re-validates the "Push bot key to Privos Brain" CTA per-agent. Switching agents in the selector triggers a fresh status fetch for the new bot, dismissals are scoped to `(roomId, botId)`, and pushes target the selected agent instead of always the room's default bot.
+**Summary:** AI chat now re-validates the "Push bot key to PrivOS Sandbox" CTA per-agent. Switching agents in the selector triggers a fresh status fetch for the new bot, dismissals are scoped to `(roomId, botId)`, and pushes target the selected agent instead of always the room's default bot.
 
 **Implementation:**
 - `apps/meteor/app/api/server/v1/agent-privos-brain-bot-key.ts` — `agents.brain.botKeyStatus` (GET) and `agents.brain.pushBotKey` (POST) accept optional `botId`. `resolveTargetBotId` validates the bot is `type: 'bot'` and subscribed to the room before falling back to the default.
 - `apps/meteor/server/services/privos-brain-bot-key-service.ts` — relaxed default-bot gate; now allows any bot subscribed to the room (membership-not-default-bot). Resolves `400 bot-not-room-default` when pushing for non-default agent bots.
-- `apps/meteor/client/hooks/aiChat/useBotPrivosBrainKeyStatus.ts` — accepts `botId`, includes it in the React Query key and request params.
+- `apps/meteor/client/hooks/aiChat/useBotPrivOSBrainKeyStatus.ts` — accepts `botId`, includes it in the React Query key and request params.
 - `apps/meteor/client/components/AIChatBox/ChatBoxInput.tsx` — passes `selectedAgent.botUserId`; dismissal state keyed by `${roomId}:${botId}`.
 
 #### Mid-Session Agent Switch — Full History Push
@@ -26,7 +26,7 @@ This document tracks significant features, improvements, and bug fixes released 
 - `apps/meteor/app/agent-chat/server/contextCompaction.ts` — added `agentChanged = !!lastBotId && lastBotId !== botId`. Bypasses resume/delta short-circuits when an agent switch is detected. Per-bot scope (`${roomId}:${botId}`) and `lastBotId` updates after stream completion let resume mode kick in normally on subsequent same-agent turns.
 
 #### Bot Self-Management Authorization
-**Summary:** `agents.triggers.*` endpoints (list/add/update/remove/run) now accept calls from the bot itself when the bot has `owner` or `leader` role on its agent room. Skills running in Privos Brain authenticate with the bot's bearer token; previously the route required the *human* creator or admin permission, which broke autonomous trigger management.
+**Summary:** `agents.triggers.*` endpoints (list/add/update/remove/run) now accept calls from the bot itself when the bot has `owner` or `leader` role on its agent room. Skills running in PrivOS Sandbox authenticate with the bot's bearer token; previously the route required the *human* creator or admin permission, which broke autonomous trigger management.
 
 **Implementation:**
 - `apps/meteor/app/api/server/v1/agent-trigger-endpoints.ts` — `verifyBotOwnership` now also checks `Subscriptions.findOneByRoomIdAndUserId(agentRoomId, userId).roles` for `owner`/`leader` before falling back to admin permission. Scope is limited to this file's five trigger routes; other endpoints unchanged.
@@ -104,13 +104,13 @@ This document tracks significant features, improvements, and bug fixes released 
 ### Completed Features
 
 #### 1. Agent System — Conversational Agent Builder
-**Summary:** Full agent creation flow powered by Privos Brain (Claude Code). Users chat with a builder assistant that gathers agent details, then the system provisions a bot user, private agent room, context files, and skill files.
+**Summary:** Full agent creation flow powered by PrivOS Sandbox (Claude Code). Users chat with a builder assistant that gathers agent details, then the system provisions a bot user, private agent room, context files, and skill files.
 
 **Features:**
-- Conversational builder UI via `POST /v1/agents.builderChat` (Privos Brain-backed)
+- Conversational builder UI via `POST /v1/agents.builderChat` (PrivOS Sandbox-backed)
 - Agent creation via `POST /v1/agents.create` — provisions bot user, room, context files, skill files
 - Context files uploaded to MinIO: IDENTITY.md, MEMORY.md, CLAUDE.md
-- Agent room auto-reply: `afterSaveMessage` → Privos Brain → streamed bot response
+- Agent room auto-reply: `afterSaveMessage` → PrivOS Sandbox → streamed bot response
 - Per-room concurrency guard (1 reply at a time)
 - Context cache with 5-min TTL for MinIO file reads
 
@@ -152,7 +152,7 @@ This document tracks significant features, improvements, and bug fixes released 
 - [Agent Settings UI](./agent-system/agent-settings-ui.md)
 
 #### 4. Agent Self-Management Skills
-**Summary:** Skill files uploaded to MinIO during agent creation, synced to Privos Brain CWD. Agents manage their own triggers via natural language → `tool_use` → curl API calls.
+**Summary:** Skill files uploaded to MinIO during agent creation, synced to PrivOS Sandbox CWD. Agents manage their own triggers via natural language → `tool_use` → curl API calls.
 
 **Features:**
 - 7 skill files: `.env`, `SKILL.md`, 5 JS scripts (list/add/update/remove/run)
@@ -163,15 +163,15 @@ This document tracks significant features, improvements, and bug fixes released 
 **Related Documentation:**
 - [Self-Management Skills](./agent-system/self-management-skills.md)
 
-#### 5. Room-Level Privos Brain Configuration
-**Summary:** Per-room Brain settings (endpoint + API key + provider/model) in Edit Channel/Team Advanced Settings. When configured, AI Chat and Agent Bot replies route to room's Brain instead of global Privos Flow.
+#### 5. Room-Level PrivOS Sandbox Configuration
+**Summary:** Per-room Brain settings (endpoint + API key + provider/model) in Edit Channel/Team Advanced Settings. When configured, AI Chat and Agent Bot replies route to room's Brain instead of global PrivOS Connect.
 
 **Features:**
 - Room customFields stores `privosBrain: { url, apiKey, defaultProvider?, defaultModel? }`
 - `POST /v1/rooms.testBrainConnection` — validate Brain endpoint, fetch available providers/models
-- AI Chat (`processAIRequestJob`) checks room Brain config before routing to Privos Flow
+- AI Chat (`processAIRequestJob`) checks room Brain config before routing to PrivOS Connect
 - Agent Bot (`handleAgentRoomMessage`) uses room Brain when available, falls back to global
-- Edit Channel/Team → Advanced Settings → Privos Brain section with URL, API key, test connection, model selects
+- Edit Channel/Team → Advanced Settings → PrivOS Sandbox section with URL, API key, test connection, model selects
 - Security: SSRF URL validation, apiKey stripped from all client-facing data paths, server-side apiKey preservation on partial updates
 
 #### 6. Migration v348 — Agent Trigger Indexes
@@ -218,7 +218,7 @@ This document tracks significant features, improvements, and bug fixes released 
 #### 1. Room-Scoped Agent Bot Management
 **Commit:** `92db6b02` - feat(ai-chat): replace global agent list with room-scoped bot agents
 
-**Summary:** Replaced global agent list UI with room-scoped bot agents. AI Chat now fetches agents specific to the current room instead of all public subagents from Privos Studio.
+**Summary:** Replaced global agent list UI with room-scoped bot agents. AI Chat now fetches agents specific to the current room instead of all public subagents from PrivOS Connect.
 
 **Changes:**
 - New endpoint: `GET /v1/rooms/:roomId/agentBots` - fetches bots configured for a specific room

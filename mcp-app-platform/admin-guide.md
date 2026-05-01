@@ -8,7 +8,7 @@
 2. Click **Connect App**
 3. Select **Direct Connection**
 4. Enter MCP server URL (e.g., `https://myapp.example.com`)
-5. Privos performs two-step discovery:
+5. PrivOS performs two-step discovery:
    - **Step A**: Fetch `/.well-known/mcp/manifest.json` (name, version, author info)
    - **Step B**: MCP client connect → `initialize` → `tools/list`
 6. OAuth credentials generated — **save clientId + clientSecret** (shown once)
@@ -19,10 +19,10 @@
 2. Click **Generate Pairing URL**
 3. Enter manifest URL (e.g., `https://myapp.example.com/.well-known/mcp/manifest.json`)
 4. Optionally configure:
-   - **Wake URL**: HTTPS endpoint Privos calls to wake app (if offline)
+   - **Wake URL**: HTTPS endpoint PrivOS calls to wake app (if offline)
    - **Queue TTL**: How long to queue messages while app is offline (default: 1 hour)
    - **Queue Max Size**: Max messages to buffer (default: 1000)
-5. Privos generates a pairing URL (1-hour expiry):
+5. PrivOS generates a pairing URL (1-hour expiry):
    - Format: `https://chat.privos.com/pair?token=pair_abc_123xyz`
 6. **Share the pairing URL with the app developer**
 7. Developer enters URL during `npm start` → credentials auto-saved to .env

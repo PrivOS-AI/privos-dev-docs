@@ -212,7 +212,7 @@ interface IRoom {
 POST /api/v1/rooms.testBrainConnection
 ```
 
-Validate a Privos Brain endpoint and fetch available providers/models. Used by the Edit Room UI to test room-level Brain configuration before saving.
+Validate a PrivOS Sandbox endpoint and fetch available providers/models. Used by the Edit Room UI to test room-level Brain configuration before saving.
 
 **Request Body:**
 
