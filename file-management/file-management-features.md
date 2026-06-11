@@ -207,34 +207,130 @@ Filter files by multiple criteria simultaneously:
 
 ---
 
-## AI Embedding Features
+## AI Document Parsing (ocr-worker integration)
 
-### 1. Auto Parse (formerly Auto-Embed)
-- UI label renamed from "Auto-Embed" to **"Auto Parse"**
-- (i) info icon next to the label with hover tooltip explaining the feature:
-  > "Auto Parse converts files into markdown format and stores them in a .markdown folder for easier analysis and context understanding."
-- Tooltip rendered via React Portal (`createPortal`) to `document.body` to avoid overflow clipping by parent containers
-- Toggle per-channel, per-user (saved in localStorage key `filemanagement_autoembed_{roomId}` — key unchanged for backward compatibility)
-- When enabled, files are auto-embedded on upload for AI-powered smart search
+> Migrated from Flowise/PrivOS Connect to a dedicated **ocr-worker** REST service.
+> Config resolves from a workspace-wide **Admin > Settings > Document Parser** group,
+> with an optional per-room override (mirrors the PrivOS Sandbox "Use Global" pattern).
 
-### 2. Manual Batch Embedding
-- Embed multiple files at once (up to 100 files per batch)
-- Embed files in a channel or specific folder
-- Track success/failed count
+### 1. Config Resolution (global vs. room)
+- **Global admin settings** (`Document_Parser` group): `DocumentParser_URL`,
+  `DocumentParser_API_Key` (secret), `DocumentParser_Use_Env` (read
+  `DOCUMENT_PARSER_URL` / `DOCUMENT_PARSER_API_KEY` env vars instead of DB).
+- **Per-room override**: `rooms.customFields.documentParser = { useGlobal, url, apiKey }`.
+- Effective config resolved by `getEffectiveDocumentParserConfig(roomId)`:
+  - `DocumentParser_Use_Env` true → env (`source: 'env'`)
+  - room `useGlobal === true`, or room has no url+key → admin global (`source: 'global'`)
+  - otherwise → room's own url/key (`source: 'room'`)
+  - `useGlobal:false` with no stored url/key still falls back to global.
+- Legacy rooms with `{ url, apiKey }` and no `useGlobal` field keep their room
+  override (backward compatible; no migration needed).
+- API key never leaves the server: client only sees `{ useGlobal, hasApiKey }`.
+- Endpoints:
+  - `GET  /v1/rooms.isDocumentParserConfigured` — resolver-backed configured check
+  - `POST /v1/rooms.testDocumentParserConnection` — room health-check (accepts `useGlobal`)
+  - `POST /v1/rooms.saveDocumentParserConfig` — validate + save (accepts `useGlobal`)
+  - `GET/POST /v1/document-parser.adminConfig` — read/save global admin settings
+  - `POST /v1/document-parser.testAdminConnection` — admin health-check
+- Room "Validate & Save" + a "Use global Document Parser config" toggle in
+  Advanced settings; admin page has its own URL/key + Test Connection. Both support
+  the `__use_existing__` sentinel to avoid resending the stored API key.
 
-### 3. Embedding Status
-- `is_embedded` flag on each file
-- `embedding_task_id` to track progress
-- Query unembedded files
+### 2. Auto Parse Toggle
+- UI label "Auto Parse" (formerly "Auto-Embed")
+- **Toggle is gated on effective doc-parser config**: greyed out + info tooltip when
+  neither the room nor the global admin endpoint is configured (checked via
+  `rooms.isDocumentParserConfigured`)
+- Tooltip text: "Document Parser not configured. Go to Room Settings → Advanced
+  to set up the ocr-worker endpoint and enable Auto Parse."
+- When enabled, every uploaded / replaced / content-updated file is auto-parsed
+- Toggle per-user, per-room (localStorage key `filemanagement_autoembed_{roomId}`)
+
+### 3. Parse Lifecycle
+The ocr-worker REST contract:
+- `POST /api/v1/jobs/process` (multipart) — upload file bytes → returns `{ job_id }`
+- `GET /api/v1/jobs/status/{job_id}` — poll status (`waiting | active | completed | failed`)
+- `POST /api/v1/jobs/delete-file` — remove parsed `.markdown/` artefact when source file is deleted
+
+privos-hub helper functions in `fileManagement.ts`:
+- `triggerFileParse(channelId, fileId, presignedUrl, filename, filePath)` — submits
+  parse job and marks file `parse_status: 'pending'`
+- `triggerFileParseDelete(channelId, fileId, filename, filePath)` — fire-and-forget
+  cleanup of `.markdown/` on deletion
+
+These are called automatically on:
+- File upload (direct + chunked completion)
+- File content update (text + binary)
+- Duplicate-replace upload
+- File delete (single + folder recursive)
+
+### 4. Parse Status Field
+Each file document has:
+- `parse_status?: 'pending' | 'complete' | 'error' | 'timeout'`
+- `parse_submitted_at?: Date` — used to detect 30-min timeout
+- `embedding_task_id?: string` — BullMQ job id from ocr-worker
+- `is_embedded?: boolean` — true when parsing completed
+
+### 5. Background Parse-Status Poller
+`server/services/parse-status-poller.ts` runs on a 5 s interval. For every file
+with `parse_status === 'pending'` it calls the ocr-worker status endpoint and
+updates `parse_status` to `complete` / `error`, or to `timeout` when
+`parse_submitted_at` is older than 30 min.
+
+### 6. UI Status Badge (per file)
+A small badge is rendered at the bottom-right of every file icon:
+- **Pending**: animated blue spinner
+- **Timeout / Error**: red spinner — clickable; calls retry-parse endpoint
+- **Complete** (or legacy `is_embedded === true`): blue tick
+- Files inside the `.markdown` root folder hide the badge (excluded from parsing)
+
+### 7. Retry From Menu
+Both the right-click context menu and the `…` dropdown expose a "Manual Parse"
+item that calls `POST /file-management.files/:fileId/retry-parse`. The item is
+**always enabled**, even while `parse_status === 'pending'`, so users can
+re-submit a stuck job.
+
+### 8. Batch Parse
+- `POST /file-management.files.batch-embed` — submits parse jobs for every
+  un-parsed file in the room
+- Excludes files inside the root-level `.markdown` folder (which contains the
+  parsed output and must never be re-parsed)
+- Fire-and-forget: returns immediately with `{ submitted: N }`; client polls
+  via `check-parse-status`
+
+### 9. Status Polling Endpoint
+- `POST /file-management.files.check-parse-status` — body `{ channelId }`,
+  returns the current file list. The Files tab calls it every 3 s while any
+  file is `pending`, so badges update without a full refetch.
+
+### 10. `.markdown` Folder Convention
+The ocr-worker writes parsed artefacts under
+`{room_id}/.markdown/{relative_path}.md` in the same MinIO bucket that holds
+the source files. Path resolution priority:
+1. `filename` already contains a `/` (archive flow) → use as-is
+2. `file_path` (MinIO object key) — strip `{room_id}/` prefix
+3. `download_link` URL extraction (legacy)
+4. Plain `filename`
+
+This preserves subfolder structure: `ROOM123/test/eVND.pdf`
+→ `.markdown/test/eVND.md`.
 
 **Workflow:**
 ```
-Upload file → Auto Parse enabled?
-  ├─ Yes → Generate presigned URL → Send task to worker → Mark is_embedded=true
-  └─ No → File saved normally (is_embedded=false)
+Upload file
+  → privos-hub stores bytes in MinIO at {room_id}/{folder}/{name}
+  → triggerFileParse(): POST multipart to ocr-worker /jobs/process
+  → privos-hub marks parse_status='pending' + parse_submitted_at=now
+  → ocr-worker queues BullMQ job, returns {job_id}
+  → Worker downloads / extracts → writes .markdown/{path}.md to MinIO
+  → parse-status-poller picks up 'completed' → updates is_embedded=true,
+                                                 parse_status='complete'
 
-Batch embed → Find unembedded files → Loop through each file
-  → Generate presigned URL → Send task → Update status
+Delete file
+  → triggerFileParseDelete(): POST to ocr-worker /jobs/delete-file
+  → privos-hub deletes source from MinIO and MongoDB immediately
+  → ocr-worker enqueues delete job (no scheduling delay)
+  → Worker removes {room_id}/.markdown/{relative}.md
 ```
 
 ---
@@ -450,12 +546,27 @@ User moves folder → Server checks duplicate at destination
 6. Refresh file list
 ```
 
-### Workflow 6: Batch AI Embedding
+### Workflow 6: Batch Document Parsing
 ```
-1. Click "Embed" button (or toggle Auto Parse)
-2. POST /batch-embed → Server finds unembedded files
-3. Server generates presigned URLs → Sends tasks to worker
-4. Display results (processed, failed)
+1. Toggle "Auto Parse" ON (or click batch action)
+2. POST /file-management.files.batch-embed
+   → Server finds files where parse_status is null/error/timeout
+     (excluding the .markdown folder)
+   → For each: submitParseJob() POSTs the file bytes to ocr-worker
+   → Marks parse_status='pending', stores embedding_task_id
+3. Endpoint returns { submitted: N } immediately (fire-and-forget)
+4. Client polls POST /file-management.files.check-parse-status every 3s
+5. Badges flip from blue spinner → tick / red as ocr-worker completes
+```
+
+### Workflow 7: Configure Document Parser
+```
+1. Open Room Settings → Advanced → Document Parser
+2. Enter ocr-worker URL (https://...) and API key
+3. Click "Validate & Save"
+   → POST /v1/rooms.saveDocumentParserConfig
+   → Server validates URL, calls /health on ocr-worker, saves to customFields
+4. Auto Parse toggle in Files tab becomes enabled
 ```
 
 ---
@@ -473,8 +584,14 @@ User moves folder → Server checks duplicate at destination
   file_size?: number;                // Bytes
   file_type?: string;                // MIME type or extension
   user_id?: string;                  // Uploader
-  is_embedded?: boolean;             // AI embedding status
-  embedding_task_id?: string;        // Embedding task reference
+  is_embedded?: boolean;             // True once ocr-worker reports parse complete
+  embedding_task_id?: string;        // BullMQ job id returned by ocr-worker
+  parse_status?:                     // Current parse lifecycle state
+    | 'pending'
+    | 'complete'
+    | 'error'
+    | 'timeout';
+  parse_submitted_at?: Date;         // When parse job was submitted (used for >30 min timeout)
   archive_id?: string;               // Archive reference
   created_at: Date;
   updated_at: Date;
@@ -512,4 +629,16 @@ These are personal preferences — not shared across users or synced to the serv
 
 ## Version
 
-**Current Version:** v2.1.0 (2026-03-27)
+**Current Version:** v2.2.0 (2026-05-04)
+
+**Changelog from v2.1.0:**
+- Migrated document parsing from Flowise/PrivOS Connect to dedicated **ocr-worker** REST service
+- Added per-room Document Parser config (`customFields.documentParser`) and Advanced settings UI
+- New `parse_status` / `parse_submitted_at` fields on file documents
+- New endpoints: `rooms.saveDocumentParserConfig`, `rooms.testDocumentParserConnection`, `file-management.files.check-parse-status`, `file-management.files/:fileId/retry-parse`
+- `batch-embed` now fire-and-forget; excludes the `.markdown` folder
+- Background `parse-status-poller` (5 s) plus client `check-parse-status` polling (3 s while pending)
+- Parse-status badge on file icons (spinner / tick / red retry)
+- Retry-parse always available from context menu / `…` dropdown, even while pending
+- Auto Parse toggle gated on whether the room has a configured doc-parser endpoint
+- ocr-worker delete-file path now removes the corresponding `.markdown/` artefact (no 30 s delay)

@@ -46,7 +46,7 @@ Uploaded to MinIO during agent creation, synced to PrivOS Sandbox CWD via `proje
 ```
 AGENT_BOT_ID={botId}
 AGENT_BOT_TOKEN={botToken}
-PRIVOS_CHAT_URL={ROOT_URL}
+PRIVOS_HUB_URL={ROOT_URL}
 ```
 
 ### SKILL.md

@@ -185,6 +185,74 @@ Update a list's name or description.
 
 ---
 
+## `privos.lists.delete`
+
+Soft-delete a list by ID. Sets `_deletedAt` timestamp instead of permanently removing the list. Items and stages cascade-delete but can be recovered if the list is recovered.
+
+| | |
+|---|---|
+| **Scope** | `lists:write` |
+
+### Arguments
+
+| Arg | Type | Required | Description |
+|-----|------|----------|-------------|
+| `listId` | string | Yes | List ID to delete |
+
+### Response
+
+```json
+{ "deleted": true, "listId": "list_001" }
+```
+
+### Example
+
+```typescript
+await app.callServerTool({
+  name: 'privos.lists.delete',
+  arguments: { listId: 'list_001' }
+});
+```
+
+---
+
+## `privos.lists.deleteMany`
+
+Soft-delete multiple lists by IDs in one call. Maximum 100 lists per batch. Failed deletions are logged but don't stop the batch — check `deletedCount` in response.
+
+| | |
+|---|---|
+| **Scope** | `lists:write` |
+
+### Arguments
+
+| Arg | Type | Required | Description |
+|-----|------|----------|-------------|
+| `listIds` | string[] | Yes | Array of list IDs to delete (max 100) |
+
+### Response
+
+```json
+{
+  "deleted": true,
+  "deletedCount": 3,
+  "listIds": ["list_001", "list_002", "list_003"]
+}
+```
+
+### Example
+
+```typescript
+await app.callServerTool({
+  name: 'privos.lists.deleteMany',
+  arguments: {
+    listIds: ['list_001', 'list_002', 'list_003']
+  }
+});
+```
+
+---
+
 ## `privos.lists.getItems`
 
 Get items in a list with pagination, sorting, and optional stage filter.

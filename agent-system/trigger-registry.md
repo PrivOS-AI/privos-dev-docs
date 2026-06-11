@@ -50,7 +50,7 @@ interface IAgentTrigger {
 
   // type=webhook
   webhookToken?: string;         // unique token for inbound URL
-  webhookSecret?: string;        // HMAC signature verification secret
+  webhookSecret?: string;        // Bearer-style shared secret (sent in header)
   prompt?: string;               // prompt sent with webhook payload as context
 
   // type=event
@@ -166,16 +166,23 @@ POST /api/v1/agents.webhook/{webhookToken}
 
 No authentication required (token-based). The request body is passed as `context` to the trigger prompt.
 
-### HMAC Signature Verification
+### Secret Verification
 
-Optional. If `webhookSecret` exists on the trigger:
+Callers post the `webhookSecret` back as a header (server accepts either):
 
 ```
-Header: x-webhook-signature: <hex>
-Expected: HMAC-SHA256(webhookSecret, JSON.stringify(body))
+x-webhook-secret: <secret>
+Authorization: Bearer <secret>
 ```
 
-If signature doesn't match → 401 Unauthorized.
+Server compares constant-time (`agent-webhook-receiver.ts:verifySecret`).
+
+- **`emit_event` triggers** — secret **mandatory**. Missing/wrong → 401.
+- **`agentic_response` triggers** — secret **optional**. If header present, must match; if absent, the gate is skipped.
+
+Sensitive headers (`Cookie`, `Authorization`, `x-webhook-secret`,
+`x-webhook-signature`) are stripped from the broadcast payload for
+`emit_event` so the secret never propagates downstream.
 
 ### Rate Limiting
 

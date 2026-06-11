@@ -51,16 +51,16 @@ fetch('https://your-domain.com/api/v1/internal/lists.list', {
 
 API keys are configured via environment variable:
 
-**Environment Variable:** `PRIVOS_CHAT_INTERNAL_API_KEY`
+**Environment Variable:** `PRIVOS_HUB_INTERNAL_API_KEY`
 
 Set this in your environment configuration:
 
 ```bash
 # .env file
-PRIVOS_CHAT_INTERNAL_API_KEY=your-secret-api-key-here
+PRIVOS_HUB_INTERNAL_API_KEY=your-secret-api-key-here
 
 # Or export directly
-export PRIVOS_CHAT_INTERNAL_API_KEY=your-secret-api-key-here
+export PRIVOS_HUB_INTERNAL_API_KEY=your-secret-api-key-here
 ```
 
 **Important:**
@@ -235,6 +235,7 @@ Batch operations process items in chunks for performance. Response includes proc
 | **Groups** | [groups.md](./groups.md) | Private group member listing |
 | **AI Messages** | [ai-messages.md](./ai-messages.md) | Client-facing AI chat messaging and context-aware session resume |
 | **Agent Chat** | [agent-chat.md](./agent-chat.md) | Send messages as bot users |
+| **Bot** | [bot.md](./bot.md) | Validate bot tokens and room access |
 | **Agent Chat Session** | [agent-chat-session.md](./agent-chat-session.md) | Canvas artifacts and context-aware sessions in AI conversations |
 | **Shared Folders** | [shared-folders.md](./shared-folders.md) | Cross-room folder sharing with permission control |
 | **File Backups** | [file-backups.md](./file-backups.md) | Time Machine file backup, restore, and admin config |

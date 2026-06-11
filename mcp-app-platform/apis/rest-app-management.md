@@ -58,6 +58,10 @@ Register a direct MCP app by providing its server URL.
 | 403 | `Not authorized` | User lacks `manage-oauth-apps` permission |
 | 500 | `Failed to connect` | Cannot reach the MCP server |
 
+### Side Effect — Credential Push (best-effort)
+
+Immediately after the app record is persisted, the Hub does a **best-effort outbound POST** to `{serverUrl}/.well-known/mcp/register` with `{ appId, clientId, clientSecret, timestamp }`. The connect succeeds regardless of the push outcome. See [Credential Push contract](./rest-credential-push.md) for the full request/response shape and how to implement the endpoint on your app server.
+
 ---
 
 ## List Apps

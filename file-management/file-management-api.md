@@ -478,18 +478,23 @@ GET /file-management.files.recent/:channelId
 
 ---
 
-#### 13. Batch Embed Files
+#### 13. Batch Parse (formerly Batch Embed)
 ```
 POST /file-management.files.batch-embed
 ```
 
-Triggers AI embedding for files that haven't been embedded yet. Processes up to 100 files per batch.
+Submits parse jobs to the room's configured ocr-worker for every file that
+hasn't been parsed yet. Files inside the root-level `.markdown` folder are
+excluded automatically. **Fire-and-forget** — the endpoint returns immediately;
+the client polls `check-parse-status` to track per-file progress.
+
+The room must have a configured Document Parser
+(`rooms.customFields.documentParser`); otherwise this returns 400.
 
 **Request Body:**
 ```json
 {
-  "channelId": "CHANNEL_ID",
-  "folderId": "FOLDER_ID"
+  "channelId": "CHANNEL_ID"
 }
 ```
 
@@ -497,11 +502,88 @@ Triggers AI embedding for files that haven't been embedded yet. Processes up to 
 ```json
 {
   "success": true,
-  "message": "Batch embedding completed: 45 processed, 2 failed",
-  "processed": 45,
-  "failed": 2
+  "submitted": 12
 }
 ```
+
+---
+
+#### 13a. Check Parse Status
+```
+POST /file-management.files.check-parse-status
+```
+
+For every file in the channel with `parse_status === 'pending'`, calls the
+ocr-worker status endpoint and updates the MongoDB record (→ `complete`,
+`error`, or `timeout` if `parse_submitted_at` is older than 30 min). Returns
+the up-to-date file list so the client can refresh in one round-trip.
+
+**Request Body:**
+```json
+{
+  "channelId": "CHANNEL_ID"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "files": [ /* File Object[] */ ]
+}
+```
+
+---
+
+#### 13b. Retry Parse
+```
+POST /file-management.files/:fileId/retry-parse
+```
+
+Re-submits a single file to the ocr-worker. Resets `parse_status` to `pending`
+and clears `is_embedded`. Allowed in any state, including while the previous
+job is still pending.
+
+**Response:**
+```json
+{ "success": true }
+```
+
+---
+
+#### 13c. Save Document Parser Config (room)
+```
+POST /v1/rooms.saveDocumentParserConfig
+```
+
+Validates the URL, performs a health-check against the ocr-worker, and
+atomically stores `customFields.documentParser = { url, apiKey }` on the room.
+The API key is stripped from any client-visible payloads (`hasApiKey: true`
+flag is exposed instead).
+
+**Request Body:**
+```json
+{
+  "roomId": "ROOM_ID",
+  "url": "https://ocr-worker.example.com",
+  "apiKey": "sk-…"
+}
+```
+
+`apiKey` may be the literal sentinel `"__use_existing__"` to keep the stored
+key when only the URL is being changed.
+
+**Permissions:** caller must have `edit-room` on the room.
+
+---
+
+#### 13d. Test Document Parser Connection (room)
+```
+POST /v1/rooms.testDocumentParserConnection
+```
+
+Health-check only — does not persist anything. Same body shape as
+`saveDocumentParserConfig`.
 
 ---
 
@@ -1037,7 +1119,11 @@ Requires `manage-settings` permission. Use after updating MinIO settings.
 | Search | GET | `/file-management.files.search/:channelId` |
 | Filter | GET | `/file-management.files.filter/:channelId` |
 | Recent | GET | `/file-management.files.recent/:channelId` |
-| Batch embed | POST | `/file-management.files.batch-embed` |
+| Batch parse | POST | `/file-management.files.batch-embed` |
+| Check parse status | POST | `/file-management.files.check-parse-status` |
+| Retry parse | POST | `/file-management.files/:fileId/retry-parse` |
+| Save doc-parser config | POST | `/v1/rooms.saveDocumentParserConfig` |
+| Test doc-parser connection | POST | `/v1/rooms.testDocumentParserConnection` |
 
 ### Folder Operations Summary
 | Operation | Method | Endpoint |
@@ -1068,7 +1154,13 @@ Requires `manage-settings` permission. Use after updating MinIO settings.
 
 ## Version
 
-**Current Version:** v2.0.0 (2025-03-18)
+**Current Version:** v2.2.0 (2026-05-04)
+
+**Changelog from v2.0.0:**
+- Document parsing migrated from Flowise/PrivOS Connect to a dedicated ocr-worker REST service (multipart POST flow)
+- New endpoints: `check-parse-status`, `retry-parse`, `rooms.saveDocumentParserConfig`, `rooms.testDocumentParserConnection`
+- `batch-embed` reworked: room-scoped, fire-and-forget, excludes the `.markdown` folder; no `folderId` parameter
+- File documents gained `parse_status` and `parse_submitted_at` fields
 
 **Changelog from v1.0.0:**
 - Chunked upload for large files (>= `FileUpload_MaxDirectFileSize`, default 100MB)

@@ -116,6 +116,66 @@ npm run dev
 | `GET /.well-known/mcp/manifest.json` | Yes | App metadata |
 | `POST /mcp` | For MCP mode | JSON-RPC 2.0 |
 | `GET /` (or custom path) | For direct iframe | Embeddable HTML UI |
+| `POST /.well-known/mcp/register` | Recommended | Receive `{appId, clientId, clientSecret}` after connect for auto-config |
+
+### Optional: Auto-receive credentials via `/.well-known/mcp/register`
+
+Right after `mcp-apps.connect` succeeds, the Hub does a **best-effort POST** with the credentials your app needs to call back into PrivOS. Implementing this endpoint means **zero manual copy/paste** for the admin.
+
+**Request body** (sent by Hub):
+
+```json
+{
+  "appId": "my-app",
+  "clientId": "client_abc",
+  "clientSecret": "secret_xyz",
+  "timestamp": "2026-05-25T10:30:00.000Z"
+}
+```
+
+**Reference implementation (Express)**:
+
+```typescript
+import express from 'express';
+import fs from 'node:fs/promises';
+
+const EXPECTED_HUB_HOST = process.env.EXPECTED_HUB_HOST; // e.g. "chat.privos.com"
+
+app.post('/.well-known/mcp/register', express.json(), async (req, res) => {
+  const { appId, clientId, clientSecret, timestamp } = req.body || {};
+
+  if (!appId || !clientId || !clientSecret) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Optional: pin expected hub host to mitigate accidental cross-hub registration
+  if (EXPECTED_HUB_HOST && req.hostname !== EXPECTED_HUB_HOST) {
+    // For inbound, this checks the Host header — combine with TLS pinning at proxy level
+    return res.status(403).json({ error: 'Unexpected hub' });
+  }
+
+  // Persist credentials (env file, secret manager, KV store, etc.)
+  await fs.writeFile('.env.runtime', [
+    `MCP_APP_ID=${appId}`,
+    `MCP_CLIENT_ID=${clientId}`,
+    `MCP_CLIENT_SECRET=${clientSecret}`,
+    `MCP_REGISTERED_AT=${timestamp}`,
+  ].join('\n'));
+
+  // Idempotent: same appId always overwrites — Hub may retry on rotation
+  return res.status(200).json({ ok: true });
+});
+```
+
+**Hub behavior on your response**:
+
+| Your response | What Hub does |
+|---|---|
+| 2xx | Success — credentials delivered |
+| 404 | Skipped — assumes you intentionally do not support auto-config (no warning logged) |
+| 4xx (other) / 5xx / timeout / network error | Logged as warning, connect still succeeds — admin can copy credentials from the connect response |
+
+**Trust model**: this push has no signature — security relies on HTTPS and the developer trusting the configured `serverUrl`. For details, see [security-and-data-model.md](./security-and-data-model.md#credential-push-to-app-server-direct-apps).
 
 ### Common Issues
 - **Blank iframe**: Check `X-Frame-Options` and CSP `frame-ancestors` headers
@@ -197,10 +257,16 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
-| `HOST_CONTEXT_CHANGED` | Host → app | `{ theme }` | — | Notify app of theme switch |
+| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready |
+| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change) |
+| `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `privos.lists.create`, `privos.bot.sendMessage`) |
+| `rooms/upload` | App → host | `{ roomId, fileName, base64Data, mimeType?, description?, uploadOnly? }` | `{ message: ... }` (default) **or** `{ file: { _id, name, type, size, url } }` (when `uploadOnly: true`) | Upload a file into a room using the host user's credentials. Default behavior also posts a user-authored message. Pass `uploadOnly: true` to upload only (no message) — useful when you want a bot to be the sole author of the resulting message via `privos.bot.sendAttachment`. |
 | `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |
 | `host/storage.get` | App → host | `{ key }` | `{ value }` | Read persistent value |
 | `host/storage.set` | App → host | `{ key, value }` | `{ ok: true }` | Write persistent value |
+| `host/chatContext.set` | App → host | `{ context }` | `{ ok: true }` | Override AI Chat context string for this app's room tab |
+| `SIZE_CHANGED` | App → host | `{ width?, height? }` | — | Hint to host about content size (currently a noop — host lays out iframe externally) |
+| `REQUEST_TEARDOWN` | App → host | — | — | Tell host the app is unmounting; host flips `isReady` back to `false` |
 
 ### Persistent Storage
 
@@ -219,6 +285,130 @@ parent.postMessage({ jsonrpc: '2.0', id: 1, method: 'host/storage.set', params: 
 // Read
 parent.postMessage({ jsonrpc: '2.0', id: 2, method: 'host/storage.get', params: { key: 'my-app:prefs' } }, '*');
 ```
+
+### Uploading files to a room (`rooms/upload`)
+
+`rooms/upload` proxies to `/api/v1/rooms.upload/{roomId}` using the **current user's** credentials. Two modes:
+
+- **Default** — uploads file **and** posts a user-authored message. Use when the user is the intended author (e.g. a "Save report" button).
+- **`uploadOnly: true`** — uploads file only and returns the upload record; no message is posted. Use when you want a **bot** to be the visible author via `privos.bot.sendAttachment` with `source.fileId`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `roomId` | string | yes | Target room — user must be a member |
+| `fileName` | string | yes | Filename including extension |
+| `base64Data` | string | yes | Base64-encoded file bytes — **without** the `data:...,` prefix |
+| `mimeType` | string | no | Defaults to `application/octet-stream` |
+| `description` | string | no | Caption for the uploaded message (ignored when `uploadOnly: true`) |
+| `uploadOnly` | boolean | no | Skip posting a message; return upload record only |
+
+Response when `uploadOnly` is unset (default):
+
+```json
+{
+  "message": {
+    "_id": "msg_abc",
+    "rid": "room_xyz",
+    "file": { "_id": "upload_111", "name": "chart.png", "type": "image/png" },
+    "files": [{ "_id": "upload_111" }],
+    "attachments": [...]
+  }
+}
+```
+
+Response when `uploadOnly: true`:
+
+```json
+{
+  "file": {
+    "_id": "upload_111",
+    "name": "chart.png",
+    "type": "image/png",
+    "size": 12345,
+    "url": "/file-upload/upload_111/chart.png"
+  }
+}
+```
+
+`url` is a relative path served by the host. Authenticated users can fetch it directly; pass it as `source.fileUrl` in `privos.bot.sendAttachment` if you prefer that path over `source.fileId`.
+
+#### Pattern: bot posts a large file generated by the app
+
+For files that exceed the 8 MB cap on `privos.bot.sendAttachment`'s `source.base64Data`:
+
+```typescript
+// 1. Upload via bridge with uploadOnly to avoid a user-authored message
+const upload = await app.callHostMethod('rooms/upload', {
+  roomId,
+  fileName: 'export.zip',
+  base64Data,            // can be multi-MB; bridge converts to multipart
+  mimeType: 'application/zip',
+  uploadOnly: true,
+});
+
+// 2. Bot posts the message referencing the upload
+await app.callServerTool({
+  name: 'privos.bot.sendAttachment',
+  arguments: {
+    botToken,
+    roomId,
+    type: 'document',
+    source: { fileId: upload.file._id },
+    text: 'Your export is ready',
+  },
+});
+```
+
+Result: exactly **one message** in the room, authored by the bot.
+
+Raw postMessage version:
+
+```js
+parent.postMessage({
+  jsonrpc: '2.0',
+  id: 99,
+  method: 'rooms/upload',
+  params: { roomId: '...', fileName: 'data.csv', base64Data: btoa('a,b\n1,2'), mimeType: 'text/csv' },
+}, '*');
+
+window.addEventListener('message', (e) => {
+  if (e.data?.id === 99) console.log('uploaded', e.data.result);
+});
+```
+
+### AI Chat Context Override
+
+When an MCP app is open in a room tab, PrivOS renders a floating AI Chat button alongside the app. The chat carries a context string that the AI agent reads to understand what the user is working on.
+
+- **Default context** (when the app sets nothing): `MCP App: <appName> [<mcpAppId>]`.
+- **App override**: send `host/chatContext.set` with `{ context: "<your string>" }` to replace the default. Send `{ context: "" }` to revert.
+
+**Persistence rules:**
+- The override is scoped per MCP App tab and persists across tab switches inside the room (e.g. switch to messages, back to the app — your value is still there).
+- It resets to default when the room is left or the page is refreshed (the tab is "re-opened").
+- Each app tab has its own context — overriding context in App A does not affect App B.
+
+Example:
+
+```js
+// Override the AI chat context to reflect what the user is currently editing.
+parent.postMessage({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'host/chatContext.set',
+  params: { context: 'Editing invoice INV-2026-0042 (status: draft)' },
+}, '*');
+
+// Revert to the default `MCP App: <name> [<id>]`.
+parent.postMessage({
+  jsonrpc: '2.0',
+  id: 2,
+  method: 'host/chatContext.set',
+  params: { context: '' },
+}, '*');
+```
+
+When the user opens the AI chat from the MCP app tab, the context appears as an insertable chip (cube icon) above the input — clicking **Insert** attaches it to the next message sent to the agent.
 
 ---
 

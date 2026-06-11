@@ -249,23 +249,19 @@ Public endpoint for receiving external webhooks. No authentication — the uniqu
 |-----------|------|-------------|
 | `token` | string | Webhook trigger token (auto-generated) |
 
-**Headers (optional):**
+**Headers:**
 
 | Header | Description |
 |--------|-------------|
-| `x-webhook-signature` | HMAC-SHA256 hex digest for payload verification |
+| `x-webhook-secret` | Shared secret (constant-time compare). |
+| `Authorization: Bearer <secret>` | Alternate form, server accepts either. |
+
+**Secret rules:**
+
+- `emit_event` triggers — secret **mandatory**.
+- `agentic_response` triggers — secret **optional** (only enforced when sent).
 
 **Body:** Any JSON payload. The entire body is serialized and passed as context to the agent.
-
-**HMAC Verification:**
-
-If the trigger has a `webhookSecret`, the server verifies:
-
-```
-expected = HMAC-SHA256(webhookSecret, JSON.stringify(body))
-```
-
-If `x-webhook-signature` header doesn't match → 401 Unauthorized.
 
 **Rate Limiting:**
 
@@ -284,10 +280,10 @@ If `x-webhook-signature` header doesn't match → 401 Unauthorized.
 | Status | Cause |
 |--------|-------|
 | 404 | Token not found or trigger disabled |
-| 401 | HMAC signature mismatch |
+| 401 | Secret missing or wrong |
 | 429 | `error-too-many-requests` — rate limit exceeded |
 
-**Example — curl:**
+**Example — agentic_response (no secret needed):**
 
 ```bash
 curl -X POST https://chat.example.com/api/v1/agents.webhook/xyz789 \
@@ -295,15 +291,11 @@ curl -X POST https://chat.example.com/api/v1/agents.webhook/xyz789 \
   -d '{"from": "github", "event": "push", "repo": "my-app"}'
 ```
 
-**Example — curl with HMAC:**
+**Example — emit_event (secret required):**
 
 ```bash
-SECRET="your-webhook-secret"
-BODY='{"from":"github","event":"push"}'
-SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
-
 curl -X POST https://chat.example.com/api/v1/agents.webhook/xyz789 \
   -H "Content-Type: application/json" \
-  -H "x-webhook-signature: $SIG" \
-  -d "$BODY"
+  -H "x-webhook-secret: your-webhook-secret" \
+  -d '{"from":"github","event":"push"}'
 ```

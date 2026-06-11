@@ -21,7 +21,6 @@ GET /api/v1/internal/stages.byListId?listId=LIST_ID
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `listId` | string | Yes | List ID |
-| `teamId` | string | No | Filter stages by assigned team (for cross-team workflow) |
 
 **Response:**
 
@@ -106,15 +105,13 @@ PUT /api/v1/internal/stages/:stageId
 |-----------|------|----------|-------------|
 | `name` | string | No | New stage name |
 | `color` | string | No | New stage color (hex format) |
-| `assignedTeamId` | string | No | Assign this stage to a team for cross-team workflow |
 
 **Request:**
 
 ```json
 {
   "name": "Updated Stage Name",
-  "color": "#10b981",
-  "assignedTeamId": "TEAM_ID"
+  "color": "#10b981"
 }
 ```
 
@@ -197,7 +194,6 @@ POST /api/v1/internal/stages.create
 | `name` | string | Yes | Stage name |
 | `color` | string | Yes | Stage color (hex format) |
 | `order` | number | No | Position in list (default: append) |
-| `assignedTeamId` | string | No | Assign this stage to a team for cross-team workflow |
 
 **Request:**
 
@@ -206,8 +202,7 @@ POST /api/v1/internal/stages.create
   "listId": "LIST_ID",
   "name": "Review",
   "color": "#f59e0b",
-  "order": 2,
-  "assignedTeamId": "TEAM_ID"
+  "order": 2
 }
 ```
 
@@ -305,21 +300,6 @@ GET /api/v1/internal/stages.items?stageId=STAGE_ID&limit=50
 ```
 
 ---
-
-## Cross-Team Workflow
-
-When a list has `crossTeamWorkflow: true`, stages can be assigned to specific teams using the `assignedTeamId` field:
-
-- **Assigned stages**: Only visible and accessible to the assigned team
-- **Unassigned stages**: Visible to all teams with access to the list
-- **Filtering**: Use `teamId` query parameter to filter stages by assigned team
-
-Example:
-```json
-{
-  "assignedTeamId": "TEAM_ID"
-}
-```
 
 ## Stage Color Guidelines
 

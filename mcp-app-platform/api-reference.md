@@ -7,8 +7,7 @@
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `mcp-apps.connect` | POST | Admin | Register direct app by server URL |
-| `mcp-apps.register-relay` | POST | Admin | Register relay app, returns clientId+clientSecret+relayUrl |
-| `mcp-apps.generate-pair-url` | POST | Admin | Generate one-time pairing URL, returns { pairUrl, pairToken } |
+| `mcp-apps.generate-pair-url` | POST | Admin | Generate one-time pairing URL for relay apps, returns { pairUrl, pairToken } |
 | `mcp-apps.pair-status` | GET | Admin | Check pairing status by token, returns { status: 'waiting'\|'paired'\|'expired', app? } |
 | `mcp-apps.list` | GET | User | List all apps (includes relayOnline status for relay apps) |
 | `mcp-apps.get` | GET | User | Get app details by ID |
@@ -27,11 +26,22 @@
 
 ## PrivOS MCP Tools
 
+> **Resource tools below are legacy.** For files, folders, lists, stages, messages, rooms
+> and users, prefer the hub REST API via `app.rest()` / `app.uploadFile()` (gated by the
+> app's granted scopes). See [Auth & REST Integration](./auth-and-rest-integration.md).
+> Tools with **no** REST equivalent stay current: `privos.context.get`, `privos.app.*LocalData`,
+> `privos.db.*`, `privos.bot.getMe`.
+
 Tools apps can call via `callServerTool()` or React hooks:
 
 | Tool | Scope | Description |
 |------|-------|-------------|
-| `privos.context.get` | — | Room ID, name, user roles |
+| `privos.context.get` | — | Room ID/name/type, user roles, isAgentRoom flag, agent/default bot |
+| `privos.bot.getMe` | — | Validate a bot token, return bot identity |
+| `privos.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
+| `privos.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
+| `privos.bot.sendAttachment` | bot:message:send | Send photo/video/audio/document/voice to a room or DM (via fileId or fileUrl) |
+| `privos.users.getByIds` | users:read | Batch lookup of public profiles by `userIds` or `usernames` (one wins; max 100) |
 | `privos.app.getLocalData` | — | Get app's localData storage |
 | `privos.app.setLocalData` | — | Set/update app's localData |
 | `privos.app.deleteLocalData` | — | Delete key from localData |
@@ -249,6 +259,45 @@ curl -X POST http://localhost:3000/oauth/token \
 }
 ```
 
+## Credential Push (Outbound from Hub)
+
+After a successful `mcp-apps.connect` (direct apps only), the Hub does a **best-effort POST** to the MCP app server so it can auto-configure callback credentials without manual copy/paste.
+
+### Endpoint (implemented by the app server, optional)
+
+```
+POST {serverUrl}/.well-known/mcp/register
+Content-Type: application/json
+
+{
+  "appId": "my-app",
+  "clientId": "client_abc",
+  "clientSecret": "secret_xyz",
+  "timestamp": "2026-05-25T10:30:00.000Z"
+}
+```
+
+### Hub semantics
+
+| Server response | Hub behavior |
+|---|---|
+| 2xx | `success` — credentials delivered |
+| 404 | `skipped` — endpoint not implemented (no error logged) |
+| any other status / timeout / network error | `failed` — warning logged, connect still succeeds |
+
+- Timeout: 10s
+- **Failure does NOT abort connect** — admin can still copy credentials manually from the connect response
+- App developers are encouraged to implement this endpoint to enable zero-config callbacks (especially for direct apps that need OAuth tokens for `privos.*` callback tools)
+
+### Per-App Namespaced Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/apps/{appId}/ui` | GET | Returns the app's UI HTML proxy (set by `uiUrl`). Cookies are isolated from other apps |
+| `/apps/{appId}/mcp` | POST | JSON-RPC proxy — direct apps: forwards to `{serverUrl}/mcp`; relay apps: dispatched over the WS connection |
+
+These give each app a per-app URL namespace so cookies/storage in iframes are partitioned.
+
 ## App Asset Storage
 
 ### File Management via MinIO
@@ -270,12 +319,27 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 
 | Scope | Grants |
 |-------|--------|
-| `lists:read` | Read lists and items |
-| `lists:write` | Create/update/delete lists, items, and fields |
+| `lists:read` | Read lists, items, stages, and field definitions |
+| `lists:write` | Create/update/delete lists, items, stages, and fields |
 | `files:read` | Read files and folders |
-| `files:write` | Upload/delete files |
+| `files:write` | Upload/update/delete files and folders |
 | `messages:read` | Read messages in authorized rooms |
 | `messages:send` | Send messages in authorized rooms |
 | `users:read` | Read user profiles |
-| `rooms:read` | Read room metadata |
+| `rooms:read` | Read room metadata and members |
 | `rooms:write` | Create/update rooms |
+| `bot:message:send` | Send messages/DMs/attachments acting as a bot (runtime identity via bot token) |
+| `db:schema:read` | List collections and read schema definitions |
+| `db:schema:write` | Register/update/drop app DB collections and schemas |
+| `db:read` | Read records, query, count, aggregate |
+| `db:write` | Create/update/delete records (soft-delete) |
+
+### Tools that do NOT require a scope
+
+The following tools bypass the OAuth scope check (they only need the app to be installed and the user to have access to the room):
+
+| Tool | Reason |
+|------|--------|
+| `privos.context.get` | Pure read of current user/room context — no resource access |
+| `privos.bot.getMe` | Validates a bot token (runtime identity check, not resource access) |
+| `privos.app.getLocalData` / `setLocalData` / `deleteLocalData` / `clearLocalData` | App's own sandboxed `localData` store — scoped to the app itself |

@@ -2,6 +2,16 @@
 
 ## Security
 
+### Credential Push to App Server (Direct Apps)
+- **Endpoint**: Hub POSTs `{ appId, clientId, clientSecret, timestamp }` to `{serverUrl}/.well-known/mcp/register` after a successful connect
+- **Trust model**: registration push has **no signature** — relies on TLS for transport security and the developer's trust in the configured serverUrl
+- **App-side defenses recommended**:
+  - Enforce HTTPS for inbound (PrivOS only pushes over HTTPS in production)
+  - Pin expected hub URL in app config (`EXPECTED_HUB_URL`) and reject if request does not originate from it
+  - Treat the endpoint as idempotent (`appId` as upsert key) — Hub may retry future rotations
+- **Best-effort**: failure (timeout, network error, non-2xx other than 404) does not abort the connect — admin can still wire credentials manually
+- **404 = explicit skip**: apps that do not implement the endpoint return 404 and Hub logs nothing
+
 ### Direct Apps
 - **Iframe sandbox**: deny-by-default — no `allow-same-origin` (prevents cookie/localStorage theft)
 - **Permissions**: camera/microphone only granted if declared in `_meta.ui.permissions`
@@ -100,16 +110,35 @@ apps/meteor/
 ├── server/
 │   ├── oauth2-server/scope-definitions.ts   # Scope taxonomy
 │   └── services/
-│       ├── mcp-manifest-fetcher.ts          # Fetch manifest metadata
+│       ├── mcp-manifest-fetcher.ts          # Fetch /.well-known/mcp/manifest.json
 │       ├── mcp-tool-discovery-client.ts     # MCP client initialize → tools/list
 │       ├── mcp-ui-resource-fetcher.ts       # Fetch ui:// HTML
+│       ├── mcp-rpc-dispatcher.ts            # Route runtime tool calls (direct HTTP vs relay WS)
 │       ├── mcp-app-lifecycle-service.ts     # Connect/refresh/install/uninstall
+│       ├── mcp-registration-pusher.ts       # POST credentials → /.well-known/mcp/register
 │       ├── mcp-tool-registry.ts             # Tool definitions + scope enforcement
-│       ├── mcp-tool-handlers-*.ts           # Tool handlers (7 files)
-│       └── mcp-tool-handlers-loader.ts      # Auto-imports all handlers
-├── app/api/server/v1/mcp-apps.ts           # REST endpoints (11 routes)
+│       ├── mcp-tool-handlers-loader.ts      # Auto-imports all handlers
+│       ├── mcp-tool-handlers-context.ts     # privos.context.*
+│       ├── mcp-tool-handlers-lists.ts       # privos.lists.*
+│       ├── mcp-tool-handlers-stages.ts      # privos.stages.*
+│       ├── mcp-tool-handlers-files.ts       # privos.files.* + privos.folders.*
+│       ├── mcp-tool-handlers-messages.ts    # privos.messages.*
+│       ├── mcp-tool-handlers-bot.ts         # privos.bot.* (token-authenticated bot actions)
+│       ├── mcp-tool-handlers-rooms.ts       # privos.rooms.*
+│       ├── mcp-tool-handlers-users.ts       # privos.users.*
+│       ├── mcp-tool-handlers-db-schema.ts   # privos.db.*Schema / *Collection
+│       ├── mcp-tool-handlers-db-data.ts     # privos.db.create/update/delete/get
+│       ├── mcp-tool-handlers-db-query.ts    # privos.db.query/count/aggregate/populate
+│       ├── mcp-app-tools.ts                 # privos.app.* (localData store)
+│       ├── mcp-app-file-storage.ts          # MinIO storage for app icons/assets
+│       ├── mcp-app-namespace-proxy.ts       # Per-app /apps/{appId}/* endpoints
+│       ├── mcp-relay-pairing-token-store.ts # Generate/validate one-time pair tokens
+│       ├── mcp-relay-connection-manager.ts  # Track relay online status + active sockets
+│       ├── mcp-relay-websocket-endpoint.ts  # WS upgrade handler + auth check
+│       └── mcp-relay-request-queue.ts       # Buffer messages while relay offline (TTL/cap)
+├── app/api/server/v1/mcp-apps.ts           # REST endpoints (14 routes)
 └── client/views/
-    ├── admin/mcpApps/                      # Admin portal UI
+    ├── admin/mcpApps/                      # Admin portal UI (incl. McpAppConnectForm)
     ├── room/mcp-apps/                      # Room tab/sidebar/host components
     └── mcp-apps/                           # Standalone page
 ```

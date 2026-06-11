@@ -26,7 +26,7 @@
 │ PrivOS Sandbox │ Agent Room Reply │ Trigger System                 │
 │ HTTP Client  │ Handler          │ ┌──────────────────────────┐   │
 │ (sync +      │ (afterSaveMsg    │ │ injectTriggerMessage()   │   │
-│  stream)     │  → Brain → resp) │ │ (shared funnel)          │   │
+│  stream)     │  → Sandbox → resp) │ │ (shared funnel)          │   │
 │              │                  │ ├──────────────────────────┤   │
 │              │                  │ │ agentHeartbeatCron       │   │
 │              │                  │ │ (every 60s, cron type)   │   │
@@ -69,7 +69,7 @@ handleAgentRoomMessage()
 getContext(roomId)  ← reads IDENTITY.md + CLAUDE.md from MinIO (5min cache)
         │
         ▼
-writeClaudeMdToProjectPath()  ← writes to /tmp/privos-brain/{roomId}/CLAUDE.md
+writeClaudeMdToProjectPath()  ← writes to /tmp/privos-sandbox/{roomId}/CLAUDE.md
         │
         ▼
 BotMessageService.startStreaming()  ← creates placeholder message
@@ -107,7 +107,7 @@ handleAgentRoomMessage()
         ├─ message.u._id === botId BUT t === 'agent-trigger' → ALLOWED
         │
         ▼
-(same flow as user message: Brain → stream → reply)
+(same flow as user message: Sandbox → stream → reply)
 ```
 
 ## Component Map
@@ -117,8 +117,8 @@ handleAgentRoomMessage()
 | File | Purpose |
 |------|---------|
 | `server/configuration/bot.ts` | Startup: registers callbacks + heartbeat cron |
-| `server/services/privos-brain-agent-service.ts` | HTTP client for PrivOS Sandbox `/api/attempts` |
-| `server/services/agent-room-reply-handler.ts` | Message → Brain → streamed reply |
+| `server/services/privos-sandbox-agent-service.ts` | HTTP client for PrivOS Sandbox `/api/attempts` |
+| `server/services/agent-room-reply-handler.ts` | Message → Sandbox → streamed reply |
 | `server/services/agent-context-cache.ts` | MinIO file reader with 5-min LRU cache |
 | `server/services/agent-context-file-generator.ts` | Generates IDENTITY.md, MEMORY.md, CLAUDE.md |
 | `server/services/agent-trigger-injector.ts` | `injectTriggerMessage()` — shared funnel for all trigger types |
@@ -215,7 +215,7 @@ handleAgentRoomMessage()
 
 | Service | Purpose | Config |
 |---------|---------|--------|
-| **PrivOS Sandbox** | Claude Code AI backend | `Admin > Bots > PrivOS Sandbox` or env `PRIVOS_BRAIN_URL` + `PRIVOS_BRAIN_API_KEY` |
+| **PrivOS Sandbox** | Claude Code AI backend | `Admin > Bots > PrivOS Sandbox` or env `PRIVOS_SANDBOX_URL` + `PRIVOS_SANDBOX_API_KEY` |
 | **MinIO** | File storage for context/skill files | Shared MinIO instance (existing) |
 | **MongoDB** | User docs (triggers), room docs | Shared MongoDB (existing) |
 | **Agenda** (`@rocket.chat/cron`) | Cron job scheduling | MongoDB-backed, handles multi-instance locking |

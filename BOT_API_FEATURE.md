@@ -495,7 +495,7 @@ When clicked, the bot's webhook receives:
 }
 ```
 
-**Example privos-connect Button (callPrivOSFlow)**:
+**Example privos-connect Button (callPrivOSConnect)**:
 
 A button configured with:
 ```json
@@ -509,10 +509,10 @@ A button configured with:
 }
 ```
 
-When clicked, the server calls `callPrivOSFlow()` which sends to PrivOS Connect:
+When clicked, the server calls `callPrivOSConnect()` which sends to PrivOS Connect:
 ```
-POST {PRIVOS_FLOW_API_URL}/prediction/flow-abc-123
-Authorization: Bearer {PRIVOS_FLOW_API_KEY}
+POST {PRIVOS_CONNECT_API_URL}/prediction/flow-abc-123
+Authorization: Bearer {PRIVOS_CONNECT_API_KEY}
 
 {
   "form": {
@@ -528,7 +528,7 @@ The `sender` field (`_id`, `username`) is automatically injected from the user w
 | Field | Required | Description |
 |-------|----------|-------------|
 | `flowId` | Yes | PrivOS Connect chatflow/agentflow ID |
-| `flowType` | No | `"callPrivOSFlow"` (default) or `"chatWithAgentBot"` |
+| `flowType` | No | `"callPrivOSConnect"` (default) or `"chatWithAgentBot"` |
 | `data` | No | Custom data passed to the flow |
 
 **Example privos-connect Button (chatWithAgentBot)**:
@@ -545,7 +545,7 @@ The `sender` field (`_id`, `username`) is automatically injected from the user w
 
 When clicked with `flowType: "chatWithAgentBot"`, calls `chatWithAgentBot()`:
 ```
-POST {PRIVOS_FLOW_API_URL}/prediction/flow-xyz
+POST {PRIVOS_CONNECT_API_URL}/prediction/flow-xyz
 
 {
   "form": {

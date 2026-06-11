@@ -9,21 +9,26 @@ MCP-compatible platform for embedding third-party apps in PrivOS Hub rooms via s
 - **Relay apps**: Your app connects via WebSocket relay provided by PrivOS (ideal for NAT/firewall)
 - Tool discovery via `initialize` → `tools/list` JSON-RPC
 - Tools with `_meta.ui` render in sandboxed iframes as room tabs
-- Apps call PrivOS resources (lists, files, messages) via `callServerTool()`
-- OAuth scope enforcement on every tool call
+- Apps call PrivOS resources (lists, files, messages, DB) via `callServerTool()`
+- OAuth scope enforcement on every tool call (with a small allow-list of scope-free tools like `privos.context.get`)
 - Deny-by-default iframe sandbox (no `allow-same-origin`)
+- **Optional credential push**: after direct-app connect, the Hub POSTs `{appId, clientId, clientSecret}` to your `/.well-known/mcp/register` endpoint (best-effort, 404 = skipped)
 
 ## Architecture
 
 ### Direct Connection
 ```
 Developer's MCP App Server (external, HTTPS required)
-├── /.well-known/mcp/manifest.json
-├── /mcp (JSON-RPC 2.0 endpoint)
+├── /.well-known/mcp/manifest.json        (GET — required)
+├── /mcp                                   (POST — JSON-RPC 2.0, required)
+├── /.well-known/mcp/register              (POST — optional, receives credentials)
 │
 ├──────────── Streamable HTTP ──────────
 │
 PrivOS Hub Host (MCP Client connects directly)
+│
+└── After connect: best-effort POST credentials → /.well-known/mcp/register
+    (lets the app self-configure OAuth credentials for callbacks; failures non-fatal)
 ```
 
 ### Relay Connection
@@ -53,6 +58,7 @@ PrivOS Hub Host
 
 | Doc | Description |
 |-----|-------------|
+| [Auth & REST Integration](./auth-and-rest-integration.md) | REST-first model, frontend session vs backend bot token, security |
 | [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
 | [React SDK](./react-sdk-reference.md) | `@privos/app-react` hooks (`useAppDb`, `useLists`, etc.) |

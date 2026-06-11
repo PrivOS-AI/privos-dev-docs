@@ -206,21 +206,21 @@ interface IRoom {
 | Private Group | `p` | Private group |
 | Direct Message | `d` | Direct message |
 
-### Test Brain Connection
+### Test Sandbox Connection
 
 ```http
-POST /api/v1/rooms.testBrainConnection
+POST /api/v1/rooms.testSandboxConnection
 ```
 
-Validate a PrivOS Sandbox endpoint and fetch available providers/models. Used by the Edit Room UI to test room-level Brain configuration before saving.
+Validate a PrivOS Sandbox endpoint and fetch available providers/models. Used by the Edit Room UI to test room-level Sandbox configuration before saving.
 
 **Request Body:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `rid` | string | Yes | Room ID |
-| `brainUrl` | string | Yes | Brain endpoint URL (must be http/https, no private IPs) |
-| `brainApiKey` | string | Yes | API key for the Brain instance. Use `__use_existing__` to reuse stored key. |
+| `sandboxUrl` | string | Yes | Sandbox endpoint URL (must be http/https, no private IPs) |
+| `sandboxApiKey` | string | Yes | API key for the Sandbox instance. Use `__use_existing__` to reuse stored key. |
 
 **Response (200):**
 

@@ -40,13 +40,13 @@ One reply at a time per room. A `Set<string>` tracks active rooms. If a room is 
 ### Reply Pipeline
 
 1. **Read context** — `getContext(roomId)` reads `IDENTITY.md` and `CLAUDE.md` from MinIO (5-min LRU cache, max 500 entries)
-2. **Write CLAUDE.md to disk** — `writeClaudeMdToProjectPath(roomId, claudeMd)` writes to `/tmp/privos-brain/{roomId}/CLAUDE.md` so PrivOS Sandbox reads it as project config
+2. **Write CLAUDE.md to disk** — `writeClaudeMdToProjectPath(roomId, claudeMd)` writes to `/tmp/privos-sandbox/{roomId}/CLAUDE.md` so PrivOS Sandbox reads it as project config
 3. **Start streaming** — `BotMessageService.startStreaming()` creates a placeholder bot message
 4. **Call PrivOS Sandbox** — `streamResponse()` → `syncResponse()` → `POST /api/attempts` with:
    - `prompt`: user message (or trigger prompt + context)
    - `systemContext`: IDENTITY.md content
    - `projectId`: roomId
-   - `projectRootPath`: `/tmp/privos-brain/{roomId}`
+   - `projectRootPath`: `/tmp/privos-sandbox/{roomId}`
 5. **Stream chunks** — `onTextDelta` → `BotMessageService.streamChunk()` (throttled at 150ms intervals)
 6. **Finalize** — `onComplete` → `BotMessageService.endStreaming()` with full text
 
@@ -60,7 +60,7 @@ Uploaded to MinIO during agent creation. PrivOS Sandbox auto-syncs files from Mi
 
 ### IDENTITY.md
 
-Agent identity document used as `systemContext` in Brain requests.
+Agent identity document used as `systemContext` in Sandbox requests.
 
 ```markdown
 # Agent Name
@@ -130,7 +130,7 @@ Cache reads `IDENTITY.md` and `CLAUDE.md` in parallel via `Promise.all`.
 
 ## PrivOS Sandbox Service
 
-File: `server/services/privos-brain-agent-service.ts`
+File: `server/services/privos-sandbox-agent-service.ts`
 
 HTTP client for PrivOS Sandbox `/api/attempts` endpoint.
 
@@ -139,7 +139,7 @@ HTTP client for PrivOS Sandbox `/api/attempts` endpoint.
 | Source | Setting |
 |--------|---------|
 | Admin UI | `Admin > Bots > PrivOS Sandbox URL` / `PrivOS Sandbox API Key` |
-| Env vars | `PRIVOS_BRAIN_URL` / `PRIVOS_BRAIN_API_KEY` |
+| Env vars | `PRIVOS_SANDBOX_URL` / `PRIVOS_SANDBOX_API_KEY` |
 
 ### Request Payload
 
@@ -151,7 +151,7 @@ HTTP client for PrivOS Sandbox `/api/attempts` endpoint.
   "projectName": "Agent - Name",
   "taskId": "agent-room-{botId}",
   "taskTitle": "Agent - Name",
-  "projectRootPath": "/tmp/privos-brain/{roomId}",
+  "projectRootPath": "/tmp/privos-sandbox/{roomId}",
   "request_method": "sync"
 }
 ```

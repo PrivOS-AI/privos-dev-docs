@@ -306,7 +306,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PRIVOS_CHAT_INTERNAL_API_KEY` | Yes | Internal API key for first-layer auth |
+| `PRIVOS_HUB_INTERNAL_API_KEY` | Yes | Internal API key for first-layer auth |
 | `ROOM_SESSION_JWT_SECRET` | Yes | Secret key for signing JWT tokens |
 | `REDIS_URL` | No | Redis URL (default: `redis://localhost:6379/0`) |
 

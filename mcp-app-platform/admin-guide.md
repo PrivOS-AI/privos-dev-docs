@@ -12,6 +12,7 @@
    - **Step A**: Fetch `/.well-known/mcp/manifest.json` (name, version, author info)
    - **Step B**: MCP client connect → `initialize` → `tools/list`
 6. OAuth credentials generated — **save clientId + clientSecret** (shown once)
+7. Hub does a **best-effort POST** to `{serverUrl}/.well-known/mcp/register` with `{ appId, clientId, clientSecret, timestamp }`. If the app implements this endpoint it can auto-configure callback credentials. A 404 or network error is non-fatal — admin can still copy credentials manually from the response.
 
 ### Relay App (via Admin Portal — Auto-Pairing)
 
@@ -77,6 +78,56 @@ curl -X POST -H "Content-Type: application/json" \
 - **View Credentials** — show Client ID/Secret after pairing is complete
 - **Check Online Status** — see if app is currently connected to relay
 - **Delete** — remove app, revoke credentials, cleanup
+
+## Managing Relay Settings
+
+After a relay app is paired, admins can tune its queueing and wake behavior via `mcp-apps.updateSettings`. These control how the Hub handles messages sent while the app is offline.
+
+| Setting | Type | Range | Default | Description |
+|---------|------|-------|---------|-------------|
+| `wakeUrl` | string (HTTPS only) | — | none | URL the Hub POSTs to when a queued message arrives and the relay is offline. Must start with `https://` — non-HTTPS rejected (SSRF protection) |
+| `queueTtlMs` | number | 1000–120000 | 3600000 (1h) | TTL for messages buffered while app is offline. Clamped to the range on write |
+| `queueMaxSize` | number | 1–100 | 1000 | Max buffered messages. Clamped to the range on write |
+| `installPermission` | string[] | `admin`/`owner`/`leader` | `["admin"]` | Roles allowed to install. At least one required |
+| `status` | string | `draft`/`active`/`suspended` | `active` | App-wide enable/disable |
+| `uiUrl` | string | — | from manifest | Override the UI resource URL |
+
+### Example — update queue + wake URL
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
+  -d '{
+    "_id": "app_abc123",
+    "wakeUrl": "https://myapp.example.com/wake",
+    "queueTtlMs": 60000,
+    "queueMaxSize": 50
+  }' \
+  http://localhost:3000/api/v1/mcp-apps.updateSettings
+```
+
+### Example — restrict who can install
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
+  -d '{
+    "_id": "app_abc123",
+    "installPermission": ["admin", "owner"]
+  }' \
+  http://localhost:3000/api/v1/mcp-apps.updateSettings
+```
+
+### Example — temporarily suspend
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
+  -d '{"_id": "app_abc123", "status": "suspended"}' \
+  http://localhost:3000/api/v1/mcp-apps.updateSettings
+```
+
+Out-of-range values for `queueTtlMs` and `queueMaxSize` are silently clamped to the documented bounds.
 
 ## Install Permissions
 

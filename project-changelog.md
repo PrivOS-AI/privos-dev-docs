@@ -6,6 +6,94 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-05-28
+
+### Document Parser — Global Admin Config + Room "Use Global" Toggle
+
+**Summary:** Document Parser config can now be set workspace-wide under Admin > Settings > Document Parser, with an optional per-room override — mirroring the PrivOS Sandbox "Use Global" pattern. Rooms inherit the global endpoint by default; owners toggle off to use a room-specific endpoint. Fully backward compatible: existing rooms with a stored `documentParser.{url,apiKey}` keep their override.
+
+**Changes:**
+- `apps/meteor/server/settings/document-parser.ts` — new `Document_Parser` settings group (`DocumentParser_URL`, `DocumentParser_API_Key` [secret], `DocumentParser_Use_Env`); registered in `settings/index.ts`.
+- `apps/meteor/server/services/room-document-parser-config.ts` — added `getEffectiveDocumentParserConfig(roomId)` resolving env → global → room; `isDocumentParserConfigured` now delegates to it; sanitizer exposes `useGlobal`.
+- `apps/meteor/app/api/server/v1/rooms.ts` — `saveDocumentParserConfig` / `testDocumentParserConnection` accept `useGlobal`; new `rooms.isDocumentParserConfigured` (resolver-backed).
+- `apps/meteor/app/api/server/v1/document-parser-admin.ts` — new `document-parser.adminConfig` (GET/POST) + `document-parser.testAdminConnection`.
+- `apps/meteor/app/api/server/v1/fileManagement.ts`, `server/services/parse-status-poller.ts` — consumers switched to the effective resolver.
+- Admin UI `client/views/admin/settings/groups/DocumentParserGroupPage.tsx` (+ registered in `SettingsGroupSelector`); room UI toggle in `document-parser-settings-section.tsx` + `useEditRoomInitialValues.ts`; `FileManagement.tsx` auto-parse gate now resolver-backed.
+- `packages/i18n/src/locales/en.i18n.json` — new Document Parser i18n keys.
+
+**Resolution rule:** `Use_Env` → env; else `useGlobal===true` or room missing url+key → global; else room. `useGlobal:false` with no room url/key still falls back to global.
+
+**Verification:** Server rebuilt cleanly; settings registered in DB (API key `secret:true`); QA matrix (6 scenarios) validated against resolver logic.
+
+---
+
+## 2026-05-11
+
+### License Compliance — Remove GPL-licensed imagemin-pngquant
+
+**Summary:** Removed `imagemin-pngquant` (GPL license) from the dependency tree. The livechat widget build (`packages/livechat/`) used `image-webpack-loader` which bundled `imagemin-pngquant` as an optional dependency. Since the livechat webpack config only processes SVG files through this loader, only `svgo` (MIT) is needed.
+
+**Changes:**
+- `packages/livechat/webpack.config.ts` — Configured `image-webpack-loader` with explicit options: disabled pngquant/optipng/mozjpeg/gifsicle (unused for SVG), kept svgo enabled (MIT-licensed SVG optimizer).
+- `package.json` — Added yarn resolution redirecting `imagemin-pngquant` to `noop-package@1.0.0` (MIT) to prevent GPL code from being installed.
+- `yarn.lock` — Regenerated; `pngquant-bin` (native GPL binary) and 3 transitive deps removed (-276 KiB).
+
+**Verification:** Livechat build compiles successfully. No runtime impact — pngquant was never invoked for SVG-only processing.
+
+---
+
+## 2026-05-06
+
+### MCP App Tab — AI Chat Integration
+
+**Summary:** AI Chat floating button now available inside the MCP App room tab. Each MCP app gets a default chat context `MCP App: <name> [<id>]` that the app can override at runtime via a new JSON-RPC method on the host bridge. Override persists per-tab across switches within the room session; resets to default on room exit / page refresh.
+
+**Implementation:**
+- `apps/meteor/client/views/room/mcp-apps/McpAppTab.tsx` — mounts `AIChatBox` (portaled to body) only for the active MCP app (route-param gated to avoid duplicate portals across cached tabs); tracks per-tab `overrideChatContext` state.
+- `apps/meteor/client/views/room/mcp-apps/use-mcp-bridge-host.ts` — new optional `onChatContextSet` callback handles `host/chatContext.set` JSON-RPC method (mirrors existing `host/storage.*` pattern). Empty string reverts to default.
+- `apps/meteor/client/components/AIChatBox/AIChatBox.tsx` — added `'mcp-app'` to `entityType` union; parses `MCP App: <name> [<id>]` into the insertable context chip.
+- `apps/meteor/client/components/AIChatBox/ChatBoxInput.tsx` — chip rendering for the new entity type uses Fuselage `cube` icon for visual consistency.
+- `docs/mcp-app-platform/developer-guide.md` — documented `host/chatContext.set` method, default context format, persistence rules, and example.
+
+---
+
+## 2026-05-04
+
+### File Management — ocr-worker Migration
+
+#### Per-Room Document Parser
+**Summary:** Document parsing migrated from Flowise/PrivOS Connect to a dedicated **ocr-worker** REST service. Each room independently configures its own ocr-worker endpoint and API key under Room Settings → Advanced. The Auto Parse toggle in the Files tab is gated on this configuration.
+
+**Implementation:**
+- `apps/meteor/server/services/room-document-parser-config.ts` — sanitize/validate helpers; client only sees `{ url, hasApiKey }`.
+- `apps/meteor/server/services/documentParserClient.ts` — `testDocumentParserConnection`, `submitParseJob` (multipart POST that downloads file bytes from MinIO and forwards them with `file_path` for subfolder-aware markdown placement), `pollParseResult`.
+- `apps/meteor/app/api/server/v1/rooms.ts` — new endpoints `rooms.testDocumentParserConnection` and `rooms.saveDocumentParserConfig` (validates URL → health-checks → atomically saves to `customFields.documentParser`).
+- `apps/meteor/client/views/room/contextualBar/Info/EditRoomInfo/document-parser-settings-section.tsx` — UI section with "Validate & Save"; uses `__use_existing__` sentinel to keep stored API key when only the URL changes.
+
+#### Parse Lifecycle
+**Summary:** Replaced the privos-connect task client (`addFileUploadTask` / `addFileDeletionTask`) with direct ocr-worker calls (`triggerFileParse` / `triggerFileParseDelete`) on every mutation: upload, chunked-complete, content update (text + binary), delete, folder delete (recursive), and duplicate-replace. New `parse_status` / `parse_submitted_at` fields on file documents, plus a 5 s background poller and a 3 s client poller (`check-parse-status`) that converges status to `complete`, `error`, or `timeout` (>30 min).
+
+**Implementation:**
+- `apps/meteor/app/api/server/v1/fileManagement.ts` — `triggerFileParse` and `triggerFileParseDelete` helpers; `batch-embed` reworked to room-scoped + fire-and-forget, excludes the root-level `.markdown` folder; new `check-parse-status` and `:fileId/retry-parse` endpoints.
+- `apps/meteor/server/services/parse-status-poller.ts` — polls all `pending` files every 5 s.
+- `apps/meteor/server/models/Files.ts` — added `parse_status`, `parse_submitted_at`; `findUnembeddedFiles` accepts `excludeFolderIds`.
+- `ocr-workers/worker/src/worker/handlers/file_handler.py` — accepts `localPath` from multipart POST; `_resolve_markdown_relative_path` now uses `file_path` to preserve subfolder structure (`ROOM/test/eVND.pdf` → `.markdown/test/eVND.md`) when no `download_link` is present.
+- `ocr-workers/worker/src/worker/handlers/archive_handler.py` — pre-reads bytes from `localPath` when no archive_id/download_link; `file_path` threaded through job_data.
+- `ocr-workers/worker/src/worker/handlers/delete_handler.py` — derives relative path from `file_path` and removes `{room_id}/.markdown/{relative}.md` (no longer tries to re-delete the original file).
+- `ocr-workers/worker/src/api/routers/jobs.py` — removed the 30 s scheduling delay on delete-file; jobs are now enqueued immediately.
+
+#### Parse Status UI
+**Summary:** Each file icon shows a bottom-right badge reflecting parse state — blue spinner (pending), red spinner (timeout/error, click to retry), blue tick (complete). Files inside the `.markdown` folder hide the badge and are excluded from batch parsing. The retry action in the right-click context menu / `…` dropdown is always enabled, even while pending, so users can re-submit a stuck job.
+
+**Implementation:**
+- `apps/meteor/client/views/room/contextualBar/FileManagement/FileListItem.tsx` — badge SVGs, retry handler, `hideParseStatus` prop.
+- `apps/meteor/client/views/room/contextualBar/FileManagement/FileManagement.tsx` — computes `markdownFolderIds` and 3 s `check-parse-status` polling while any file is pending.
+
+#### Flowise Cleanup
+**Summary:** Removed the upstream Flowise prediction-callback integration that's no longer relevant under the new flow. Deleted `prediction_callback_service.py`, all `schedule_notify_extract_completed` call sites in file/archive handlers, the `PREDICTION_CALLBACK_*` config fields and env-example entries, and stale README rows.
+
+---
+
 ## 2026-04-29
 
 ### Agent Selector & Bot Key
@@ -14,13 +102,13 @@ This document tracks significant features, improvements, and bug fixes released 
 **Summary:** AI chat now re-validates the "Push bot key to PrivOS Sandbox" CTA per-agent. Switching agents in the selector triggers a fresh status fetch for the new bot, dismissals are scoped to `(roomId, botId)`, and pushes target the selected agent instead of always the room's default bot.
 
 **Implementation:**
-- `apps/meteor/app/api/server/v1/agent-privos-brain-bot-key.ts` — `agents.brain.botKeyStatus` (GET) and `agents.brain.pushBotKey` (POST) accept optional `botId`. `resolveTargetBotId` validates the bot is `type: 'bot'` and subscribed to the room before falling back to the default.
-- `apps/meteor/server/services/privos-brain-bot-key-service.ts` — relaxed default-bot gate; now allows any bot subscribed to the room (membership-not-default-bot). Resolves `400 bot-not-room-default` when pushing for non-default agent bots.
-- `apps/meteor/client/hooks/aiChat/useBotPrivOSBrainKeyStatus.ts` — accepts `botId`, includes it in the React Query key and request params.
+- `apps/meteor/app/api/server/v1/agent-privos-sandbox-bot-key.ts` — `agents.sandbox.botKeyStatus` (GET) and `agents.sandbox.pushBotKey` (POST) accept optional `botId`. `resolveTargetBotId` validates the bot is `type: 'bot'` and subscribed to the room before falling back to the default.
+- `apps/meteor/server/services/privos-sandbox-bot-key-service.ts` — relaxed default-bot gate; now allows any bot subscribed to the room (membership-not-default-bot). Resolves `400 bot-not-room-default` when pushing for non-default agent bots.
+- `apps/meteor/client/hooks/aiChat/useBotPrivOSSandboxKeyStatus.ts` — accepts `botId`, includes it in the React Query key and request params.
 - `apps/meteor/client/components/AIChatBox/ChatBoxInput.tsx` — passes `selectedAgent.botUserId`; dismissal state keyed by `${roomId}:${botId}`.
 
 #### Mid-Session Agent Switch — Full History Push
-**Summary:** When the user changes agents during an active session, the next attempt force-pushes summary + activeMessages to the new agent's brain task. Previously, agent-room sessions used a botId-less `taskId` and fell into delta mode, leaving the new agent blind to prior conversation.
+**Summary:** When the user changes agents during an active session, the next attempt force-pushes summary + activeMessages to the new agent's sandbox task. Previously, agent-room sessions used a botId-less `taskId` and fell into delta mode, leaving the new agent blind to prior conversation.
 
 **Implementation:**
 - `apps/meteor/app/agent-chat/server/contextCompaction.ts` — added `agentChanged = !!lastBotId && lastBotId !== botId`. Bypasses resume/delta short-circuits when an agent switch is detected. Per-bot scope (`${roomId}:${botId}`) and `lastBotId` updates after stream completion let resume mode kick in normally on subsequent same-agent turns.
@@ -125,7 +213,7 @@ This document tracks significant features, improvements, and bug fixes released 
 
 **Features:**
 - Heartbeat cron (every 60s) evaluates all cron triggers with atomic `lastRunAt` double-fire prevention
-- Webhook receiver: `POST /v1/agents.webhook/:token` — public, token-based, optional HMAC verification
+- Webhook receiver: `POST /v1/agents.webhook/:token` — public, token-based, bearer-style secret via `x-webhook-secret` (or `Authorization: Bearer`)
 - Event triggers: `afterSaveMessage` dispatches `message.new` to subscribed agents with 30s cooldown
 - 5 CRUD endpoints: `agents.triggers.list/add/update/remove/run`
 - Max 5 triggers per agent, prompt max 500 chars
@@ -164,13 +252,13 @@ This document tracks significant features, improvements, and bug fixes released 
 - [Self-Management Skills](./agent-system/self-management-skills.md)
 
 #### 5. Room-Level PrivOS Sandbox Configuration
-**Summary:** Per-room Brain settings (endpoint + API key + provider/model) in Edit Channel/Team Advanced Settings. When configured, AI Chat and Agent Bot replies route to room's Brain instead of global PrivOS Connect.
+**Summary:** Per-room Sandbox settings (endpoint + API key + provider/model) in Edit Channel/Team Advanced Settings. When configured, AI Chat and Agent Bot replies route to room's Sandbox instead of global PrivOS Connect.
 
 **Features:**
-- Room customFields stores `privosBrain: { url, apiKey, defaultProvider?, defaultModel? }`
-- `POST /v1/rooms.testBrainConnection` — validate Brain endpoint, fetch available providers/models
-- AI Chat (`processAIRequestJob`) checks room Brain config before routing to PrivOS Connect
-- Agent Bot (`handleAgentRoomMessage`) uses room Brain when available, falls back to global
+- Room customFields stores `privosSandbox: { url, apiKey, defaultProvider?, defaultModel? }`
+- `POST /v1/rooms.testSandboxConnection` — validate Sandbox endpoint, fetch available providers/models
+- AI Chat (`processAIRequestJob`) checks room Sandbox config before routing to PrivOS Connect
+- Agent Bot (`handleAgentRoomMessage`) uses room Sandbox when available, falls back to global
 - Edit Channel/Team → Advanced Settings → PrivOS Sandbox section with URL, API key, test connection, model selects
 - Security: SSRF URL validation, apiKey stripped from all client-facing data paths, server-side apiKey preservation on partial updates
 
