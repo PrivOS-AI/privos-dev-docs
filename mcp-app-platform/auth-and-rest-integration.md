@@ -76,6 +76,128 @@ curl -X POST https://<hub>/api/v1/file-management.files.upload \
 (Header auth is the standard session-token path — `app/api/server/ApiClass.ts`,
 "Session auth (X-Auth-Token + X-User-Id)".)
 
+## Calling the Sandbox agent (REST client-facing)
+
+To run a PrivOS Sandbox (claude-ws) agent and get its text back, call the hub REST
+proxy — the caller never needs its own Sandbox URL/API key. Two endpoints
+(`app/api/server/v1/agent-privos-sandbox-proxy-endpoints.ts`), both `authRequired` and
+gated on the caller having access to `roomId`:
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `agents.sandbox.upload` | POST | Upload a file, get a `tempId` to attach to a generation |
+| `agents.sandbox.generate` | POST | One-shot **synchronous** agent generation → `{ text }` |
+| `agents.sandbox.generate-async` | POST | Enqueue a generation → `{ attemptId, taskId }` immediately |
+| `agents.sandbox.attempt-status` | GET | Poll an async generation → `{ status, text? }` |
+
+### Call — `agents.sandbox.generate`
+
+```bash
+curl -X POST https://<hub>/api/v1/agents.sandbox.generate \
+  -H "X-Auth-Token: $PRIVOS_BOT_TOKEN" \
+  -H "X-User-Id: $PRIVOS_BOT_USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "ROOM_ID",
+    "prompt": "Summarise the attached report",
+    "provider": "anthropic",          // optional — falls back to room/global default
+    "model": "claude-...",            // optional
+    "fileIds": ["TEMP_ID"],           // optional — from agents.sandbox.upload
+    "systemContext": "..."            // optional
+  }'
+# → { "text": "...", "source": "room" | "global" }
+```
+
+Limits: `prompt` < 50000 chars, `systemContext` < 200000 chars.
+
+### Response model — sync (blocking) or async + poll
+
+**Sync — `generate`** blocks until the agent finishes and returns the full text in the
+single HTTP response. The hub does all the waiting server-side
+(`privos-sandbox-agent-service.ts` `syncResponseWithConfig`):
+
+- Sandbox runs in `request_method: 'sync'` (its sync window is ~5 min).
+- On a `408` (window elapsed, agent still running) the hub parses the `attemptId` and
+  **polls internally** until the attempt terminates, then extracts text from its logs
+  (`pollAttemptUntilDone`, capped at 15 min).
+- On gateway timeouts (`502/504/524`) the hub recovers by looking up the latest attempt
+  for the `taskId` and polling that.
+
+So a sync caller's only job is to **set a generous client HTTP timeout** (the server caps
+the wait at ~15 min via `POLL_MAX_MS`); the hub returns once, with the final text.
+
+**Async + poll — `generate-async` / `attempt-status`** for callers that can't hold a long
+HTTP request open (MCP app iframes behind the 10s bridge timeout, serverless, etc.):
+
+```bash
+# 1. Enqueue — returns immediately
+curl -X POST https://<hub>/api/v1/agents.sandbox.generate-async \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID" -H "Content-Type: application/json" \
+  -d '{ "roomId": "ROOM_ID", "prompt": "..." }'
+# → { "attemptId": "agent-attempt-…", "taskId": "...", "source": "room" }
+
+# 2. Poll until terminal (e.g. every 2–5s)
+curl "https://<hub>/api/v1/agents.sandbox.attempt-status?roomId=ROOM_ID&attemptId=agent-attempt-…" \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID"
+# while running → { "status": "running" }
+# when done    → { "status": "completed" | "failed" | "cancelled", "text": "..." }
+```
+
+The hub keeps **no job state** — the attempt lives in the Sandbox (enqueued with
+`request_method: 'queue'`); `attempt-status` proxies the Sandbox's status and, on a
+terminal status, extracts the assistant text from the attempt logs
+(`startAsyncResponseWithConfig` / `getAttemptResultWithConfig`). Both endpoints re-check
+room access on every call. Note: polling returns the final text only — token-by-token
+deltas remain hub-internal (see Reachability below).
+
+### Uploading a file first
+
+```bash
+curl -X POST https://<hub>/api/v1/agents.sandbox.upload \
+  -H "X-Auth-Token: $PRIVOS_BOT_TOKEN" -H "X-User-Id: $PRIVOS_BOT_USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{ "roomId": "ROOM_ID", "fileName": "report.pdf", "mimeType": "application/pdf", "base64": "..." }'
+# → { "tempId": "...", "source": "room" | "global" }
+```
+
+Pass the returned `tempId` in `generate`'s `fileIds`.
+
+### Reachability
+
+- **Backend (bot token):** works — these are normal header-auth REST routes.
+- **Frontend (`app.rest()`):** reachable with the **`sandbox:generate`** scope, which maps
+  to `agents.sandbox.generate` / `generate-async` / `attempt-status` / `upload`
+  (`server/services/mcp-rest-allowlist.ts`). In-iframe apps should use the **async + poll**
+  pair — the host-bridge postMessage default times out at 10s (`PrivOSAppProvider`
+  `sendRequest`), while a sandbox generation can take minutes:
+
+  ```ts
+  // 1. Enqueue (fast — fits the 10s bridge timeout)
+  const { body: started } = await app.rest({
+    method: 'POST',
+    path: 'agents.sandbox.generate-async',
+    body: { roomId, prompt: 'Summarise the report' },
+  });
+
+  // 2. Poll until terminal
+  let result;
+  do {
+    await new Promise((r) => setTimeout(r, 3000));
+    ({ body: result } = await app.rest({
+      method: 'GET',
+      path: 'agents.sandbox.attempt-status',
+      query: { roomId, attemptId: started.attemptId },
+    }));
+  } while (result.status === 'running');
+  // result.text — the agent's reply
+  ```
+
+  The synchronous `agents.sandbox.generate` stays available for backend bot-token callers
+  that can hold the request open.
+- **Streaming** (token-by-token `output:json`, `question:ask`) exists only on the hub's
+  *internal* proxy (`app/agent-chat/server/privosSandboxProxy.ts`) for the hub's own
+  agent-chat UI — it is **not** part of the client-facing REST surface.
+
 ## Security — bot token leakage & privilege escalation
 
 A bot/session token is a **bearer credential**: whoever holds it acts as that principal,
