@@ -333,6 +333,9 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `db:schema:write` | Register/update/drop app DB collections and schemas |
 | `db:read` | Read records, query, count, aggregate |
 | `db:write` | Create/update/delete records (soft-delete) |
+| `sandbox:generate` | Run a Sandbox agent generation (sync/async) and upload files to attach |
+| `sandbox:skills:use` | List + select which Sandbox skills are enabled for a room (room admin) |
+| `sandbox:botkey:push` | Provision the room's Sandbox project + push/refresh its bot key (room admin) |
 
 ### Tools that do NOT require a scope
 

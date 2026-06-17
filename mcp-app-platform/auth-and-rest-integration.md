@@ -198,6 +198,82 @@ Pass the returned `tempId` in `generate`'s `fileIds`.
   *internal* proxy (`app/agent-chat/server/privosSandboxProxy.ts`) for the hub's own
   agent-chat UI — it is **not** part of the client-facing REST surface.
 
+## Provisioning the room's Sandbox (bot-key push)
+
+Before a room can run agents, its Sandbox **project** must be provisioned and the room
+bot's key pushed. The push uploads the room's config templates to MinIO, registers the
+key on the Sandbox, and warms a VM — i.e. "init sandbox" and "push bot key" are the same
+operation. Two REST routes (`app/api/server/v1/agent-privos-sandbox-bot-key.ts`):
+
+| Path | Method | Purpose |
+| --- | --- | --- |
+| `agents.sandbox.botKeyStatus` | GET | Read push status → `{ pushed, hasBot, hasSandbox, canPush, status? }` |
+| `agents.sandbox.pushBotKey` | POST | Provision project + push/refresh the bot key |
+
+### Reachability
+
+- **Frontend (`app.rest()`):** reachable with the **`sandbox:botkey:push`** scope, which
+  maps to both routes (`server/services/mcp-rest-allowlist.ts`).
+- **Server-side gate is unchanged by the scope.** `pushBotKey` still enforces
+  `authorizePushBotKey` — the caller must hold **`edit-room`** AND be the bot's owner OR
+  hold **`edit-bot`**. The call runs as the end-user session (forwarded `X-Auth-Token`),
+  never a bot token, so the scope only widens reachable paths — it never changes who may push.
+
+```ts
+// 1. Check whether the room is already provisioned
+const { body: status } = await app.rest({
+  method: 'GET',
+  path: 'agents.sandbox.botKeyStatus',
+  query: { roomId },
+});
+
+// 2. Provision + push if allowed (status.canPush === true for room admins)
+if (!status.pushed && status.canPush) {
+  await app.rest({ method: 'POST', path: 'agents.sandbox.pushBotKey', body: { roomId } });
+}
+```
+
+```bash
+curl -X POST https://<hub>/api/v1/agents.sandbox.pushBotKey \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{ "roomId": "ROOM_ID" }'
+# → { "success": true, "privosSandboxId": "...", "pushedAt": "..." }
+```
+
+## Selecting room skills (sync + remove)
+
+Per-room skill selection is a single **sync** endpoint that takes the **full desired set**
+of `componentIds`. Adding a skill = include its id; removing one = re-sync without it.
+There is no separate delete endpoint — sync is the add/remove mechanism. Both routes
+(`app/api/server/v1/rooms.ts`):
+
+| Path | Method | Purpose |
+| --- | --- | --- |
+| `rooms.listPrivOSSandboxSkills` | POST | List the skills available to the room → `{ skills: [{ id, name, description? }] }` |
+| `rooms.syncPrivOSSandboxSkills` | POST | Set the room's enabled skills to exactly `componentIds` |
+
+### Reachability
+
+- **Frontend (`app.rest()`):** reachable with the **`sandbox:skills:use`** scope.
+- **Server-side gate:** both routes enforce **`edit-room`** (room admin), independent of the
+  scope. The selected skills sync into the room project's `.privos/skills/` and are picked
+  up on the next agent generation.
+
+```ts
+// List options
+const { body: avail } = await app.rest({
+  method: 'POST', path: 'rooms.listPrivOSSandboxSkills',
+  body: { rid: roomId, useGlobal: true },
+});
+
+// Enable exactly these (omit an id to remove it)
+await app.rest({
+  method: 'POST', path: 'rooms.syncPrivOSSandboxSkills',
+  body: { rid: roomId, componentIds: ['skill-a', 'skill-b'] },
+});
+```
+
 ## Security — bot token leakage & privilege escalation
 
 A bot/session token is a **bearer credential**: whoever holds it acts as that principal,
