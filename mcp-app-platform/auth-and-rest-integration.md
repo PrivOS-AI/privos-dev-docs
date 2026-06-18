@@ -88,7 +88,7 @@ gated on the caller having access to `roomId`:
 | `agents.sandbox.upload` | POST | Upload a file, get a `tempId` to attach to a generation |
 | `agents.sandbox.generate` | POST | One-shot **synchronous** agent generation → `{ text }` |
 | `agents.sandbox.generate-async` | POST | Enqueue a generation → `{ attemptId, taskId }` immediately |
-| `agents.sandbox.attempt-status` | GET | Poll an async generation → `{ status, text? }` |
+| `agents.sandbox.attempt-status` | GET | Poll an async generation → `{ status, text?, json? }` |
 
 ### Call — `agents.sandbox.generate`
 
@@ -140,7 +140,7 @@ curl -X POST https://<hub>/api/v1/agents.sandbox.generate-async \
 curl "https://<hub>/api/v1/agents.sandbox.attempt-status?roomId=ROOM_ID&attemptId=agent-attempt-…" \
   -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID"
 # while running → { "status": "running" }
-# when done    → { "status": "completed" | "failed" | "cancelled", "text": "..." }
+# when done    → { "status": "completed" | "failed" | "cancelled", "text": "...", "json": [ ... ] }
 ```
 
 The hub keeps **no job state** — the attempt lives in the Sandbox (enqueued with
@@ -149,6 +149,13 @@ terminal status, extracts the assistant text from the attempt logs
 (`startAsyncResponseWithConfig` / `getAttemptResultWithConfig`). Both endpoints re-check
 room access on every call. Note: polling returns the final text only — token-by-token
 deltas remain hub-internal (see Reachability below).
+
+On a terminal status the response also carries **`json`** — the array of structured
+response blocks parsed from the attempt's `type:'json'` log lines (the same events the
+hub flattens into `text`). Use `text` for the plain reply; use `json` when you need the
+agent's structured output (tool calls, `result` summaries, content blocks, usage, etc.).
+The array is the parsed events *after the last user turn* of the attempt. It is omitted
+while `status` is `running`.
 
 ### Uploading a file first
 
@@ -189,7 +196,8 @@ Pass the returned `tempId` in `generate`'s `fileIds`.
       query: { roomId, attemptId: started.attemptId },
     }));
   } while (result.status === 'running');
-  // result.text — the agent's reply
+  // result.text — the agent's plain reply
+  // result.json — structured response blocks (tool calls, result summary, content blocks)
   ```
 
   The synchronous `agents.sandbox.generate` stays available for backend bot-token callers
