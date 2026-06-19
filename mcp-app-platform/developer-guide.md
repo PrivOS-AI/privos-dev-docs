@@ -259,7 +259,7 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 |--------|-----------|--------|---------|---------|
 | `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready |
 | `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change) |
-| `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `privos.lists.create`, `privos.bot.sendMessage`) |
+| `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `privos.bot.sendMessage`, `privos.db.create`). For lists/files/messages/rooms/users, use the REST API via `app.rest()` instead. |
 | `rooms/upload` | App → host | `{ roomId, fileName, base64Data, mimeType?, description?, uploadOnly? }` | `{ message: ... }` (default) **or** `{ file: { _id, name, type, size, url } }` (when `uploadOnly: true`) | Upload a file into a room using the host user's credentials. Default behavior also posts a user-authored message. Pass `uploadOnly: true` to upload only (no message) — useful when you want a bot to be the sole author of the resulting message via `privos.bot.sendAttachment`. |
 | `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |
 | `host/storage.get` | App → host | `{ key }` | `{ value }` | Read persistent value |

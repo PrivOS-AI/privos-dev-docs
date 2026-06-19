@@ -33,14 +33,16 @@ export default function App() {
 
 ## usePrivOSApp
 
-Returns the MCP app instance. Use for mutations (writes) where you call tools directly:
+Returns the MCP app instance. Use it for `app.rest()` (the preferred way to read/write
+hub data — see below) and for direct tool calls to capabilities with no REST equivalent
+(`privos.db.*`, `privos.bot.*`):
 
 ```tsx
 const app = usePrivOSApp();
 
 await app.callServerTool({
-  name: 'privos.lists.createItem',
-  arguments: { listId: 'abc', title: 'New item' }
+  name: 'privos.db.create',
+  arguments: { collection: 'contacts', data: { name: 'New item' } }
 });
 ```
 
@@ -129,21 +131,15 @@ Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guid
 
 ## usePrivOSTool
 
-Generic hook — auto-fetches on mount and when args change. Best for reads:
+Generic hook — auto-fetches on mount and when args change. Best for reads from tools with
+no REST equivalent (`privos.db.*`):
 
 ```tsx
-const { data, loading, error, refetch } = usePrivOSTool('privos.lists.get', { listId });
+const { data, loading, error, refetch } = usePrivOSTool('privos.db.get', { collection, id });
 ```
 
-**Note:** Skips fetch if any arg value is empty/null/undefined.
-
-## useLists
-
-Convenience wrapper for `privos.lists.getAll`:
-
-```tsx
-const { data: lists, loading, error } = useLists(roomId);
-```
+**Note:** Skips fetch if any arg value is empty/null/undefined. For hub data (lists, files,
+messages, rooms, users), read via `app.rest()` instead.
 
 ## useAppDb
 

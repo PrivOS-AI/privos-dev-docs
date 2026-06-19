@@ -16,19 +16,18 @@ Detailed API reference organized by category.
 
 ## PrivOS MCP Tools
 
+REST-first is the primary integration path: data operations (lists, items, files,
+folders, messages, rooms, users, stages) are reached through `/api/v1` via the granted
+OAuth scopes — see [Auth & REST Integration](../auth-and-rest-integration.md) and the
+REST endpoints above. The MCP tools below remain for capabilities with **no REST
+equivalent**:
+
 | Document | Description |
 |----------|-------------|
 | [Context Tools](./tools-context.md) | Get current user/room context |
 | [App Storage Tools](./tools-app.md) | `privos.app.*` — per-app `localData` key/value store |
 | [Bot Tools](./tools-bot.md) | Send messages/attachments/DMs as a bot using its token |
 | [Database Tools](./tools-database.md) | `privos.db.*` — schema, CRUD, query, aggregate |
-| [Lists & Items Tools](./tools-lists.md) | CRUD for lists, items, custom fields |
-| [Stages Tools](./tools-stages.md) | Kanban stages management |
-| [Files Tools](./tools-files.md) | File operations |
-| [Folders Tools](./tools-folders.md) | Folder operations |
-| [Messages Tools](./tools-messages.md) | Read and send messages |
-| [Rooms Tools](./tools-rooms.md) | Room metadata and members |
-| [Users Tools](./tools-users.md) | User profile information |
 
 ## Authentication
 

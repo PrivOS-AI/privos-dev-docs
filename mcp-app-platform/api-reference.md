@@ -26,11 +26,10 @@
 
 ## PrivOS MCP Tools
 
-> **Resource tools below are legacy.** For files, folders, lists, stages, messages, rooms
-> and users, prefer the hub REST API via `app.rest()` / `app.uploadFile()` (gated by the
-> app's granted scopes). See [Auth & REST Integration](./auth-and-rest-integration.md).
-> Tools with **no** REST equivalent stay current: `privos.context.get`, `privos.app.*LocalData`,
-> `privos.db.*`, `privos.bot.getMe`.
+> **REST-first.** Lists, items, stages, files, folders, messages, rooms and users are
+> reached through the hub REST API via `app.rest()` / `app.uploadFile()`, gated by the
+> app's granted scopes — see [Auth & REST Integration](./auth-and-rest-integration.md).
+> The MCP tools below remain only for capabilities with **no** REST equivalent.
 
 Tools apps can call via `callServerTool()` or React hooks:
 
@@ -41,58 +40,10 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `privos.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
 | `privos.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
 | `privos.bot.sendAttachment` | bot:message:send | Send photo/video/audio/document/voice to a room or DM (via fileId or fileUrl) |
-| `privos.users.getByIds` | users:read | Batch lookup of public profiles by `userIds` or `usernames` (one wins; max 100) |
 | `privos.app.getLocalData` | — | Get app's localData storage |
 | `privos.app.setLocalData` | — | Set/update app's localData |
 | `privos.app.deleteLocalData` | — | Delete key from localData |
 | `privos.app.clearLocalData` | — | Clear all localData (requires confirmation) |
-| `privos.lists.create` | lists:write | Create a new list with fields and stages |
-| `privos.lists.getAll` | lists:read | All lists in room |
-| `privos.lists.get` | lists:read | Single list by ID or key, with field definitions |
-| `privos.lists.getItems` | lists:read | Items in a list (offset/count pagination, sortable, filterable by stage) |
-| `privos.lists.createItem` | lists:write | Create list item with custom field values |
-| `privos.lists.updateItem` | lists:write | Update list item |
-| `privos.lists.deleteItem` | lists:write | Delete list item |
-| `privos.lists.deleteItems` | lists:write | Batch delete items by IDs or custom field filter |
-| `privos.lists.addField` | lists:write | Add custom field definition to list |
-| `privos.lists.removeField` | lists:write | Remove custom field definition from list |
-| `privos.lists.updateList` | lists:write | Update list name/description |
-| `privos.lists.getItem` | lists:read | Full item detail by ID (all custom fields) |
-| `privos.lists.getItemsByStage` | lists:read | Items in a specific stage |
-| `privos.lists.moveItemToStage` | lists:write | Move item to different stage (kanban) |
-| `privos.lists.reorderItem` | lists:write | Change item position within stage |
-| `privos.lists.updateCustomField` | lists:write | Update a single custom field on an item |
-| `privos.lists.searchItems` | lists:read | Search items by name |
-| `privos.lists.getSubItems` | lists:read | Get child/sub-items of a parent item |
-| `privos.lists.getItemsByStages` | lists:read | Get items grouped by multiple stages |
-| `privos.lists.batchAddFields` | lists:write | Add multiple field definitions in one call |
-| `privos.lists.batchCreateItems` | lists:write | Create multiple items in one call |
-| `privos.stages.getByList` | lists:read | Get all stages (kanban columns) for a list |
-| `privos.stages.get` | lists:read | Get single stage by ID |
-| `privos.stages.create` | lists:write | Create a new stage |
-| `privos.stages.update` | lists:write | Update stage name/color |
-| `privos.stages.delete` | lists:write | Delete a stage |
-| `privos.stages.reorder` | lists:write | Reorder stages by providing ordered IDs |
-| `privos.files.getByChannel` | files:read | Files in room, optionally by folder |
-| `privos.files.get` | files:read | File detail by ID |
-| `privos.files.search` | files:read | Search files by name |
-| `privos.files.count` | files:read | Count files in channel/folder |
-| `privos.files.update` | files:write | Update file name/description/folder |
-| `privos.files.delete` | files:write | Delete file |
-| `privos.folders.getByChannel` | files:read | Folders in channel, optionally by parent |
-| `privos.folders.get` | files:read | Folder detail by ID |
-| `privos.folders.getContent` | files:read | Files and subfolders inside a folder |
-| `privos.folders.getRootContent` | files:read | Root-level files and folders |
-| `privos.folders.create` | files:write | Create folder |
-| `privos.folders.update` | files:write | Rename/move folder |
-| `privos.folders.delete` | files:write | Delete folder (optionally recursive) |
-| `privos.folders.search` | files:read | Search folders by name |
-| `privos.messages.getRecent` | messages:read | Recent room messages |
-| `privos.messages.send` | messages:send | Send message to room |
-| `privos.rooms.get` | rooms:read | Room metadata |
-| `privos.rooms.getMembers` | rooms:read | Room member list |
-| `privos.users.get` | users:read | User profile by ID |
-| `privos.users.getCurrent` | users:read | Current user profile |
 | `privos.db.registerCollection` | db:schema:write | Register app DB collection with schema |
 | `privos.db.updateSchema` | db:schema:write | Update collection schema fields |
 | `privos.db.getSchema` | db:schema:read | Get collection schema definition |
@@ -111,73 +62,9 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `privos.db.populate` | db:read | Resolve reference fields (1-level) |
 
 > **Database API:** See [apis/tools-database.md](./apis/tools-database.md) for full database tool documentation with examples.
-
-## Tool Details
-
-### `privos.lists.createItem`
-
-Create a new item in a list with optional custom field values.
-
-**Arguments:**
-
-| Arg | Type | Required | Description |
-|-----|------|----------|-------------|
-| `listId` | string | Yes | List ID |
-| `title` | string | Yes | Item title/name |
-| `description` | string | No | Item description |
-| `customFields` | array | No | Array of `{ fieldId: string, value: any }` |
-
-**Response:**
-```json
-{ "_id": "item_123", "name": "Item Title", "listId": "list_456" }
-```
-
-**Example:**
-```typescript
-await app.callServerTool({
-  name: 'privos.lists.createItem',
-  arguments: {
-    listId: 'list_123',
-    title: 'John Doe',
-    customFields: [
-      { fieldId: 'field_email', value: 'john@example.com' },
-      { fieldId: 'field_phone', value: '+1-555-0100' },
-    ]
-  }
-});
-```
-
-### `privos.lists.addField`
-
-Add a new custom field definition to a list.
-
-**Arguments:**
-
-| Arg | Type | Required | Description |
-|-----|------|----------|-------------|
-| `listId` | string | Yes | List ID |
-| `fieldId` | string | No | Custom field ID (auto-generated if omitted) |
-| `name` | string | Yes | Field label |
-| `type` | enum | Yes | `TEXT`, `TEXTAREA`, `NUMBER`, `DATE`, `DATE_TIME`, `SELECT`, `MULTI_SELECT`, `CHECKBOX`, `URL`, `USER`, `FILE`, `FILE_MULTIPLE`, `DOCUMENT`, `ASSIGNEE`, `DEADLINE`, `DEPENDENCIES` |
-| `options` | array | No | For SELECT/MULTI_SELECT: `[{ _id?, value, color? }]` |
-
-**Response:**
-```json
-{ "_id": "field_789", "name": "Email", "type": "TEXT", "order": 3 }
-```
-
-**Example (SELECT with options):**
-```typescript
-await app.callServerTool({
-  name: 'privos.lists.addField',
-  arguments: {
-    listId: 'list_123',
-    name: 'Source',
-    type: 'SELECT',
-    options: [{ value: 'Web' }, { value: 'Email' }, { value: 'Phone' }]
-  }
-});
-```
+>
+> **Data operations (lists, items, files, folders, messages, rooms, users):** call the hub
+> REST API via `app.rest()` — see [Auth & REST Integration](./auth-and-rest-integration.md).
 
 ## Relay App Endpoints
 

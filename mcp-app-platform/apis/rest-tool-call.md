@@ -2,7 +2,10 @@
 
 ## Execute Tool Call
 
-Execute an MCP tool on a specific app. This is the primary way to invoke PrivOS MCP tools from the client.
+Execute an MCP tool on a specific app. Use this for tools with **no REST equivalent**
+(`privos.db.*`, `privos.bot.*`, `privos.context.get`, `privos.app.*`). For lists, items,
+files, folders, messages, rooms and users, call the hub REST API via `app.rest()` instead
+— see [Auth & REST Integration](../auth-and-rest-integration.md).
 
 | | |
 |---|---|
@@ -21,9 +24,9 @@ Execute an MCP tool on a specific app. This is the primary way to invoke PrivOS 
 ```json
 {
   "mcpAppId": "app_abc123",
-  "toolName": "privos.lists.getAll",
+  "toolName": "privos.db.query",
   "arguments": {
-    "roomId": "room_xyz789"
+    "collection": "contacts"
   },
   "roomId": "room_xyz789"
 }
@@ -62,30 +65,28 @@ The response depends on the tool being called. See the [PrivOS MCP Tools documen
 | 404 | `App not found` | No app with this ID |
 | 404 | `Tool not found` | Tool name doesn't exist |
 
-### Example: Create a List Item
+### Example: Create a DB record
 
 ```json
 {
   "mcpAppId": "app_abc123",
-  "toolName": "privos.lists.createItem",
+  "toolName": "privos.db.create",
   "arguments": {
-    "listId": "list_001",
-    "title": "John Doe",
-    "customFields": [
-      { "fieldId": "field_email", "value": "john@example.com" }
-    ]
+    "collection": "contacts",
+    "data": { "name": "John Doe", "email": "john@example.com" }
   },
   "roomId": "room_xyz789"
 }
 ```
 
-### Example: Send a Message
+### Example: Send a bot message
 
 ```json
 {
   "mcpAppId": "app_abc123",
-  "toolName": "privos.messages.send",
+  "toolName": "privos.bot.sendMessage",
   "arguments": {
+    "botToken": "bot_token_here",
     "roomId": "room_xyz789",
     "text": "Hello from MCP app!"
   },
