@@ -8,6 +8,20 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ## 2026-06-20
 
+### Sandbox Wake — `sandbox:wake` scope (`agents.sandbox.wake` + `agents.sandbox.vmState`)
+
+**Summary:** A room's VM now establishes silently after push-bot-key (no chat message needed), and a new `sandbox:wake` scope lets MCP apps wake/establish an idle VM **without re-pushing the bot key**, plus poll its state. Establishment is single-flight per project: a concurrent wake and first message coalesce into one establishment (the later is ignored until the VM is up) — never a double-spawn. After establish the room is usable on the board with no message.
+
+**Changes:**
+- `apps/meteor/server/oauth2-server/scope-definitions.ts` — added `sandbox:wake` ("Wake Sandbox VM").
+- `apps/meteor/server/services/mcp-rest-allowlist.ts` — mapped `sandbox:wake` → `POST agents.sandbox.wake` + `GET agents.sandbox.vmState`.
+- `apps/meteor/app/api/server/v1/agent-privos-sandbox-bot-key.ts` — new `agents.sandbox.wake` (POST, fire-and-forget → `{ accepted: true }`, gated by the same `authorizePushBotKey` check, never writes the key) and `agents.sandbox.vmState` (GET, pure read → `{ vmState, errorMessage? }`).
+- Proxy (`privos-sandbox`): `ensureEstablished` = single-flight create + start + board-project registration; `/ready` and the attempt paths share it; `/ready` now accepts `room-<id>-<id>` projectIds (was silently rejecting regular rooms).
+
+**Usage:** see [mcp-app-platform/auth-and-rest-integration.md](mcp-app-platform/auth-and-rest-integration.md#waking-the-rooms-vm-without-re-pushing-the-bot-key). `vmState` is a pure read — it does not wake the VM.
+
+---
+
 ### AI Chat Scopes — `sandbox:ai-chat` (read) + `sandbox:ai-chat:write`
 
 **Summary:** Two new OAuth scopes let MCP apps reach a room's **native AI Chat** over REST-first. Previously no scope mapped to the `ai-messages.*` endpoints, so apps couldn't list sessions or drive a chat. Each endpoint still re-checks room access per call; the scopes only widen the reachable path set.

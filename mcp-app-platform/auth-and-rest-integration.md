@@ -245,6 +245,58 @@ curl -X POST https://<hub>/api/v1/agents.sandbox.pushBotKey \
 # → { "success": true, "privosSandboxId": "...", "pushedAt": "..." }
 ```
 
+## Waking the room's VM (without re-pushing the bot key)
+
+Once a room is provisioned, its VM is **idle-stopped** after inactivity. Pushing the bot
+key already establishes the VM in the background, but re-pushing the key just to wake an
+idle room is wasteful (key churn). Use **wake** to establish/wake the room's VM directly,
+and **vmState** to poll the result. Establishment is silent and idempotent — concurrent
+wakes (and a first chat message) coalesce into one establishment, so a duplicate wake is
+ignored until the VM is up. After a successful establish the room is usable on the board
+**without sending a chat message**. Two REST routes
+(`app/api/server/v1/agent-privos-sandbox-bot-key.ts`):
+
+| Path | Method | Purpose |
+| --- | --- | --- |
+| `agents.sandbox.wake` | POST | Wake/establish the room's VM (create + start + register on the board). Returns `{ accepted: true }` immediately |
+| `agents.sandbox.vmState` | GET | Poll the VM state → `{ vmState, errorMessage? }` where `vmState ∈ running \| starting \| stopped \| error \| not_found \| unknown` |
+
+### Reachability
+
+- **Frontend (`app.rest()`):** both routes reachable with the **`sandbox:wake`** scope
+  (`server/services/mcp-rest-allowlist.ts`).
+- **Server-side gate:** `wake` enforces the **same** `authorizePushBotKey` check as
+  `pushBotKey` (caller holds **`edit-room`** AND is the bot's owner OR holds **`edit-bot`**),
+  runs as the end-user session, and **never writes/rotates the bot key**. `vmState` is a
+  pure read gated by room access (no side effect — it never wakes the VM).
+
+```ts
+// 1. Wake / establish the room's VM (fire-and-forget; returns immediately)
+await app.rest({ method: 'POST', path: 'agents.sandbox.wake', body: { roomId } });
+
+// 2. Poll until running (vmState is a pure read — it does not wake the VM)
+let vmState = 'starting';
+while (vmState === 'starting' || vmState === 'stopped' || vmState === 'unknown') {
+  await new Promise((r) => setTimeout(r, 2000));
+  const { body } = await app.rest({
+    method: 'GET', path: 'agents.sandbox.vmState', query: { roomId },
+  });
+  vmState = body.vmState; // 'running' = ready; 'error' = body.errorMessage explains why
+  if (vmState === 'running' || vmState === 'error' || vmState === 'not_found') break;
+}
+```
+
+```bash
+curl -X POST https://<hub>/api/v1/agents.sandbox.wake \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID" \
+  -H "Content-Type: application/json" -d '{ "roomId": "ROOM_ID" }'
+# → { "accepted": true }
+
+curl "https://<hub>/api/v1/agents.sandbox.vmState?roomId=ROOM_ID" \
+  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID"
+# → { "vmState": "running" }
+```
+
 ## Selecting room skills (sync + remove)
 
 Per-room skill selection is a single **sync** endpoint that takes the **full desired set**
