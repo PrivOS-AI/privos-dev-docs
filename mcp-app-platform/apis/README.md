@@ -25,9 +25,9 @@ equivalent**:
 | Document | Description |
 |----------|-------------|
 | [Context Tools](./tools-context.md) | Get current user/room context |
-| [App Storage Tools](./tools-app.md) | `privos.app.*` — per-app `localData` key/value store |
+| [App Storage Tools](./tools-app.md) | `mcpapp.app.*` — per-app `localData` key/value store |
 | [Bot Tools](./tools-bot.md) | Send messages/attachments/DMs as a bot using its token |
-| [Database Tools](./tools-database.md) | `privos.db.*` — schema, CRUD, query, aggregate |
+| [Database Tools](./tools-database.md) | `mcpapp.db.*` — schema, CRUD, query, aggregate |
 
 ## Authentication
 
@@ -79,6 +79,6 @@ Successful responses include `"success": true` along with the endpoint-specific 
 
 A few tools bypass the OAuth scope check — they only require the app to be installed and the user to have room access:
 
-- `privos.context.get` — reads current user/room context
-- `privos.bot.getMe` — validates a bot token (runtime identity check)
-- `privos.app.*` — per-app `localData` store (scoped to the app itself)
+- `mcpapp.context.get` — reads current user/room context
+- `mcpapp.bot.getMe` — validates a bot token (runtime identity check)
+- `mcpapp.app.*` — per-app `localData` store (scoped to the app itself)

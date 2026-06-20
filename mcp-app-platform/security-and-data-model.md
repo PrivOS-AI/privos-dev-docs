@@ -118,18 +118,18 @@ apps/meteor/
 │       ├── mcp-registration-pusher.ts       # POST credentials → /.well-known/mcp/register
 │       ├── mcp-tool-registry.ts             # Tool definitions + scope enforcement
 │       ├── mcp-tool-handlers-loader.ts      # Auto-imports all handlers
-│       ├── mcp-tool-handlers-context.ts     # privos.context.*
-│       ├── mcp-tool-handlers-lists.ts       # privos.lists.*
-│       ├── mcp-tool-handlers-stages.ts      # privos.stages.*
-│       ├── mcp-tool-handlers-files.ts       # privos.files.* + privos.folders.*
-│       ├── mcp-tool-handlers-messages.ts    # privos.messages.*
-│       ├── mcp-tool-handlers-bot.ts         # privos.bot.* (token-authenticated bot actions)
-│       ├── mcp-tool-handlers-rooms.ts       # privos.rooms.*
-│       ├── mcp-tool-handlers-users.ts       # privos.users.*
-│       ├── mcp-tool-handlers-db-schema.ts   # privos.db.*Schema / *Collection
-│       ├── mcp-tool-handlers-db-data.ts     # privos.db.create/update/delete/get
-│       ├── mcp-tool-handlers-db-query.ts    # privos.db.query/count/aggregate/populate
-│       ├── mcp-app-tools.ts                 # privos.app.* (localData store)
+│       ├── mcp-tool-handlers-context.ts     # mcpapp.context.*
+│       ├── mcp-tool-handlers-lists.ts       # mcpapp.lists.*
+│       ├── mcp-tool-handlers-stages.ts      # mcpapp.stages.*
+│       ├── mcp-tool-handlers-files.ts       # mcpapp.files.* + mcpapp.folders.*
+│       ├── mcp-tool-handlers-messages.ts    # mcpapp.messages.*
+│       ├── mcp-tool-handlers-bot.ts         # mcpapp.bot.* (token-authenticated bot actions)
+│       ├── mcp-tool-handlers-rooms.ts       # mcpapp.rooms.*
+│       ├── mcp-tool-handlers-users.ts       # mcpapp.users.*
+│       ├── mcp-tool-handlers-db-schema.ts   # mcpapp.db.*Schema / *Collection
+│       ├── mcp-tool-handlers-db-data.ts     # mcpapp.db.create/update/delete/get
+│       ├── mcp-tool-handlers-db-query.ts    # mcpapp.db.query/count/aggregate/populate
+│       ├── mcp-app-tools.ts                 # mcpapp.app.* (localData store)
 │       ├── mcp-app-file-storage.ts          # MinIO storage for app icons/assets
 │       ├── mcp-app-namespace-proxy.ts       # Per-app /apps/{appId}/* endpoints
 │       ├── mcp-relay-pairing-token-store.ts # Generate/validate one-time pair tokens

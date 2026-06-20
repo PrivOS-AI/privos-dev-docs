@@ -1,6 +1,6 @@
 # PrivOS MCP Tools — Context
 
-## `privos.context.get`
+## `mcpapp.context.get`
 
 Get the current user and room context. No scope required.
 
@@ -74,7 +74,7 @@ Bot objects contain `_id` and `username`. Both `agentBot` and `defaultBot` are v
 
 ```typescript
 const context = await app.callServerTool({
-  name: 'privos.context.get',
+  name: 'mcpapp.context.get',
   arguments: {}
 });
 // { userId: "user_123", roomId: "room_xyz", roomName: "general", ... }
@@ -86,7 +86,7 @@ const context = await app.callServerTool({
 import { useServerTool } from '@anthropic/mcp-react-sdk';
 
 function MyComponent() {
-  const { data: context } = useServerTool('privos.context.get');
+  const { data: context } = useServerTool('mcpapp.context.get');
   return <div>Room: {context?.roomName}</div>;
 }
 ```

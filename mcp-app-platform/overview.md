@@ -10,7 +10,7 @@ MCP-compatible platform for embedding third-party apps in PrivOS Hub rooms via s
 - Tool discovery via `initialize` → `tools/list` JSON-RPC
 - Tools with `_meta.ui` render in sandboxed iframes as room tabs
 - Apps call PrivOS resources (lists, files, messages, DB) via `callServerTool()`
-- OAuth scope enforcement on every tool call (with a small allow-list of scope-free tools like `privos.context.get`)
+- OAuth scope enforcement on every tool call (with a small allow-list of scope-free tools like `mcpapp.context.get`)
 - Deny-by-default iframe sandbox (no `allow-same-origin`)
 - **Optional credential push**: after direct-app connect, the Hub POSTs `{appId, clientId, clientSecret}` to your `/.well-known/mcp/register` endpoint (best-effort, 404 = skipped)
 
@@ -62,6 +62,6 @@ PrivOS Hub Host
 | [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
 | [React SDK](./react-sdk-reference.md) | `@privos/app-react` hooks (`useAppDb`, `useLists`, etc.) |
-| [Database API](./apis/tools-database.md) | `privos.db.*` tools — schema, CRUD, query, references |
+| [Database API](./apis/tools-database.md) | `mcpapp.db.*` tools — schema, CRUD, query, references |
 | [Admin Guide](./admin-guide.md) | Register direct/relay apps, configure install perms |
 | [Security & Data Model](./security-and-data-model.md) | Sandbox, OAuth, relay security, schema |

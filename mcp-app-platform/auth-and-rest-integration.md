@@ -300,22 +300,22 @@ verified in `app/api/server/v1/fileManagement.ts`; others in the named route fil
 
 | Legacy tool | REST endpoint |
 |---|---|
-| `privos.files.getByChannel` | `GET file-management.files.channel/:channelId` |
-| `privos.files.get` | `GET file-management.files/:fileId` |
-| `privos.files.search` | `GET file-management.files.search/:channelId` |
-| `privos.files.update` | `POST file-management.files/:fileId/rename` (or `/update-content`) |
-| `privos.files.delete` | `DELETE file-management.files/:fileId` |
+| `mcpapp.files.getByChannel` | `GET file-management.files.channel/:channelId` |
+| `mcpapp.files.get` | `GET file-management.files/:fileId` |
+| `mcpapp.files.search` | `GET file-management.files.search/:channelId` |
+| `mcpapp.files.update` | `POST file-management.files/:fileId/rename` (or `/update-content`) |
+| `mcpapp.files.delete` | `DELETE file-management.files/:fileId` |
 | *(file upload — was never a tool)* | `POST file-management.files.upload` |
 | *(large file upload)* | `POST file-management.files.upload-chunked-init` → `…upload-chunk` → `…upload-chunked-complete` / `…-cancel` |
-| `privos.folders.*` | `file-management.folders.*` (`channel/:channelId`, `:folderId`, create/rename/delete) |
-| `privos.lists.*` | `lists.*` (`lists.create`, `lists.list`, `lists.info`, `lists.update`, items via `lists.*`/`items.*`) |
-| `privos.lists.addField` / `removeField` | `lists.fields.create` / `lists.fields.delete` (or `lists.addField` / `lists.removeField`) |
-| `privos.messages.send` | `POST chat.sendMessage` (or `chat.postMessage`) |
-| `privos.messages.getRecent` | `GET channels.messages` / `channels.history` |
-| `privos.rooms.get` | `GET channels.info` |
-| `privos.rooms.getMembers` | `GET channels.members` |
-| `privos.users.get` / `getByIds` | `GET users.info` / `users.list` |
-| `privos.bot.sendMessage` / `sendAttachment` | `POST chat.sendMessage` with a bot token (identity = bot user) |
+| `mcpapp.folders.*` | `file-management.folders.*` (`channel/:channelId`, `:folderId`, create/rename/delete) |
+| `mcpapp.lists.*` | `lists.*` (`lists.create`, `lists.list`, `lists.info`, `lists.update`, items via `lists.*`/`items.*`) |
+| `mcpapp.lists.addField` / `removeField` | `lists.fields.create` / `lists.fields.delete` (or `lists.addField` / `lists.removeField`) |
+| `mcpapp.messages.send` | `POST chat.sendMessage` (or `chat.postMessage`) |
+| `mcpapp.messages.getRecent` | `GET channels.messages` / `channels.history` |
+| `mcpapp.rooms.get` | `GET channels.info` |
+| `mcpapp.rooms.getMembers` | `GET channels.members` |
+| `mcpapp.users.get` / `getByIds` | `GET users.info` / `users.list` |
+| `mcpapp.bot.sendMessage` / `sendAttachment` | `POST chat.sendMessage` with a bot token (identity = bot user) |
 
 > File **archive extraction** (unzip into the folder tree) has **no** REST endpoint today.
 > If needed, add it as a single new REST route (e.g. `file-management.files.extract`) —
@@ -326,11 +326,11 @@ verified in `app/api/server/v1/fileManagement.ts`; others in the named route fil
 These are MCP-runtime / sandbox concerns, not hub resources — keep using them via the
 bridge/SDK:
 
-- `privos.context.get` — current room/user context for the iframe session.
-- `privos.app.getLocalData` / `setLocalData` / `deleteLocalData` / `clearLocalData` — the
+- `mcpapp.context.get` — current room/user context for the iframe session.
+- `mcpapp.app.getLocalData` / `setLocalData` / `deleteLocalData` / `clearLocalData` — the
   app's own sandboxed key-value store.
-- `privos.db.*` — the app-private collection store (app's own data, not a hub resource).
-- `privos.bot.getMe` — runtime bot-token identity check.
+- `mcpapp.db.*` — the app-private collection store (app's own data, not a hub resource).
+- `mcpapp.bot.getMe` — runtime bot-token identity check.
 
 ## Implemented approach (allowlist)
 

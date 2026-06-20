@@ -35,13 +35,13 @@ export default function App() {
 
 Returns the MCP app instance. Use it for `app.rest()` (the preferred way to read/write
 hub data — see below) and for direct tool calls to capabilities with no REST equivalent
-(`privos.db.*`, `privos.bot.*`):
+(`mcpapp.db.*`, `mcpapp.bot.*`):
 
 ```tsx
 const app = usePrivOSApp();
 
 await app.callServerTool({
-  name: 'privos.db.create',
+  name: 'mcpapp.db.create',
   arguments: { collection: 'contacts', data: { name: 'New item' } }
 });
 ```
@@ -132,10 +132,10 @@ Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guid
 ## usePrivOSTool
 
 Generic hook — auto-fetches on mount and when args change. Best for reads from tools with
-no REST equivalent (`privos.db.*`):
+no REST equivalent (`mcpapp.db.*`):
 
 ```tsx
-const { data, loading, error, refetch } = usePrivOSTool('privos.db.get', { collection, id });
+const { data, loading, error, refetch } = usePrivOSTool('mcpapp.db.get', { collection, id });
 ```
 
 **Note:** Skips fetch if any arg value is empty/null/undefined. For hub data (lists, files,

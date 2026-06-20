@@ -1,6 +1,6 @@
 # PrivOS MCP Tools — App
 
-## `privos.app.getLocalData`
+## `mcpapp.app.getLocalData`
 
 Get the app's localData storage. This is per-app storage unique to each MCP app instance.
 
@@ -45,14 +45,14 @@ Or when `key` is specified:
 ```typescript
 // Get all localData
 const allData = await app.callServerTool({
-  name: 'privos.app.getLocalData',
+  name: 'mcpapp.app.getLocalData',
   arguments: {}
 });
 // { data: { apiKey: "xxx", preferences: { theme: "dark" } } }
 
 // Get specific key
 const apiKey = await app.callServerTool({
-  name: 'privos.app.getLocalData',
+  name: 'mcpapp.app.getLocalData',
   arguments: { key: 'apiKey' }
 });
 // { data: { apiKey: "xxx" } }
@@ -64,14 +64,14 @@ const apiKey = await app.callServerTool({
 import { useServerTool } from '@anthropic/mcp-react-sdk';
 
 function MyComponent() {
-  const { data } = useServerTool('privos.app.getLocalData');
+  const { data } = useServerTool('mcpapp.app.getLocalData');
   return <div>API Key: {data?.apiKey}</div>;
 }
 ```
 
 ---
 
-## `privos.app.setLocalData`
+## `mcpapp.app.setLocalData`
 
 Set/update the app's localData. Merges with existing data by default.
 
@@ -108,7 +108,7 @@ Set/update the app's localData. Merges with existing data by default.
 ```typescript
 // Merge with existing data (default)
 await app.callServerTool({
-  name: 'privos.app.setLocalData',
+  name: 'mcpapp.app.setLocalData',
   arguments: {
     data: {
       apiKey: 'new-secret',
@@ -121,7 +121,7 @@ await app.callServerTool({
 
 // Replace entire localData
 await app.callServerTool({
-  name: 'privos.app.setLocalData',
+  name: 'mcpapp.app.setLocalData',
   arguments: {
     data: { freshStart: true },
     merge: false
@@ -136,7 +136,7 @@ await app.callServerTool({
 import { useServerToolCallback } from '@anthropic/mcp-react-sdk';
 
 function Settings() {
-  const updateTheme = useServerToolCallback('privos.app.setLocalData');
+  const updateTheme = useServerToolCallback('mcpapp.app.setLocalData');
 
   const handleThemeChange = (theme: string) => {
     updateTheme({
@@ -151,7 +151,7 @@ function Settings() {
 
 ---
 
-## `privos.app.deleteLocalData`
+## `mcpapp.app.deleteLocalData`
 
 Delete specific key(s) from localData.
 
@@ -187,14 +187,14 @@ Delete specific key(s) from localData.
 ```typescript
 // Delete top-level key
 await app.callServerTool({
-  name: 'privos.app.deleteLocalData',
+  name: 'mcpapp.app.deleteLocalData',
   arguments: { key: 'apiKey' }
 });
 // Result: { success: true, data: { deletedKey: "apiKey" } }
 
 // Delete nested key using dot notation
 await app.callServerTool({
-  name: 'privos.app.deleteLocalData',
+  name: 'mcpapp.app.deleteLocalData',
   arguments: { key: 'preferences.theme' }
 });
 // Result: { success: true, data: { deletedKey: "preferences.theme" } }
@@ -206,7 +206,7 @@ await app.callServerTool({
 import { useServerToolCallback } from '@anthropic/mcp-react-sdk';
 
 function ClearCache() {
-  const clearCache = useServerToolCallback('privos.app.deleteLocalData');
+  const clearCache = useServerToolCallback('mcpapp.app.deleteLocalData');
 
   return (
     <button onClick={() => clearCache({ key: 'cache' })}>
@@ -218,7 +218,7 @@ function ClearCache() {
 
 ---
 
-## `privos.app.clearLocalData`
+## `mcpapp.app.clearLocalData`
 
 Clear all app localData. Use with caution — this cannot be undone.
 
@@ -253,14 +253,14 @@ Clear all app localData. Use with caution — this cannot be undone.
 ```typescript
 // Clear all data (requires explicit confirmation)
 await app.callServerTool({
-  name: 'privos.app.clearLocalData',
+  name: 'mcpapp.app.clearLocalData',
   arguments: { confirm: true }
 });
 // Result: { success: true, data: { message: "All localData cleared successfully" } }
 
 // Attempt without confirmation - will fail
 await app.callServerTool({
-  name: 'privos.app.clearLocalData',
+  name: 'mcpapp.app.clearLocalData',
   arguments: { confirm: false }
 });
 // Error: Must confirm by setting confirm=true
@@ -272,7 +272,7 @@ await app.callServerTool({
 import { useServerToolCallback } from '@anthropic/mcp-react-sdk';
 
 function ResetApp() {
-  const clearData = useServerToolCallback('privos.app.clearLocalData');
+  const clearData = useServerToolCallback('mcpapp.app.clearLocalData');
 
   const handleReset = () => {
     if (confirm('Are you sure you want to clear all app data?')) {
@@ -293,7 +293,7 @@ function ResetApp() {
 ```typescript
 // Save app settings on first run
 await app.callServerTool({
-  name: 'privos.app.setLocalData',
+  name: 'mcpapp.app.setLocalData',
   arguments: {
     data: {
       config: {
@@ -311,7 +311,7 @@ await app.callServerTool({
 ```typescript
 // Cache API response
 await app.callServerTool({
-  name: 'privos.app.setLocalData',
+  name: 'mcpapp.app.setLocalData',
   arguments: {
     data: {
       cache: {
@@ -324,7 +324,7 @@ await app.callServerTool({
 
 // Retrieve cached data
 const { data } = await app.callServerTool({
-  name: 'privos.app.getLocalData',
+  name: 'mcpapp.app.getLocalData',
   arguments: { key: 'cache' }
 });
 ```
@@ -334,7 +334,7 @@ const { data } = await app.callServerTool({
 ```typescript
 // Track user progress
 await app.callServerTool({
-  name: 'privos.app.setLocalData',
+  name: 'mcpapp.app.setLocalData',
   arguments: {
     data: {
       state: {
@@ -352,7 +352,7 @@ await app.callServerTool({
 ```typescript
 // Securely store app-specific credentials
 await app.callServerTool({
-  name: 'privos.app.setLocalData',
+  name: 'mcpapp.app.setLocalData',
   arguments: {
     data: {
       credentials: {
@@ -390,7 +390,7 @@ await app.callServerTool({
 2. **Handle missing data gracefully**: Always check for undefined/null
    ```typescript
    const { data } = await app.callServerTool({
-     name: 'privos.app.getLocalData',
+     name: 'mcpapp.app.getLocalData',
      arguments: {}
    });
    const apiKey = data?.apiKey || 'default-key';
@@ -399,7 +399,7 @@ await app.callServerTool({
 3. **Use merge mode**: Default to `merge: true` to preserve existing data
    ```typescript
    await app.callServerTool({
-     name: 'privos.app.setLocalData',
+     name: 'mcpapp.app.setLocalData',
      arguments: { data: newSettings, merge: true }
    });
    ```
@@ -407,7 +407,7 @@ await app.callServerTool({
 4. **Clean up unused data**: Delete old keys to avoid bloat
    ```typescript
    await app.callServerTool({
-     name: 'privos.app.deleteLocalData',
+     name: 'mcpapp.app.deleteLocalData',
      arguments: { key: 'old.cache' }
    });
    ```

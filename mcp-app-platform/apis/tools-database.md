@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `privos.db.*` tools give apps a relational database with schema registration, Firestore-style query builder, typed references, and migration support.
+The `mcpapp.db.*` tools give apps a relational database with schema registration, Firestore-style query builder, typed references, and migration support.
 
 **Data scope:** Apps choose `scope: 'global' | 'room'` per collection.
 - **Global:** `app_{appId}_{collection}` — shared across all rooms
@@ -23,7 +23,7 @@ The `privos.db.*` tools give apps a relational database with schema registration
 
 ## Schema Tools
 
-### `privos.db.registerCollection`
+### `mcpapp.db.registerCollection`
 
 Register a new collection with schema definition.
 
@@ -69,7 +69,7 @@ Register a new collection with schema definition.
 }
 ```
 
-### `privos.db.updateSchema`
+### `mcpapp.db.updateSchema`
 
 Update field definitions (bumps version, uses `validationLevel: 'moderate'`).
 
@@ -82,13 +82,13 @@ Update field definitions (bumps version, uses `validationLevel: 'moderate'`).
 | `collection` | string | Yes |
 | `fields` | array | Yes |
 
-### `privos.db.getSchema` / `privos.db.listCollections`
+### `mcpapp.db.getSchema` / `mcpapp.db.listCollections`
 
 | | |
 |---|---|
 | **Scope** | `db:schema:read` |
 
-### `privos.db.dropCollection`
+### `mcpapp.db.dropCollection`
 
 Drops the MongoDB collection and removes the schema document.
 
@@ -100,7 +100,7 @@ Drops the MongoDB collection and removes the schema document.
 
 ## CRUD Tools
 
-### `privos.db.create`
+### `mcpapp.db.create`
 
 | | |
 |---|---|
@@ -120,7 +120,7 @@ Records automatically get `_id`, `_createdAt`, `_updatedAt`.
 { "_id": "664f...", "name": "Alice", "email": "alice@example.com", "_createdAt": "...", "_updatedAt": "..." }
 ```
 
-### `privos.db.createMany`
+### `mcpapp.db.createMany`
 
 Batch create (max 100 records).
 
@@ -129,14 +129,14 @@ Batch create (max 100 records).
 | `collection` | string | Yes |
 | `records` | array | Yes |
 
-### `privos.db.get`
+### `mcpapp.db.get`
 
 | Arg | Type | Required |
 |-----|------|----------|
 | `collection` | string | Yes |
 | `id` | string | Yes |
 
-### `privos.db.update`
+### `mcpapp.db.update`
 
 | Arg | Type | Required |
 |-----|------|----------|
@@ -144,7 +144,7 @@ Batch create (max 100 records).
 | `id` | string | Yes |
 | `data` | object | Yes |
 
-### `privos.db.updateMany`
+### `mcpapp.db.updateMany`
 
 | Arg | Type | Required |
 |-----|------|----------|
@@ -152,7 +152,7 @@ Batch create (max 100 records).
 | `where` | array | Yes |
 | `data` | object | Yes |
 
-### `privos.db.delete` / `privos.db.deleteMany`
+### `mcpapp.db.delete` / `mcpapp.db.deleteMany`
 
 Soft-delete: sets `_deletedAt` timestamp. Cascade rules are enforced.
 
@@ -160,7 +160,7 @@ Soft-delete: sets `_deletedAt` timestamp. Cascade rules are enforced.
 
 ## Query Tools
 
-### `privos.db.query`
+### `mcpapp.db.query`
 
 | | |
 |---|---|
@@ -188,11 +188,11 @@ Soft-delete: sets `_deletedAt` timestamp. Cascade rules are enforced.
 
 Response: `{ "records": [...], "total": 42 }`
 
-### `privos.db.count`
+### `mcpapp.db.count`
 
 Returns `{ "count": number }`.
 
-### `privos.db.aggregate`
+### `mcpapp.db.aggregate`
 
 | Arg | Type | Required | Description |
 |-----|------|----------|-------------|
@@ -206,7 +206,7 @@ Returns `{ "count": number }`.
 
 ## Reference Tools
 
-### `privos.db.populate`
+### `mcpapp.db.populate`
 
 Resolve reference fields to full documents (1-level deep, max 5 fields, max 1000 records).
 
@@ -421,9 +421,9 @@ await db.registerCollection('poll_votes', [
 
 ---
 
-## privos.db vs privos.lists — When to Use What
+## mcpapp.db vs mcpapp.lists — When to Use What
 
-| | `privos.db.*` | `privos.lists.*` |
+| | `mcpapp.db.*` | `mcpapp.lists.*` |
 |---|---|---|
 | **Data model** | Schema-first, typed fields | Kanban board with custom fields |
 | **Query** | Full query builder, aggregation | Simple filter by stage/field |

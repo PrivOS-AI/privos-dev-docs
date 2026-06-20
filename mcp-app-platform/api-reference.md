@@ -35,31 +35,31 @@ Tools apps can call via `callServerTool()` or React hooks:
 
 | Tool | Scope | Description |
 |------|-------|-------------|
-| `privos.context.get` | — | Room ID/name/type, user roles, isAgentRoom flag, agent/default bot |
-| `privos.bot.getMe` | — | Validate a bot token, return bot identity |
-| `privos.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
-| `privos.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
-| `privos.bot.sendAttachment` | bot:message:send | Send photo/video/audio/document/voice to a room or DM (via fileId or fileUrl) |
-| `privos.app.getLocalData` | — | Get app's localData storage |
-| `privos.app.setLocalData` | — | Set/update app's localData |
-| `privos.app.deleteLocalData` | — | Delete key from localData |
-| `privos.app.clearLocalData` | — | Clear all localData (requires confirmation) |
-| `privos.db.registerCollection` | db:schema:write | Register app DB collection with schema |
-| `privos.db.updateSchema` | db:schema:write | Update collection schema fields |
-| `privos.db.getSchema` | db:schema:read | Get collection schema definition |
-| `privos.db.listCollections` | db:schema:read | List all app collections |
-| `privos.db.dropCollection` | db:schema:write | Drop collection and schema |
-| `privos.db.create` | db:write | Create record in collection |
-| `privos.db.createMany` | db:write | Batch create records (max 100) |
-| `privos.db.get` | db:read | Get record by ID |
-| `privos.db.update` | db:write | Update record by ID |
-| `privos.db.updateMany` | db:write | Update records matching filter |
-| `privos.db.delete` | db:write | Soft-delete record by ID |
-| `privos.db.deleteMany` | db:write | Soft-delete records matching filter |
-| `privos.db.query` | db:read | Query with filters, sort, pagination |
-| `privos.db.count` | db:read | Count records matching filter |
-| `privos.db.aggregate` | db:read | Aggregation (count/sum/avg/min/max) |
-| `privos.db.populate` | db:read | Resolve reference fields (1-level) |
+| `mcpapp.context.get` | — | Room ID/name/type, user roles, isAgentRoom flag, agent/default bot |
+| `mcpapp.bot.getMe` | — | Validate a bot token, return bot identity |
+| `mcpapp.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
+| `mcpapp.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
+| `mcpapp.bot.sendAttachment` | bot:message:send | Send photo/video/audio/document/voice to a room or DM (via fileId or fileUrl) |
+| `mcpapp.app.getLocalData` | — | Get app's localData storage |
+| `mcpapp.app.setLocalData` | — | Set/update app's localData |
+| `mcpapp.app.deleteLocalData` | — | Delete key from localData |
+| `mcpapp.app.clearLocalData` | — | Clear all localData (requires confirmation) |
+| `mcpapp.db.registerCollection` | db:schema:write | Register app DB collection with schema |
+| `mcpapp.db.updateSchema` | db:schema:write | Update collection schema fields |
+| `mcpapp.db.getSchema` | db:schema:read | Get collection schema definition |
+| `mcpapp.db.listCollections` | db:schema:read | List all app collections |
+| `mcpapp.db.dropCollection` | db:schema:write | Drop collection and schema |
+| `mcpapp.db.create` | db:write | Create record in collection |
+| `mcpapp.db.createMany` | db:write | Batch create records (max 100) |
+| `mcpapp.db.get` | db:read | Get record by ID |
+| `mcpapp.db.update` | db:write | Update record by ID |
+| `mcpapp.db.updateMany` | db:write | Update records matching filter |
+| `mcpapp.db.delete` | db:write | Soft-delete record by ID |
+| `mcpapp.db.deleteMany` | db:write | Soft-delete records matching filter |
+| `mcpapp.db.query` | db:read | Query with filters, sort, pagination |
+| `mcpapp.db.count` | db:read | Count records matching filter |
+| `mcpapp.db.aggregate` | db:read | Aggregation (count/sum/avg/min/max) |
+| `mcpapp.db.populate` | db:read | Resolve reference fields (1-level) |
 
 > **Database API:** See [apis/tools-database.md](./apis/tools-database.md) for full database tool documentation with examples.
 >
@@ -232,6 +232,6 @@ The following tools bypass the OAuth scope check (they only need the app to be i
 
 | Tool | Reason |
 |------|--------|
-| `privos.context.get` | Pure read of current user/room context — no resource access |
-| `privos.bot.getMe` | Validates a bot token (runtime identity check, not resource access) |
-| `privos.app.getLocalData` / `setLocalData` / `deleteLocalData` / `clearLocalData` | App's own sandboxed `localData` store — scoped to the app itself |
+| `mcpapp.context.get` | Pure read of current user/room context — no resource access |
+| `mcpapp.bot.getMe` | Validates a bot token (runtime identity check, not resource access) |
+| `mcpapp.app.getLocalData` / `setLocalData` / `deleteLocalData` / `clearLocalData` | App's own sandboxed `localData` store — scoped to the app itself |

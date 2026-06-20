@@ -3,7 +3,7 @@
 ## Execute Tool Call
 
 Execute an MCP tool on a specific app. Use this for tools with **no REST equivalent**
-(`privos.db.*`, `privos.bot.*`, `privos.context.get`, `privos.app.*`). For lists, items,
+(`mcpapp.db.*`, `mcpapp.bot.*`, `mcpapp.context.get`, `mcpapp.app.*`). For lists, items,
 files, folders, messages, rooms and users, call the hub REST API via `app.rest()` instead
 — see [Auth & REST Integration](../auth-and-rest-integration.md).
 
@@ -24,7 +24,7 @@ files, folders, messages, rooms and users, call the hub REST API via `app.rest()
 ```json
 {
   "mcpAppId": "app_abc123",
-  "toolName": "privos.db.query",
+  "toolName": "mcpapp.db.query",
   "arguments": {
     "collection": "contacts"
   },
@@ -70,7 +70,7 @@ The response depends on the tool being called. See the [PrivOS MCP Tools documen
 ```json
 {
   "mcpAppId": "app_abc123",
-  "toolName": "privos.db.create",
+  "toolName": "mcpapp.db.create",
   "arguments": {
     "collection": "contacts",
     "data": { "name": "John Doe", "email": "john@example.com" }
@@ -84,7 +84,7 @@ The response depends on the tool being called. See the [PrivOS MCP Tools documen
 ```json
 {
   "mcpAppId": "app_abc123",
-  "toolName": "privos.bot.sendMessage",
+  "toolName": "mcpapp.bot.sendMessage",
   "arguments": {
     "botToken": "bot_token_here",
     "roomId": "room_xyz789",
