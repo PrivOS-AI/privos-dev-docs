@@ -88,7 +88,7 @@ gated on the caller having access to `roomId`:
 | `agents.sandbox.upload` | POST | Upload a file, get a `tempId` to attach to a generation |
 | `agents.sandbox.generate` | POST | One-shot **synchronous** agent generation → `{ text }` |
 | `agents.sandbox.generate-async` | POST | Enqueue a generation → `{ attemptId, taskId }` immediately |
-| `agents.sandbox.attempt-status` | GET | Poll an async generation → `{ status, text?, json? }`; add `&partial=1` to stream blocks while running |
+| `agents.sandbox.attempt-status` | GET | Poll an async generation → `{ status, text? }` |
 
 ### Call — `agents.sandbox.generate`
 
@@ -140,7 +140,7 @@ curl -X POST https://<hub>/api/v1/agents.sandbox.generate-async \
 curl "https://<hub>/api/v1/agents.sandbox.attempt-status?roomId=ROOM_ID&attemptId=agent-attempt-…" \
   -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID"
 # while running → { "status": "running" }
-# when done    → { "status": "completed" | "failed" | "cancelled", "text": "...", "json": [ ... ] }
+# when done    → { "status": "completed" | "failed" | "cancelled", "text": "..." }
 ```
 
 The hub keeps **no job state** — the attempt lives in the Sandbox (enqueued with
@@ -150,32 +150,8 @@ terminal status, extracts the assistant text from the attempt logs
 room access on every call. Note: polling returns the final text only — token-by-token
 deltas remain hub-internal (see Reachability below).
 
-On a terminal status the response also carries **`json`** — the array of structured
-response blocks parsed from the attempt's `type:'json'` log lines (the same events the
-hub flattens into `text`). Use `text` for the plain reply; use `json` when you need the
-agent's structured output (tool calls, `result` summaries, content blocks, usage, etc.).
-The array is the parsed events *after the last user turn* of the attempt. By default it
-is omitted while `status` is `running`.
-
-**Streaming blocks while running — `&partial=1`.** Pass `partial=1` on `attempt-status`
-to also receive the `text`/`json` accumulated **so far** on a `running` poll, instead of
-waiting for the terminal status. The attempt's logs grow as the agent works, so each poll
-returns more blocks — letting a client render the response **block-by-block as it
-generates** (assistant text, tool calls, tool results, result summary):
-
-```bash
-curl "https://<hub>/api/v1/agents.sandbox.attempt-status?roomId=ROOM_ID&attemptId=…&partial=1" \
-  -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $USER_ID"
-# running  → { "status": "running", "text": "<partial>", "json": [ <blocks so far> ] }
-# terminal → { "status": "completed", "text": "...", "json": [ ... ] }
-```
-
-Notes: `partial` is **opt-in** — without it, behaviour is unchanged (`running` carries no
-`text`/`json`). Each partial poll fetches the full attempt log (heavier than a bare status
-check), and the partial fetch is best-effort: if it fails mid-run the poll degrades to a
-plain `{ "status": "running" }`. Poll a bit faster (~1–2s) when streaming. This is still
-event-level (per assistant message / tool call), **not** token-level — token deltas remain
-hub-internal (see Reachability below).
+> Structured response blocks (tool calls, content blocks) are exposed on the **native AI
+> Chat** path (`ai-messages.*`, scope `sandbox:ai-chat`), not on this Sandbox proxy.
 
 ### Uploading a file first
 

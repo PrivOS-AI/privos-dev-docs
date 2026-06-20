@@ -22,38 +22,6 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
-## 2026-06-18
-
-### Sandbox Async Poll — Stream Blocks While Running (`partial=1`)
-
-**Summary:** `agents.sandbox.attempt-status` accepts a new opt-in `partial=1` query param. With it, a still-`running` poll returns the `text`/`json` accumulated so far (the attempt's logs grow as the agent works) instead of an empty `{ status: 'running' }`. This lets clients render the response **block-by-block as the agent generates** (assistant text, tool calls, tool results, result summary). Without `partial`, behaviour is unchanged — existing callers (MCP host bridge, etc.) are unaffected.
-
-**Changes:**
-- `apps/meteor/server/services/privos-sandbox-agent-service.ts` — `getAttemptResultWithConfig` gains `opts.partial`; on a running attempt it best-effort fetches the partial result (`fetchAttemptFinalResult`) and returns `{ status: 'running', text, json }`. Fetch errors degrade to plain `{ status: 'running' }`.
-- `apps/meteor/app/api/server/v1/agent-privos-sandbox-proxy-endpoints.ts` — `attempt-status` reads `partial` (`'1'`/`'true'`) and threads it through.
-
-**Trade-off:** each partial poll fetches the full attempt log (heavier than a status check), so it's gated behind the flag; clients should poll ~1–2s while streaming. Still event-level granularity (per assistant message / tool call), not token-level.
-
-**Verification:** `tsc --noEmit` clean (exit 0), no errors in changed files.
-
----
-
-## 2026-06-18
-
-### Sandbox Async Poll — Expose Structured `json` Response Blocks
-
-**Summary:** `agents.sandbox.attempt-status` now returns a `json` array alongside `text` on a terminal status. Previously the hub parsed the attempt's `type:'json'` log lines into events and flattened them to plain text, discarding the structure. Callers needing the agent's structured output (tool calls, `result` summaries, content blocks, usage) had no way to retrieve it. No new OAuth scope: the endpoint stays gated by the existing `sandbox:generate` scope.
-
-**Changes:**
-- `apps/meteor/server/services/privos-sandbox-agent-service.ts` — renamed private `fetchAttemptFinalText` → `fetchAttemptFinalResult`, now returns `{ text, json }` (the parsed `type:'json'` event blocks) instead of only text; `IAttemptResult` gains optional `json?: any[]`; `getAttemptResultWithConfig` surfaces `json`. Sync poller (`pollAttemptUntilDone`) unchanged in behavior (still text-only).
-- `apps/meteor/app/api/server/v1/agent-privos-sandbox-proxy-endpoints.ts` — endpoint already spreads `...result`, so `json` flows through; doc comment updated.
-
-**Response shape:** terminal poll → `{ status, text, json, source }`; while running → `{ status: 'running' }` (no `json`). `json` is the parsed events after the last user turn of the attempt.
-
-**Verification:** `tsc --noEmit` clean (exit 0), no errors in changed files.
-
----
-
 ## 2026-05-28
 
 ### Document Parser — Global Admin Config + Room "Use Global" Toggle
