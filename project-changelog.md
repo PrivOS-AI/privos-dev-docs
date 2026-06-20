@@ -6,6 +6,22 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-06-20
+
+### AI Chat Scopes — `sandbox:ai-chat` (read) + `sandbox:ai-chat:write`
+
+**Summary:** Two new OAuth scopes let MCP apps reach a room's **native AI Chat** over REST-first. Previously no scope mapped to the `ai-messages.*` endpoints, so apps couldn't list sessions or drive a chat. Each endpoint still re-checks room access per call; the scopes only widen the reachable path set.
+
+**Changes:**
+- `apps/meteor/server/oauth2-server/scope-definitions.ts` — added `sandbox:ai-chat` ("Read AI Chat") and `sandbox:ai-chat:write` ("Use AI Chat").
+- `apps/meteor/server/services/mcp-rest-allowlist.ts` — mapped:
+  - `sandbox:ai-chat` → `GET ai-messages.sessions` / `ai-messages.getSession` / `ai-messages.list`
+  - `sandbox:ai-chat:write` → `POST ai-messages.send` / `ai-messages.startGeneration`
+
+**Note:** AI Chat sessions are separate from the Sandbox proxy (`agents.sandbox.*`) — the native path persists `AIChatSession`/`AIMessage` rows; the sandbox proxy stores a Sandbox attempt and writes no session.
+
+---
+
 ## 2026-06-18
 
 ### Sandbox Async Poll — Stream Blocks While Running (`partial=1`)

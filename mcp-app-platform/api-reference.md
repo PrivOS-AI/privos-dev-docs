@@ -223,6 +223,8 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `sandbox:generate` | Run a Sandbox agent generation (sync/async) and upload files to attach |
 | `sandbox:skills:use` | List + select which Sandbox skills are enabled for a room (room admin) |
 | `sandbox:botkey:push` | Provision the room's Sandbox project + push/refresh its bot key (room admin) |
+| `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history (`ai-messages.sessions` / `.getSession` / `.list`) |
+| `sandbox:ai-chat:write` | Send messages in a room's AI Chat and start the agent generation (`ai-messages.send` / `.startGeneration`) |
 
 ### Tools that do NOT require a scope
 

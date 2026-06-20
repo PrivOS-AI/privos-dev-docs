@@ -72,6 +72,8 @@ Successful responses include `"success": true` along with the endpoint-specific 
 | `db:schema:write` | Register/update/drop app DB collections and schemas |
 | `db:read` | Read records, query, count, aggregate |
 | `db:write` | Create/update/delete records (soft-delete) |
+| `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history |
+| `sandbox:ai-chat:write` | Send messages in a room's AI Chat and start the agent generation |
 
 ### Scope-free tools
 
