@@ -6,6 +6,25 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-07-07
+
+### `basic:information` scope — room/app identifiers via `mcpapp.context.get`
+
+**Summary:** New `basic:information` scope. `mcpapp.context.get` now also returns `appId`, `roomSlug` (room name), and `appUrl` — the in-room deep link `${ROOT_URL}/{channel|direct|group}/{roomSlug}/mcpapp/{appId}` — so apps can render their own identifiers and links. Docs: [Tools — Context](./mcp-app-platform/apis/tools-context.md), [API Reference — Scope Taxonomy](./mcp-app-platform/api-reference.md#scope-taxonomy).
+
+**Changes:**
+- `apps/meteor/server/oauth2-server/scope-definitions.ts` — added `basic:information`.
+- `apps/meteor/server/services/mcp-tool-handlers-context.ts` — return `appId`, `roomSlug`, `appUrl`. (commit `6afab2b4`)
+
+### Signed user-identity delivery hardened via `mcpapp.context.get`
+
+**Summary:** The hub-signed user token (`HOST_CONTEXT_CHANGED` push, added earlier) could be missed if the push fired before the app iframe attached its message listener — leaving the frontend with no `userToken`/`username`. `mcpapp.context.get` now also returns `username` + a freshly-minted `userToken`, a reliable request/response the SDK issues after mount. Verify on the backend via the hub JWKS (`GET /.well-known/mcp-apps/jwks.json`). Docs: [Tools — Context › Signed user identity](./mcp-app-platform/apis/tools-context.md#signed-user-identity), [React SDK › usePrivosUserToken](./mcp-app-platform/react-sdk-reference.md#useprivosusertoken).
+
+**Changes:**
+- `apps/meteor/server/services/mcp-tool-handlers-context.ts` — mint + return `username` + `userToken`. (commit `a97964f0`)
+
+---
+
 ## 2026-06-20
 
 ### Sandbox Wake — `sandbox:wake` scope (`agents.sandbox.wake` + `agents.sandbox.vmState`)

@@ -9,7 +9,8 @@ Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with Priv
 | Hook | Returns | Description |
 |------|---------|-------------|
 | `usePrivOSApp()` | `McpApp` | MCP app instance for direct `callServerTool()` |
-| `usePrivOSContext()` | `PrivOSContext` | userId, roomId, theme, userRoles, isAgentRoom, agent/default bot |
+| `usePrivOSContext()` | `PrivOSContext` | userId, username, userToken, appId, roomId/slug/name/type, appUrl, theme, userRoles, isAgentRoom, agent/default bot |
+| `usePrivosUserToken()` | `string \| undefined` | Signed RS256 user identity JWT (verify on your backend via JWKS) |
 | `usePrivOSTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call |
 | `useLists(roomId)` | `{ data, loading, error }` | Lists in room |
 | `useFiles(roomId)` | `{ data, loading, error }` | Files in room |
@@ -117,17 +118,35 @@ Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:
 
 ```tsx
 const {
-  roomId, userId, username, roomName, roomType, theme, userRoles,
+  roomId, roomSlug, userId, username, userToken, appId, appUrl,
+  roomName, roomType, theme, userRoles,
   isAgentRoom, agentBot, defaultBot,
 } = usePrivOSContext();
 ```
 
+- `userToken` (`string`) — signed RS256 identity JWT; forward to your backend and verify via JWKS. Delivered via `mcpapp.context.get` (reliable) as well as the `HOST_CONTEXT_CHANGED` push. See [`usePrivosUserToken`](#useprivosusertoken) and [Signed user identity](./apis/tools-context.md#signed-user-identity)
+- `appId` / `roomSlug` / `appUrl` (`basic:information`) — this app's id, the room slug, and the deep-link URL to the app inside the room (`${ROOT_URL}/{channel|direct|group}/{roomSlug}/mcpapp/{appId}`)
 - `theme` (`'light'` | `'dark'`) — updates in real-time when the user toggles theme
 - `isAgentRoom` (`boolean`) — `true` when the room was created for an agent
 - `agentBot` (`{ _id, username } | null`) — present when `isAgentRoom` is `true`; `null` if bot left the room
 - `defaultBot` (`{ _id, username } | null`) — present when `isAgentRoom` is `false`; the room's auto-provisioned bot, or `null` if removed
 
 Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).
+
+## usePrivosUserToken
+
+Returns the current user's short-lived signed identity JWT (or `undefined`
+before it arrives). Forward it to your app **backend** and verify it against the
+hub JWKS — this proves *who* the caller is without your app being able to forge
+it. Never trust a client-supplied `userId` without a token that verifies.
+
+```tsx
+const token = usePrivosUserToken();
+// POST it to your backend, e.g. as Authorization: `Bearer ${token}`
+```
+
+Backend verification + claims are documented in
+[Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity).
 
 ## usePrivOSTool
 

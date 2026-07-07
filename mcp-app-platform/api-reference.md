@@ -35,7 +35,7 @@ Tools apps can call via `callServerTool()` or React hooks:
 
 | Tool | Scope | Description |
 |------|-------|-------------|
-| `mcpapp.context.get` | — | Room ID/name/type, user roles, isAgentRoom flag, agent/default bot |
+| `mcpapp.context.get` | — | User + room context: userId, username, signed userToken, appId, roomId/name/slug/type, appUrl, user roles, isAgentRoom flag, agent/default bot |
 | `mcpapp.bot.getMe` | — | Validate a bot token, return bot identity |
 | `mcpapp.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
 | `mcpapp.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
@@ -206,6 +206,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 
 | Scope | Grants |
 |-------|--------|
+| `basic:information` | Read basic room/app identifiers: `roomId`, `roomSlug`, `appId`, and the app URL (returned by `mcpapp.context.get`) |
 | `lists:read` | Read lists, items, stages, and field definitions |
 | `lists:write` | Create/update/delete lists, items, stages, and fields |
 | `files:read` | Read files and folders |
