@@ -6,6 +6,20 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-07-13
+
+### Cancel in-flight AI Chat runs — `sandbox:ai-chat:write` gains `ai-messages.cancel`
+
+**Summary:** MCP apps on the AI Chat flow can now interrupt a generating reply. `ai-messages.cancel` was added to the `sandbox:ai-chat:write` scope allowlist. The endpoint already existed and enforces session owner/participant, so the scope only widens reachable paths — it never lets one user abort another user's turn. The hub-side streaming worker observes the cancel via its `isCancelled()` watchdog and aborts the sandbox run; partial streamed text is retained on the `cancelled` message. Docs: [Internal APIs — AI Messages › Cancel Message](./internal-apis/ai-messages.md#cancel-message), [API Reference — Scope Taxonomy](./mcp-app-platform/api-reference.md#scope-taxonomy).
+
+**Changes:**
+- `apps/meteor/server/services/mcp-rest-allowlist.ts` — mapped `sandbox:ai-chat:write` → `POST ai-messages.cancel`.
+- `apps/meteor/server/oauth2-server/scope-definitions.ts` — updated `sandbox:ai-chat:write` description.
+- `apps/meteor/tests/unit/.../mcp-rest-allowlist.tests.ts` — grant/deny coverage for the ai-chat scope. (commit `77b62388`)
+- Demo app `privos-demo-hrm-ws` — AI Chat tab: Send button becomes **Stop** while generating; calls `ai-messages.cancel`, breaks the poll loop, refreshes once to render the cancelled partial reply. (commit `d1b4c5a`)
+
+---
+
 ## 2026-07-07
 
 ### `basic:information` scope — room/app identifiers via `mcpapp.context.get`

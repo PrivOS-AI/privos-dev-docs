@@ -226,7 +226,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `sandbox:botkey:push` | Provision the room's Sandbox project + push/refresh its bot key (room admin) |
 | `sandbox:wake` | Wake/establish a room's Sandbox VM without re-pushing the bot key (`agents.sandbox.wake`) + poll its state (`agents.sandbox.vmState`) (room admin) |
 | `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history (`ai-messages.sessions` / `.getSession` / `.list`) |
-| `sandbox:ai-chat:write` | Send messages in a room's AI Chat and start the agent generation (`ai-messages.send` / `.startGeneration`) |
+| `sandbox:ai-chat:write` | Send messages in a room's AI Chat, start the agent generation, and cancel an in-flight run (`ai-messages.send` / `.startGeneration` / `.cancel`) |
 
 ### Tools that do NOT require a scope
 

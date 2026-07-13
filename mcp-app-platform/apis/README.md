@@ -73,7 +73,7 @@ Successful responses include `"success": true` along with the endpoint-specific 
 | `db:read` | Read records, query, count, aggregate |
 | `db:write` | Create/update/delete records (soft-delete) |
 | `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history |
-| `sandbox:ai-chat:write` | Send messages in a room's AI Chat and start the agent generation |
+| `sandbox:ai-chat:write` | Send messages in a room's AI Chat, start the agent generation, and cancel an in-flight run |
 
 ### Scope-free tools
 

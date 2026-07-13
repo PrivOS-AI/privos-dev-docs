@@ -393,6 +393,48 @@ Submit answers to pending questions in AI chat flow.
 
 ---
 
+### Cancel Message
+
+```http
+POST /v1/ai-messages.cancel
+```
+
+Interrupt an in-flight AI Chat run. Aborts the running agent server-side and
+marks the message `cancelled`, preserving any partial text streamed so far.
+
+MCP apps reach this via the `sandbox:ai-chat:write` scope. The endpoint
+additionally enforces that the caller is the session owner/participant — a
+room co-member cannot cancel another user's in-flight turn.
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | Yes | The in-flight AI message ID (from `ai-messages.send` → `aiMessage._id`) |
+
+**Request:**
+
+```json
+{
+  "messageId": "MESSAGE_789"
+}
+```
+
+**Response:**
+
+```json
+{
+  "cancelled": true
+}
+```
+
+**Behavior:**
+- `{ cancelled: true }` — the run was aborted and the message marked `cancelled`.
+- `{ cancelled: false, alreadyTerminal: true }` — the message was already `completed` / `failed` / `cancelled`; the call is a no-op (idempotent).
+- Partial `content` streamed before the cancel is retained; poll `ai-messages.list` once after cancelling to render the final state.
+
+---
+
 ## Error Responses
 
 | Error Code | Description |
