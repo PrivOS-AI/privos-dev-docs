@@ -36,6 +36,9 @@ Tools apps can call via `callServerTool()` or React hooks:
 | Tool | Scope | Description |
 |------|-------|-------------|
 | `mcpapp.context.get` | — | User + room context: userId, username, signed userToken, appId, roomId/name/slug/type, appUrl, user roles, isAgentRoom flag, agent/default bot |
+| `mcpapp.bot.createAgent` | bot:agent:create | Create one agent bot owned by the exact active parent installation; returns no credential |
+| `mcpapp.bot.joinCurrentRoom` | bot:room:join | Add the associated bot to the Hub-resolved current Room; accepts no Room or bot selector |
+| `mcpapp.bot.getCurrentRoomIdentity` | bot:identity:read | Return safe associated-bot identity only with ordinary membership in the Hub-resolved current Room |
 | `mcpapp.bot.getMe` | — | Validate a bot token, return bot identity |
 | `mcpapp.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
 | `mcpapp.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
@@ -216,6 +219,9 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `users:read` | Read user profiles |
 | `rooms:read` | Read room metadata and members |
 | `rooms:write` | Create/update rooms |
+| `bot:agent:create` | Create one agent bot owned by the exact parent V3 installation (workspace, interactive user only) |
+| `bot:room:join` | Add the installation-owned bot to the exact active child Room binding (interactive user only) |
+| `bot:identity:read` | Read safe associated-bot identity only for ordinary membership in the exact active child Room binding |
 | `bot:message:send` | Send messages/DMs/attachments acting as a bot (runtime identity via bot token) |
 | `db:schema:read` | List collections and read schema definitions |
 | `db:schema:write` | Register/update/drop app DB collections and schemas |

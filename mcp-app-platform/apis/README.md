@@ -26,7 +26,7 @@ equivalent**:
 |----------|-------------|
 | [Context Tools](./tools-context.md) | Get current user/room context |
 | [App Storage Tools](./tools-app.md) | `mcpapp.app.*` — per-app `localData` key/value store |
-| [Bot Tools](./tools-bot.md) | Send messages/attachments/DMs as a bot using its token |
+| [Bot Tools](./tools-bot.md) | Create an installation-owned agent bot for approved Rooms, or use legacy token-selected messaging |
 | [Database Tools](./tools-database.md) | `mcpapp.db.*` — schema, CRUD, query, aggregate |
 
 ## Authentication
@@ -67,6 +67,9 @@ Successful responses include `"success": true` along with the endpoint-specific 
 | `users:read` | Read user profiles |
 | `rooms:read` | Read room metadata and members |
 | `rooms:write` | Create/update rooms |
+| `bot:agent:create` | Create one agent bot owned by the exact parent MCP installation (workspace, interactive user only) |
+| `bot:room:join` | Add that installation-owned bot to the exact approved Room (interactive user only) |
+| `bot:identity:read` | Read safe identity only when that bot has ordinary membership in the exact approved Room |
 | `bot:message:send` | Send messages/DMs/attachments as a bot (runtime identity via bot token) |
 | `db:schema:read` | List collections and read schema definitions |
 | `db:schema:write` | Register/update/drop app DB collections and schemas |
