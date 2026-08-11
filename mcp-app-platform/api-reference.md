@@ -211,6 +211,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 |-------|--------|
 | `basic:information` | Read basic room/app identifiers: `roomId`, `roomSlug`, `appId`, and the app URL (returned by `mcpapp.context.get`) |
 | `lists:read` | Read lists, items, stages, and field definitions |
+| `lists:query` | Run filtered, paginated queries over list items (`POST items.query`). Separate from `lists:read` because it is a POST, and every `*:read` scope is GET-only |
 | `lists:write` | Create/update/delete lists, items, stages, and fields |
 | `files:read` | Read files and folders |
 | `files:write` | Upload/update/delete files and folders |

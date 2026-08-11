@@ -13,6 +13,7 @@ Detailed API reference organized by category.
 | [Settings](./rest-settings.md) | Update app settings and permissions |
 | [Tool Execution](./rest-tool-call.md) | Execute MCP tools via REST |
 | [UI Resources](./rest-ui-resource.md) | Fetch app UI HTML resources |
+| [Item Query](./items-query.md) | `items.query` — filtered, cursor-paginated item retrieval |
 
 ## PrivOS MCP Tools
 
@@ -59,6 +60,7 @@ Successful responses include `"success": true` along with the endpoint-specific 
 | Scope | Grants |
 |-------|--------|
 | `lists:read` | Read lists, items, stages, and field definitions |
+| `lists:query` | Run filtered, paginated queries over list items (`POST items.query`). Separate from `lists:read` because it is a POST, and every `*:read` scope is GET-only |
 | `lists:write` | Create/update/delete lists, items, stages, and fields |
 | `files:read` | Read files and folders |
 | `files:write` | Upload/update/delete files and folders |

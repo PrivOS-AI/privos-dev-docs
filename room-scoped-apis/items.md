@@ -6,6 +6,13 @@ Manage items within lists in a specific room. Items represent tasks, tickets, or
 
 **Base Path:** `/api/v1/internal/rooms/:roomId/items`
 
+> **Retrieving many items:** `items.listByListId` is capped at 500 and sets
+> `truncated: true` when a list holds more. To filter, sort or page through a list, use
+> [`items.query`](../mcp-app-platform/apis/items-query.md), which returns a window and a
+> cursor. The `mcpapp.lists.getItems` tool is likewise superseded by
+> `mcpapp.lists.queryItems`: it pages by offset, so rows shift across page boundaries
+> when the list changes between calls.
+
 ## Authentication
 
 All endpoints require:
