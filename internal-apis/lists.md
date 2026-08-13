@@ -305,7 +305,7 @@ POST /api/v1/internal/lists.create
     {
       "_id": "field_assignee",
       "name": "Assignee",
-      "type": "USER_SELECT",
+      "type": "ASSIGNEE",
       "order": 1
     }
   ],
@@ -346,18 +346,45 @@ POST /api/v1/internal/lists.create
 
 **Field Definition Types:**
 
+Full enum (`server/core-typings/IList.ts`): `TEXT`, `TEXTAREA`, `NUMBER`, `DATE`,
+`DATE_TIME`, `SELECT`, `MULTI_SELECT`, `USER`, `CHECKBOX`, `URL`, `FILE`,
+`FILE_MULTIPLE`, `DOCUMENT`, `ASSIGNEE`, `DEADLINE`, `DEPENDENCIES`, `RECURRING`.
+There is no `USER_SELECT` or `MEMBER_SELECT` type.
+
 | Type | Description | Example Value |
 |------|-------------|---------------|
 | `TEXT` | Plain text input | `"Sample text"` |
 | `TEXTAREA` | Multi-line text | `"Line 1\nLine 2"` |
-| `SELECT` | Single select from options | `"High"` |
-| `MULTI_SELECT` | Multiple select | `["A", "B"]` |
 | `NUMBER` | Numeric input | `42` |
 | `DATE` | Date picker | `"2024-01-15"` |
-| `USER_SELECT` | Single user | `"USER_ID"` |
-| `MEMBER_SELECT` | Multiple users | `["USER_1", "USER_2"]` |
-| `BOOLEAN` | Checkbox | `true` |
+| `DATE_TIME` | Date + time picker | `"2024-01-15T10:00:00.000Z"` |
+| `SELECT` | Single select from options | `"High"` |
+| `MULTI_SELECT` | Multiple select | `["A", "B"]` |
+| `USER` | Single user reference | `"USER_ID"` |
+| `CHECKBOX` | Boolean checkbox | `true` |
+| `URL` | Link | `"https://example.com"` |
+| `FILE` | Single file reference | file ref object |
+| `FILE_MULTIPLE` | Multiple file references | array of file ref objects |
 | `DOCUMENT` | Rich text document | `[{"_id": "...", "content": "..."}]` |
+| `ASSIGNEE` | User(s) assigned to the item — see [Assignee values](#assignee-field-values) below | `"USER_ID"`, `{"_id": "USER_ID"}`, or an array of either |
+| `DEADLINE` | Due-date style field | `"2024-01-15"` |
+| `DEPENDENCIES` | Links to other items | array of item IDs |
+| `RECURRING` | Recurrence rule | recurrence config object |
+
+#### Assignee field values
+
+`ASSIGNEE` fields accept a bare user ID, a single `{ _id, username? }` object, or
+an array of either — all three shapes resolve to the same set of assigned user
+IDs (`app/api/server/lib/isolated-list-item-filter.ts:23-41`).
+
+#### Isolated lists
+
+A list with `isolatedList: true` restricts item visibility: only the room
+owner/admin, the item's creator, and any user in an `ASSIGNEE` field on that item
+(plus their visible sub-items) can see it — everyone else sees nothing
+(`app/api/server/lib/isolated-list-item-filter.ts:65-93,99-128`). The `ASSIGNEE`
+field is what drives this — assigning a user is how you grant them visibility
+into an otherwise isolated item.
 
 ---
 
@@ -457,7 +484,7 @@ Update all field definitions for a list (replaces entire array).
     {
       "_id": "field_2",
       "name": "Assignee",
-      "type": "USER_SELECT",
+      "type": "ASSIGNEE",
       "order": 1
     }
   ]
@@ -483,6 +510,23 @@ Update all field definitions for a list (replaces entire array).
 | `error-list-not-found` | List not found |
 | `error-invalid-field` | Field definition not found in list |
 | `error-duplicate-id` | A list with the supplied `_id` already exists |
+
+## MCP App Access (`mcpapp.lists.*`)
+
+MCP apps reach lists through a separate MCP tool surface
+(`server/services/mcp-tool-handlers-lists.ts`), not this internal REST API —
+`mcpapp.lists.getAll`/`get` require `lists:read`; `mcpapp.lists.create`,
+`updateItem`, `updateCustomField`, etc. require `lists:write`.
+
+- `mcpapp.lists.create` accepts an `isolatedList: boolean` argument and
+  **requires the caller to be a room owner or admin** — enforced at the tool
+  handler (`mcp-tool-handlers-lists.ts` around lines 59-78), independent of the
+  `lists:write` scope check.
+- Assigning a user to an item (setting an `ASSIGNEE` field, which is what grants
+  visibility on an isolated list — see [Isolated lists](#isolated-lists) above)
+  goes through `mcpapp.lists.updateItem` or `mcpapp.lists.updateCustomField` and
+  only needs the ordinary `lists:write` scope; no extra room-role check applies
+  to assignment itself.
 
 ## Related Resources
 

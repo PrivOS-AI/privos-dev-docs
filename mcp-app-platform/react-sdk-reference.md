@@ -1,45 +1,52 @@
 # App Platform — React SDK Reference
 
-Package: `@privos/app-react`
+Package: `@privos_ai/app-react@0.4.0`
 
-Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with PrivOS-specific convenience hooks.
+Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with PrivOS-specific convenience hooks. Verify exports against the package's shipped `dist/index.d.ts` if this reference and the installed version ever disagree.
 
 ## Hooks
 
 | Hook | Returns | Description |
 |------|---------|-------------|
-| `usePrivOSApp()` | `McpApp` | MCP app instance for direct `callServerTool()` |
-| `usePrivOSContext()` | `PrivOSContext` | userId, username, userToken, appId, roomId/slug/name/type, appUrl, theme, userRoles, isAgentRoom, agent/default bot |
-| `usePrivosUserToken()` | `string \| undefined` | Signed RS256 user identity JWT (verify on your backend via JWKS) |
-| `usePrivOSTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call |
-| `useLists(roomId)` | `{ data, loading, error }` | Lists in room |
-| `useFiles(roomId)` | `{ data, loading, error }` | Files in room |
-| `useRoom(roomId?)` | `{ data, loading, error }` | Room metadata |
+| `usePrivosApp()` | `McpApp` | MCP app instance for `app.rest()`, `app.uploadFile()`, and `callServerTool()` |
+| `usePrivosContext()` | `PrivosContext` | `userId`, `username`, `theme`, `roomId`, `roomName`, `userRoles`, `effectiveScopes?`, `roomSlug?`, `appId?`, `appUrl?` — see note below on extra runtime fields |
+| `usePrivosCapability(scope)` | `{ resolved, granted, scope }` | Presentation/degradation helper only — the Hub remains the sole authorization authority, this never gates real access |
+| `usePrivosTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call. Skips the fetch while any arg value is empty/null/undefined |
+| `useLists(roomId)` | `{ data, loading, error, refetch }` | Lists in room |
+| `useFiles(roomId)` | `{ data, loading, error, refetch }` | Files in room |
+| `useRoom(roomId?)` | `{ data, loading, error, refetch }` | Room metadata |
+| `useAppChatSurface(options?)` | `{ resolved, supported, isOpen, open, close }` | Claim the Hub's floating AI-chat launcher so this app can render its own chat window instead |
+| `useProviderEmbed(url)` | `{ ref, state, reason? }` | Ask the host to hoist a provider iframe (e.g. YouTube, Figma) over a placeholder element — the app's own document cannot embed those origins directly |
+| `parseToolResult(result)` | `Record<string, unknown>` | Parse an MCP tool / host-bridge response into a plain object |
+
+There is **no** `useAppDb` or `usePrivosUserToken` hook — see the notes under [No dedicated DB hook](#no-dedicated-db-hook) and [Signed user token](#signed-user-token) below.
 
 ## Provider
 
-Wrap your app with `PrivOSAppProvider`:
+Wrap your app with `PrivosAppProvider` (backed by `PrivosAppContext`):
 
 ```tsx
-import { PrivOSAppProvider } from '@privos/app-react';
+import { PrivosAppProvider } from '@privos_ai/app-react';
 
 export default function App() {
   return (
-    <PrivOSAppProvider>
+    <PrivosAppProvider>
       <MyComponent />
-    </PrivOSAppProvider>
+    </PrivosAppProvider>
   );
 }
 ```
 
-## usePrivOSApp
+`PrivosAppProviderProps`: `children` (required), plus optional `app` (custom `McpApp` implementation — defaults to a PostMessage-based one), `name`, `version`.
+
+## usePrivosApp
 
 Returns the MCP app instance. Use it for `app.rest()` (the preferred way to read/write
 hub data — see below) and for direct tool calls to capabilities with no REST equivalent
 (`mcpapp.db.*`, `mcpapp.bot.*`):
 
 ```tsx
-const app = usePrivOSApp();
+const app = usePrivosApp();
 
 await app.callServerTool({
   name: 'mcpapp.db.create',
@@ -54,7 +61,7 @@ the call as the current user; the server gates it against the app's granted
 scopes (a request to a path the app's scopes don't cover is rejected with 403).
 
 ```tsx
-const app = usePrivOSApp();
+const app = usePrivosApp();
 
 // GET — list files in a channel
 const files = await app.rest({
@@ -79,6 +86,7 @@ await app.rest({
 | `path` | `string` | hub REST path after `/api/v1/` |
 | `query` | `Record<string, string \| number \| boolean>` | optional querystring |
 | `body` | `any` | optional JSON body |
+| `timeoutMs` | `number` | optional host-bridge response timeout override (default 10000) |
 
 ### app.uploadFile() — multipart file upload
 
@@ -86,7 +94,7 @@ Uploads a file to file management as the current user. Requires the
 **`files:write`** scope in the app manifest (admin-granted).
 
 ```tsx
-const app = usePrivOSApp();
+const app = usePrivosApp();
 
 await app.uploadFile({
   channelId: roomId,
@@ -112,127 +120,101 @@ await app.uploadFile({
 > The app never exceeds the current user's own permissions — the server still
 > enforces per-room ACL and read-only restrictions on every call.
 
-## usePrivOSContext
+## usePrivosContext
 
 Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:
 
 ```tsx
-const {
-  roomId, roomSlug, userId, username, userToken, appId, appUrl,
-  roomName, roomType, theme, userRoles,
-  isAgentRoom, agentBot, defaultBot,
-} = usePrivOSContext();
+const { roomId, userId, username, theme, roomName, userRoles, effectiveScopes, roomSlug, appId, appUrl } = usePrivosContext();
 ```
 
-- `userToken` (`string`) — signed RS256 identity JWT; forward to your backend and verify via JWKS. Delivered via `mcpapp.context.get` (reliable) as well as the `HOST_CONTEXT_CHANGED` push. See [`usePrivosUserToken`](#useprivosusertoken) and [Signed user identity](./apis/tools-context.md#signed-user-identity)
-- `appId` / `roomSlug` / `appUrl` (`basic:information`) — this app's id, the room slug, and the deep-link URL to the app inside the room (`${ROOT_URL}/{channel|direct|group}/{roomSlug}/mcpapp/{appId}`)
+The TypeScript `PrivosContext` type only declares the fields above, but the hook's
+underlying fetch is the same `mcpapp.context.get` tool call documented in
+[Tools — Context](./apis/tools-context.md), whose response also carries `userToken`,
+`roomType`, `isAgentRoom`, `agentBot`, `defaultBot` when relevant. Those extra fields
+are present on the object at runtime but aren't in the type — read them off a cast,
+matching the app's own untyped-extras pattern:
+
+```tsx
+const ctx = usePrivosContext() as Record<string, any>;
+const userToken: string | undefined = ctx.userToken;
+const isAgentRoom: boolean | undefined = ctx.isAgentRoom;
+```
+
 - `theme` (`'light'` | `'dark'`) — updates in real-time when the user toggles theme
-- `isAgentRoom` (`boolean`) — `true` when the room was created for an agent
-- `agentBot` (`{ _id, username } | null`) — present when `isAgentRoom` is `true`; `null` if bot left the room
-- `defaultBot` (`{ _id, username } | null`) — present when `isAgentRoom` is `false`; the room's auto-provisioned bot, or `null` if removed
+- `appId` / `roomSlug` / `appUrl` (`basic:information`) — this app's id, the room slug, and the deep-link URL to the app inside the room (`${ROOT_URL}/{channel|direct|group}/{roomSlug}/mcpapp/{appId}`)
 
 Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).
 
-## usePrivosUserToken
+## Signed user token
 
-Returns the current user's short-lived signed identity JWT (or `undefined`
-before it arrives). Forward it to your app **backend** and verify it against the
-hub JWKS — this proves *who* the caller is without your app being able to forge
-it. Never trust a client-supplied `userId` without a token that verifies.
+There is no `usePrivosUserToken()` hook. Read `userToken` off `usePrivosContext()`
+(cast as shown above) and forward it to your app **backend**, which verifies it
+against the hub JWKS — this proves *who* the caller is without your app being able
+to forge it. Never trust a client-supplied `userId` without a token that verifies.
 
 ```tsx
-const token = usePrivosUserToken();
-// POST it to your backend, e.g. as Authorization: `Bearer ${token}`
+const { userToken } = usePrivosContext() as Record<string, any>;
+// POST it to your backend, e.g. as Authorization: `Bearer ${userToken}`
 ```
 
 Backend verification + claims are documented in
 [Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity).
 
-## usePrivOSTool
+## usePrivosTool
 
 Generic hook — auto-fetches on mount and when args change. Best for reads from tools with
 no REST equivalent (`mcpapp.db.*`):
 
 ```tsx
-const { data, loading, error, refetch } = usePrivOSTool('mcpapp.db.get', { collection, id });
+const { data, loading, error, refetch } = usePrivosTool('mcpapp.db.get', { collection, id });
 ```
 
 **Note:** Skips fetch if any arg value is empty/null/undefined. For hub data (lists, files,
 messages, rooms, users), read via `app.rest()` instead.
 
-## useAppDb
+## Other hooks
 
-Database operations hook — provides typed CRUD, query builder, and schema management:
+- **`usePrivosCapability(scope)`** — returns `{ resolved, granted, scope }` for
+  presentation-only degradation (e.g. hide a button before the tool call would 403).
+  It never itself authorizes anything.
+- **`useAppChatSurface(options?)`** — claims the Hub's floating AI-chat launcher for
+  an app that renders its own chat UI. `options.onOpen` / `options.onClose` fire when
+  the host asks the app to show/hide its chat window.
+- **`useProviderEmbed(url)`** — attach the returned `ref` to a placeholder element;
+  the host renders an approved provider (YouTube, Figma, etc.) iframe over it,
+  because the app's own sandboxed document cannot embed those origins itself.
+- **`parseToolResult(result)`** — normalizes an MCP tool / host-bridge response into
+  a plain object; used when calling `app.callServerTool()` directly instead of
+  `usePrivosTool()`.
 
-```tsx
-import { useAppDb } from '@privos/app-react';
+## No dedicated DB hook
 
-function MyComponent() {
-  const db = useAppDb();
-
-  // Schema management
-  await db.registerCollection('contacts', [
-    { name: 'name', type: 'string', required: true },
-    { name: 'email', type: 'string' },
-  ]);
-
-  // CRUD
-  const contact = await db.create('contacts', { name: 'Alice' });
-  const found = await db.get('contacts', contact._id);
-  await db.update('contacts', contact._id, { name: 'Bob' });
-  await db.delete('contacts', contact._id);
-
-  // Query builder (chainable)
-  const results = await db.query('contacts')
-    .where('name', '!=', '')
-    .orderBy('name', 'asc')
-    .limit(10)
-    .execute();
-
-  // Aggregation
-  const stats = await db.aggregate('contacts', 'count');
-}
-```
-
-### Methods
-
-| Method | Scope | Description |
-|--------|-------|-------------|
-| `registerCollection(col, fields, indexes?)` | db:schema:write | Register collection with schema |
-| `updateSchema(col, fields)` | db:schema:write | Update schema fields |
-| `getSchema(col)` | db:schema:read | Get schema definition |
-| `listCollections()` | db:schema:read | List all app collections |
-| `dropCollection(col)` | db:schema:write | Drop collection |
-| `create(col, data)` | db:write | Create record |
-| `createMany(col, records)` | db:write | Batch create (max 100) |
-| `get(col, id)` | db:read | Get record by ID |
-| `update(col, id, data)` | db:write | Update record |
-| `delete(col, id)` | db:write | Soft-delete record |
-| `query(col)` | db:read | Returns `QueryBuilder` |
-| `count(col, where?)` | db:read | Count records |
-| `aggregate(col, op, field?, where?, groupBy?)` | db:read | Aggregation |
-| `populate(col, ids, fields)` | db:read | Resolve references |
-
-### QueryBuilder
-
-Chainable query builder returned by `db.query(collection)`:
+There is no `useAppDb()` hook. Call `mcpapp.db.*` tools directly:
 
 ```tsx
-db.query('contacts')
-  .where('status', '==', 'active')
-  .where('age', '>=', 18)
-  .orderBy('name', 'asc')
-  .limit(20)
-  .offset(0)
-  .populate('company')
-  .execute()  // → { records, total }
-  .count()    // → { count }
+const app = usePrivosApp();
+
+// Write
+await app.callServerTool({ name: 'mcpapp.db.create', arguments: { collection: 'contacts', data: { name: 'Alice' } } });
+
+// Read (auto-fetching)
+const { data, loading, error, refetch } = usePrivosTool('mcpapp.db.query', {
+  collection: 'contacts',
+  where: [{ field: 'name', op: '!=', value: '' }],
+  orderBy: [{ field: 'name', direction: 'asc' }],
+  limit: 10,
+});
 ```
+
+`mcpapp.db.query` takes a flat `where`/`orderBy` argument object (no chainable query
+builder client-side) — see [Database Tools API Reference](./apis/tools-database.md)
+for every `mcpapp.db.*` tool's full input schema.
 
 ## Pattern: Reads vs Mutations
 
-- **Reads** — use `usePrivOSTool` or convenience hooks (`useLists`, `useFiles`, `useRoom`). Auto-fetches.
+- **Reads** — use `usePrivosTool` or convenience hooks (`useLists`, `useFiles`, `useRoom`). Auto-fetches.
 - **Hub data (REST-first)** — use `app.rest()` to reach existing hub REST endpoints (files, folders, rooms…) as the current user, gated by the app's scopes. Preferred over building dedicated resource tools.
 - **File upload** — use `app.uploadFile()` (requires `files:write`).
-- **Mutations** — use `usePrivOSApp()` to get the app instance, then call `app.callServerTool()` directly in event handlers.
-- **Database** — use `useAppDb()` for all database operations (both reads and writes).
+- **Mutations** — use `usePrivosApp()` to get the app instance, then call `app.callServerTool()` directly in event handlers.
+- **Database** — call `mcpapp.db.*` tools via `usePrivosApp().callServerTool()` (writes) and `usePrivosTool()` (reads); there is no dedicated hook.

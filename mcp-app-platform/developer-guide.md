@@ -11,13 +11,25 @@ Generated structure:
 ```
 my-app/
 ├── src/
-│   ├── server.ts          # MCP server (Express + JSON-RPC)
+│   ├── server.ts          # Express app wired through @privos_ai/app-server's
+│   │                       # createDirectRouter (handles auth, dispatch, UI
+│   │                       # resource serving — you only implement tools/list
+│   │                       # and your own tool-call routing)
 │   └── ui/
-│       ├── App.tsx         # React app
+│       ├── App.tsx         # React app (@privos_ai/app-react)
 │       └── main.tsx        # Entry point
+├── privos-app.json         # Manifest (schemaVersion 2+; see §5)
 ├── package.json
 └── vite.config.ts
 ```
+
+The server no longer hand-rolls JSON-RPC dispatch — `@privos_ai/app-server`
+(`createDirectRouter`, `verifyPrivosUser`, and, in production, the workload
+identity client) owns the protocol and auth plumbing. For a fuller
+production-grade reference — workload identity, relay pairing, license
+gating, runtime dispatch v3 — read the
+[`privos-mcp-app-demo`](https://github.com/PrivOS-AI/privos-mcp-app-demo)
+repository rather than hand-building the server from scratch.
 
 ## 2. Define Tools
 
@@ -44,19 +56,19 @@ tools: [{
 
 ## 3. Build the UI
 
-Use `@privos/app-react` hooks (see [React SDK Reference](./react-sdk-reference.md)):
+Use `@privos_ai/app-react` hooks (see [React SDK Reference](./react-sdk-reference.md)):
 
 ```tsx
-import { PrivOSAppProvider, usePrivOSContext, useLists } from '@privos/app-react';
+import { PrivosAppProvider, usePrivosContext, useLists } from '@privos_ai/app-react';
 
 function Dashboard() {
-  const ctx = usePrivOSContext();
+  const ctx = usePrivosContext();
   const { data: lists, loading } = useLists(ctx.roomId);
   return <div>{lists?.map(l => <div key={l._id}>{l.name}</div>)}</div>;
 }
 
 export default function App() {
-  return <PrivOSAppProvider><Dashboard /></PrivOSAppProvider>;
+  return <PrivosAppProvider><Dashboard /></PrivosAppProvider>;
 }
 ```
 
@@ -116,11 +128,20 @@ npm run dev
 | `GET /.well-known/mcp/manifest.json` | Yes | App metadata |
 | `POST /mcp` | For MCP mode | JSON-RPC 2.0 |
 | `GET /` (or custom path) | For direct iframe | Embeddable HTML UI |
-| `POST /.well-known/mcp/register` | Recommended | Receive `{appId, clientId, clientSecret}` after connect for auto-config |
+| `POST /.well-known/mcp/register` | Optional, OAuth-credential apps only | Receive `{appId, clientId, clientSecret}` after connect for auto-config |
+
+**Note on credentials:** `/.well-known/mcp/register` applies to apps that
+authenticate back to the Hub with an OAuth client secret. Managed Marketplace
+apps built on `@privos_ai/app-server` instead use **workload identity** — a
+per-installation Unix socket the SDK exchanges for short-lived, sender-constrained
+tokens, with no client secret and nothing to auto-receive here. See the
+[`privos-mcp-app-demo`](https://github.com/PrivOS-AI/privos-mcp-app-demo) README's
+"Runtime trust model" section for that path. The two contract endpoints above
+(manifest + `POST /mcp`) apply either way.
 
 ### Optional: Auto-receive credentials via `/.well-known/mcp/register`
 
-Right after `mcp-apps.connect` succeeds, the Hub does a **best-effort POST** with the credentials your app needs to call back into PrivOS. Implementing this endpoint means **zero manual copy/paste** for the admin.
+Right after `mcp-apps.connect` succeeds, the Hub does a **best-effort POST** with the credentials your app needs to call back into PrivOS. Implementing this endpoint means **zero manual copy/paste** for the admin. This applies only to the OAuth-credential path described above — not to workload-identity apps.
 
 **Request body** (sent by Hub):
 
@@ -190,7 +211,7 @@ PrivOS pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` Post
 
 1. PrivOS host detects theme change (user toggles light/dark/auto)
 2. Host sends `{ method: 'HOST_CONTEXT_CHANGED', params: { theme: 'light' | 'dark' } }` to iframe
-3. `usePrivOSContext()` hook receives updated `theme` value
+3. `usePrivosContext()` hook receives updated `theme` value
 4. App sets `data-theme` attribute on `<html>` → CSS variables switch between light/dark palettes
 
 ### Recommended Pattern
@@ -204,7 +225,7 @@ Use a `ThemeProvider` with three modes:
 | **Dark** | Forces dark regardless of host |
 
 ```tsx
-const { theme } = usePrivOSContext();
+const { theme } = usePrivosContext();
 <ThemeProvider hostTheme={theme}>
   <App />
 </ThemeProvider>
@@ -253,7 +274,7 @@ When running inside the PrivOS iframe, `--rcx-color-*` variables are inherited f
 
 ## 8. Host PostMessage Bridge
 
-Apps running in a sandboxed iframe communicate with the PrivOS host via `window.postMessage` using JSON-RPC 2.0. `@privos/app-react` wraps most of this, but these are the raw host-exposed methods:
+Apps running in a sandboxed iframe communicate with the PrivOS host via `window.postMessage` using JSON-RPC 2.0. `@privos_ai/app-react` wraps most of this, but these are the raw host-exposed methods:
 
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
@@ -587,208 +608,7 @@ Give your app a full database with schema registration, CRUD, queries, reference
 
 > **When to use:** App needs to store structured, queryable data (CRM contacts, inventory, form submissions, etc.). For simple tabular data, consider `mcpapp.lists.*` instead.
 
-### Quick Start
+**Request scopes** in your manifest: `db:read`, `db:write`, `db:schema:read`, `db:schema:write` as needed.
 
-**Step 1 — Request scopes** in your manifest:
-
-```json
-{
-  "name": "com.example.crm",
-  "scopes": ["db:read", "db:write", "db:schema:read", "db:schema:write"]
-}
-```
-
-**Step 2 — Register schema on first load:**
-
-```tsx
-import { useAppDb } from '@privos/app-react';
-import { useEffect, useRef } from 'react';
-
-function App() {
-  const db = useAppDb();
-  const initialized = useRef(false);
-
-  useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-
-    // Register collections (idempotent — errors if already exists, so catch)
-    db.registerCollection('companies', [
-      { name: 'name', type: 'string', required: true, maxLength: 200 },
-      { name: 'industry', type: 'string', enum: ['tech', 'finance', 'healthcare', 'other'] },
-      { name: 'size', type: 'number', min: 1 },
-    ]).catch(() => {}); // already registered — ok
-
-    db.registerCollection('contacts', [
-      { name: 'name', type: 'string', required: true },
-      { name: 'email', type: 'string', maxLength: 254 },
-      { name: 'phone', type: 'string' },
-      { name: 'tags', type: 'array', itemType: 'string', maxItems: 10 },
-      { name: 'company', type: 'reference', refCollection: 'companies', onDelete: 'set-null' },
-    ], [
-      { fields: { email: 1 }, unique: true },
-    ]).catch(() => {});
-  }, []);
-
-  return <ContactList />;
-}
-```
-
-**Step 3 — CRUD operations:**
-
-```tsx
-function ContactList() {
-  const db = useAppDb();
-  const [contacts, setContacts] = useState([]);
-
-  // Load contacts
-  const loadContacts = async () => {
-    const { records } = await db.query('contacts')
-      .where('tags', 'array-contains', 'vip')
-      .orderBy('name', 'asc')
-      .limit(50)
-      .execute();
-    setContacts(records);
-  };
-
-  // Create
-  const addContact = async () => {
-    const contact = await db.create('contacts', {
-      name: 'Alice Nguyen',
-      email: 'alice@example.com',
-      tags: ['vip', 'partner'],
-      company: { _ref: 'companies/507f1f77bcf86cd799439011' },
-    });
-    setContacts(prev => [...prev, contact]);
-  };
-
-  // Update
-  const updateContact = async (id, data) => {
-    const updated = await db.update('contacts', id, data);
-    setContacts(prev => prev.map(c => c._id === id ? updated : c));
-  };
-
-  // Delete (soft-delete)
-  const deleteContact = async (id) => {
-    await db.delete('contacts', id);
-    setContacts(prev => prev.filter(c => c._id !== id));
-  };
-
-  useEffect(() => { loadContacts(); }, []);
-
-  return (
-    <ul>
-      {contacts.map(c => (
-        <li key={c._id}>
-          {c.name} — {c.email}
-          <button onClick={() => deleteContact(c._id)}>Delete</button>
-        </li>
-      ))}
-      <button onClick={addContact}>Add Contact</button>
-    </ul>
-  );
-}
-```
-
-### Data Scope: Global vs Room
-
-| Scope | Collection Name | Use Case |
-|-------|----------------|----------|
-| `global` (default) | `app_{appId}_{collection}` | Shared data across all rooms (user profiles, settings, catalogs) |
-| `room` | `app_{appId}_{roomId}_{collection}` | Per-room isolation (project tasks, team notes, channel polls) |
-
-```tsx
-// Global — same data in every room
-db.registerCollection('products', [
-  { name: 'sku', type: 'string', required: true },
-  { name: 'price', type: 'number' },
-]);
-
-// Room-scoped — each room has its own data
-db.registerCollection('poll_votes', [
-  { name: 'userId', type: 'string', required: true },
-  { name: 'choice', type: 'string', required: true },
-], undefined, 'room');
-```
-
-### Query Builder
-
-Chainable, Firestore-style query builder:
-
-```tsx
-// Basic filter + sort + pagination
-const page1 = await db.query('contacts')
-  .where('industry', '==', 'tech')
-  .where('size', '>=', 50)
-  .orderBy('name', 'asc')
-  .limit(20)
-  .offset(0)
-  .execute();
-// → { records: [...], total: 142 }
-
-// Count without fetching records
-const { count } = await db.query('contacts')
-  .where('tags', 'array-contains', 'vip')
-  .count();
-
-// Aggregation
-const stats = await db.aggregate('contacts', 'count');
-const avgSize = await db.aggregate('companies', 'avg', 'size',
-  [{ field: 'industry', op: '==', value: 'tech' }]
-);
-const byIndustry = await db.aggregate('companies', 'count', undefined,
-  undefined, 'industry'  // groupBy
-);
-```
-
-**Available operators:** `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not-in`, `array-contains`, `array-contains-any`
-
-### References & Population
-
-Link documents across collections:
-
-```tsx
-// 1. Create a company
-const company = await db.create('companies', { name: 'ACME Inc', industry: 'tech' });
-
-// 2. Create a contact referencing that company
-const contact = await db.create('contacts', {
-  name: 'Bob',
-  company: { _ref: `companies/${company._id}` },
-});
-
-// 3. Populate — resolve references to full documents (1-level deep)
-const populated = await db.populate('contacts', [contact._id], ['company']);
-// populated[0].company → { _id: '...', name: 'ACME Inc', industry: 'tech', ... }
-```
-
-**Cascade delete rules** — set on the reference field at schema registration:
-
-| Rule | Behavior when referenced doc is deleted |
-|------|----------------------------------------|
-| `cascade` | Auto soft-delete all referencing records |
-| `set-null` | Set reference field to null |
-| `restrict` | Block deletion if references exist |
-| `no-action` | Do nothing (orphan refs allowed) |
-
-### Limits & Security
-
-| Constraint | Value |
-|-----------|-------|
-| Collections per app | 20 max |
-| Query result size | 1000 docs max |
-| Batch create | 100 records max |
-| Query timeout | 10 seconds |
-| Populate fields | 5 per call |
-| Populate records | 1000 per call |
-| Collection name | `^[a-zA-Z][a-zA-Z0-9_]{0,63}$` |
-| Field names | No `$` or `.` allowed |
-
-- `appId` is server-set from OAuth token — apps cannot impersonate each other
-- Schema validation via MongoDB `$jsonSchema` rejects malformed writes at the database level
-- All queries go through a safe operator whitelist — no raw MongoDB operators exposed
-- Soft-delete: `mcpapp.db.delete` sets `_deletedAt`, records are excluded from queries automatically
-
-### Full API Reference
-
-See [Database Tools API Reference](./apis/tools-database.md) for all 16 tools with full input schemas and response formats.
+There is no `useAppDb()` hook — call `mcpapp.db.*` tools via `usePrivosApp().callServerTool()` (writes) and `usePrivosTool()` (reads). Schema registration, CRUD, the query args shape (flat `where`/`orderBy`, not a chainable builder), references/population, cascade-delete rules, data scope (`global` vs `room`), and limits are all documented once in the
+[Database Tools API Reference](./apis/tools-database.md) — including a full call-by-call tutorial — rather than duplicated here.

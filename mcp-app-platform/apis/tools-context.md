@@ -127,10 +127,12 @@ client-supplied `userId` without a token that verifies.
 context, forward it to your backend, verify, then trust the identity.
 
 ```typescript
-// frontend (React SDK)
-import { usePrivosUserToken } from '@privos/app-react';
-const token = usePrivosUserToken();
-// send `token` to your backend tool call / endpoint
+// frontend (React SDK) — there is no dedicated usePrivosUserToken() hook;
+// usePrivosContext() merges the mcpapp.context.get response, so userToken is
+// on the returned object even though it isn't in the PrivosContext TS type.
+import { usePrivosContext } from '@privos_ai/app-react';
+const { userToken } = usePrivosContext() as Record<string, any>;
+// send `userToken` to your backend tool call / endpoint
 
 // backend (Node, no JWT lib needed — plain crypto)
 import crypto from 'node:crypto';

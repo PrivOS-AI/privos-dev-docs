@@ -32,7 +32,7 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ### Signed user-identity delivery hardened via `mcpapp.context.get`
 
-**Summary:** The hub-signed user token (`HOST_CONTEXT_CHANGED` push, added earlier) could be missed if the push fired before the app iframe attached its message listener — leaving the frontend with no `userToken`/`username`. `mcpapp.context.get` now also returns `username` + a freshly-minted `userToken`, a reliable request/response the SDK issues after mount. Verify on the backend via the hub JWKS (`GET /.well-known/mcp-apps/jwks.json`). Docs: [Tools — Context › Signed user identity](./mcp-app-platform/apis/tools-context.md#signed-user-identity), [React SDK › usePrivosUserToken](./mcp-app-platform/react-sdk-reference.md#useprivosusertoken).
+**Summary:** The hub-signed user token (`HOST_CONTEXT_CHANGED` push, added earlier) could be missed if the push fired before the app iframe attached its message listener — leaving the frontend with no `userToken`/`username`. `mcpapp.context.get` now also returns `username` + a freshly-minted `userToken`, a reliable request/response the SDK issues after mount. Verify on the backend via the hub JWKS (`GET /.well-known/mcp-apps/jwks.json`). Docs: [Tools — Context › Signed user identity](./mcp-app-platform/apis/tools-context.md#signed-user-identity), [React SDK › Signed user token](./mcp-app-platform/react-sdk-reference.md#signed-user-token).
 
 **Changes:**
 - `apps/meteor/server/services/mcp-tool-handlers-context.ts` — mint + return `username` + `userToken`. (commit `a97964f0`)
@@ -358,7 +358,7 @@ This document tracks significant features, improvements, and bug fixes released 
 
 **Related Documentation:**
 - [Tools — Database API](./mcp-app-platform/apis/tools-database.md) - Full database tool docs with examples
-- [React SDK Reference](./mcp-app-platform/react-sdk-reference.md) - `useAppDb()` hook documentation
+- [React SDK Reference](./mcp-app-platform/react-sdk-reference.md#no-dedicated-db-hook) - there is no `useAppDb()` hook; call `mcpapp.db.*` tools directly
 
 ---
 

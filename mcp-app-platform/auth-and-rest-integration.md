@@ -171,7 +171,7 @@ Pass the returned `tempId` in `generate`'s `fileIds`.
 - **Frontend (`app.rest()`):** reachable with the **`sandbox:generate`** scope, which maps
   to `agents.sandbox.generate` / `generate-async` / `attempt-status` / `upload`
   (`server/services/mcp-rest-allowlist.ts`). In-iframe apps should use the **async + poll**
-  pair — the host-bridge postMessage default times out at 10s (`PrivOSAppProvider`
+  pair — the host-bridge postMessage default times out at 10s (`PrivosAppProvider`
   `sendRequest`), while a sandbox generation can take minutes:
 
   ```ts
@@ -399,10 +399,10 @@ bridge/SDK:
   directly to `file-management.files.upload` as the user; the host gates it on `files:write`
   (the iframe reaches REST only via the trusted host bridge).
 
-### SDK usage (`@privos/app-react`)
+### SDK usage (`@privos_ai/app-react`)
 
 ```ts
-const app = usePrivOSApp();
+const app = usePrivosApp();
 
 // Read files in the room (needs files:read)
 const res = await app.rest({ method: 'GET', path: `file-management.files.channel/${roomId}` });

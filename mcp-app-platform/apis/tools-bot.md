@@ -236,7 +236,7 @@ The bot is the **author** of both the message and the upload when `base64Data` o
 ### Example (SDK)
 
 ```typescript
-const app = usePrivOSApp();
+const app = usePrivosApp();
 const botToken = await app.callServerTool({
   name: 'mcpapp.app.getLocalData',
   arguments: { key: 'botToken' },

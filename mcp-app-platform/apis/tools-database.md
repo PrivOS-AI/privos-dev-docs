@@ -21,6 +21,29 @@ The `mcpapp.db.*` tools give apps a relational database with schema registration
 
 ---
 
+## Data Scope: Global vs Room
+
+Every collection is registered with a scope, which decides the physical
+collection name the hub stores it under
+(`apps/meteor/server/services/mcp-app-db-schema-registry.ts:41-43`). The scope is
+fixed at registration time; `scope` accepts `global` or `room` and defaults to
+`global` (`mcp-tool-handlers-db-schema.ts:18,57`).
+
+| Scope | Collection name | Use case |
+|-------|-----------------|----------|
+| `global` (default) | `app_{appId}_{collection}` | Shared data across all rooms (user profiles, settings, catalogs) |
+| `room` | `app_{appId}_{roomId}_{collection}` | Per-room isolation (project tasks, team notes, channel polls) |
+
+```jsonc
+// Global — same data in every room
+{ "name": "products", "fields": [ /* … */ ] }
+
+// Room-scoped — each room gets its own collection
+{ "name": "poll_votes", "fields": [ /* … */ ], "scope": "room" }
+```
+
+---
+
 ## Schema Tools
 
 ### `mcpapp.db.registerCollection`
@@ -220,32 +243,40 @@ Resolve reference fields to full documents (1-level deep, max 5 fields, max 1000
 
 ## SDK Usage (React)
 
-See [React SDK Reference — useAppDb](../react-sdk-reference.md#useappdb) for full hook API.
+There is no dedicated `useAppDb()` hook in `@privos_ai/app-react` — call these
+tools directly via `usePrivosApp()` / `usePrivosTool()`. See
+[React SDK Reference — No dedicated DB hook](../react-sdk-reference.md#no-dedicated-db-hook).
 
 ```tsx
-import { useAppDb } from '@privos/app-react';
+import { usePrivosApp, usePrivosTool } from '@privos_ai/app-react';
 
 function MyApp() {
-  const db = useAppDb();
+  const app = usePrivosApp();
 
   // Register schema (call once on first load)
-  await db.registerCollection('contacts', [
-    { name: 'name', type: 'string', required: true },
-    { name: 'email', type: 'string' },
-  ]);
+  await app.callServerTool({
+    name: 'mcpapp.db.registerCollection',
+    arguments: {
+      collection: 'contacts',
+      fields: [
+        { name: 'name', type: 'string', required: true },
+        { name: 'email', type: 'string' },
+      ],
+    },
+  });
 
-  // CRUD
-  const contact = await db.create('contacts', { name: 'Alice' });
-  const found = await db.get('contacts', contact._id);
-  await db.update('contacts', contact._id, { name: 'Bob' });
-  await db.delete('contacts', contact._id);
+  // Create / update / delete — all writes go through callServerTool
+  const contact = await app.callServerTool({ name: 'mcpapp.db.create', arguments: { collection: 'contacts', data: { name: 'Alice' } } });
+  await app.callServerTool({ name: 'mcpapp.db.update', arguments: { collection: 'contacts', id: contact._id, data: { name: 'Bob' } } });
+  await app.callServerTool({ name: 'mcpapp.db.delete', arguments: { collection: 'contacts', id: contact._id } });
 
-  // Query builder (chainable)
-  const results = await db.query('contacts')
-    .where('name', '!=', '')
-    .orderBy('name', 'asc')
-    .limit(10)
-    .execute();
+  // Query — flat where/orderBy args, no chainable builder client-side; usePrivosTool auto-fetches
+  const { data, loading, error, refetch } = usePrivosTool('mcpapp.db.query', {
+    collection: 'contacts',
+    where: [{ field: 'name', op: '!=', value: '' }],
+    orderBy: [{ field: 'name', direction: 'asc' }],
+    limit: 10,
+  });
 }
 ```
 
@@ -254,6 +285,15 @@ function MyApp() {
 ## Getting Started Tutorial
 
 Complete walkthrough: building a "Feedback Board" app using the DB layer.
+
+> **`db` below is illustrative, not an SDK export.** `@privos_ai/app-react` has no
+> `useAppDb()` hook and no chainable query builder — see
+> [SDK Usage (React)](#sdk-usage-react) above for the real, non-chainable call
+> shape. Every `db.xxx(...)` call in this tutorial (including the chained
+> `.where().orderBy().execute()` query form) is shorthand for a single
+> `mcpapp.db.*` tool call with flat arguments; write your own thin wrapper
+> over `usePrivosApp().callServerTool()` / `usePrivosTool()` if you want this
+> ergonomics, or call the tools directly.
 
 ### 1. Request Scopes
 
@@ -271,11 +311,12 @@ In your app manifest (`/.well-known/mcp/manifest.json`):
 ### 2. Register Schema on Mount
 
 ```tsx
-import { useAppDb } from '@privos/app-react';
 import { useEffect, useRef, useState } from 'react';
+// `db` here is a hand-rolled wrapper you write yourself (see the disclaimer
+// above) — not an import from '@privos_ai/app-react'.
 
 function FeedbackApp() {
-  const db = useAppDb();
+  const db = useDb(); // your own wrapper over usePrivosApp()
   const initialized = useRef(false);
 
   useEffect(() => {
