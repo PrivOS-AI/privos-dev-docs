@@ -9,15 +9,31 @@ credential.
 One active schema-v3 parent Library Runtime installation may own one dedicated agent bot. Child
 Room bindings reference their parent; they never accept or snapshot a bot selector.
 
+### Declaring and creating the bot
+
+Apps no longer create the bot themselves — there is no creation tool or scope. Instead:
+
+1. **The manifest declares the identity.** The app's `privos-app.json` carries an `agentBot`
+   block: `{ "agentBot": { "name": "...", "slug": "..." } }`. The `slug` becomes the bot's
+   username (`mcp-app-library-provisioning-v3.ts` maps `slug` → `username`; name 2–200 chars,
+   slug must match the bot-username pattern). Apps cannot invent an identity at runtime.
+2. **A workspace administrator authorizes creation** via
+   `POST /api/v1/mcp-apps.bot-agent.create` with `{ parentInstallationId }` (requires the
+   `manage-oauth-apps` permission and a same-origin Marketplace mutation). Creation also
+   requires available bot license capacity.
+3. **The bot's `BotTokens` row is provisioned at creation** (`mcp-installation-agent-bot.ts`),
+   so hub-side bot-key pushes and sandbox chat authenticate without a manual first push.
+
+An app that declares no `agentBot` gets `BOT_AGENT_NOT_DECLARED` from the admin route. The
+association survives an in-place generation upgrade of the same installation; a new manifest
+declaration is required to move the identity.
+
+### Room tools
+
 | Tool | Scope | Arguments | Result |
 |------|-------|-----------|--------|
-| `mcpapp.bot.createAgent` | `bot:agent:create` | `name`, `username`, `agentData` with required `purpose` | Safe bot identity, canonical agent Room, and `created`; never a credential |
 | `mcpapp.bot.joinCurrentRoom` | `bot:room:join` | none | Safe bot identity, exact authorized `roomId`, and `joined` |
 | `mcpapp.bot.getCurrentRoomIdentity` | `bot:identity:read` | none | Safe bot identity, exact authorized `roomId`, and `membershipStatus: "member"` |
-
-`bot:agent:create` is workspace-scoped and interactive. It also requires the current user's native
-`create-bot` permission and available license capacity. The association survives an in-place
-generation upgrade of the same installation.
 
 The Room tools are separately approved, interactive actions. Their schemas accept no `roomId`,
 `botId`, or `botToken`; the Hub resolves the exact active child binding and verifies the current
@@ -28,22 +44,15 @@ Creation does not mint, return, store, or push a bot secret. Sandbox key provisi
 separate operation under `sandbox:botkey:push`. Successful uninstall releases the installation
 association without deleting the reusable bot or changing its Room memberships.
 
-Stable denial codes include `BOT_AGENT_CREATE_DENIED`, `BOT_AGENT_NOT_CONFIGURED`,
-`BOT_AGENT_CONFIGURATION_INVALID`, `MCP_ROOM_SCOPE_DENIED`, and
-`BOT_NOT_MEMBER_OF_AUTHORIZED_ROOM`.
+Stable denial codes include `BOT_AGENT_NOT_DECLARED`, `BOT_AGENT_CREATE_DENIED`,
+`BOT_AGENT_USERNAME_EXISTS`, `BOT_AGENT_LICENSE_LIMIT_REACHED`,
+`BOT_AGENT_CREATION_IN_PROGRESS`, `BOT_AGENT_CONFIGURATION_INVALID`,
+`MCP_ROOM_SCOPE_DENIED`, and `BOT_NOT_MEMBER_OF_AUTHORIZED_ROOM`.
 
 ### SDK example
 
 ```typescript
-const created = await app.callServerTool({
-  name: 'mcpapp.bot.createAgent',
-  arguments: {
-    name: 'Room Assistant',
-    username: 'room-assistant',
-    agentData: { purpose: 'Help people in approved Rooms.' },
-  },
-});
-
+// The bot already exists: declared in the manifest, created by a workspace admin.
 // No Room or bot selector: the Hub supplies the exact authorized Room binding.
 await app.callServerTool({ name: 'mcpapp.bot.joinCurrentRoom', arguments: {} });
 const identity = await app.callServerTool({

@@ -20,7 +20,8 @@ re-evaluate per-bot — not per-room.
 
 | File | Role |
 |------|------|
-| `apps/meteor/server/services/privos-sandbox-bot-key-service.ts` | `getBotKeyStatus`, `pushBotKeyToSandbox` — DB read/write + outbound POST to sandbox |
+| `apps/meteor/server/services/privos-sandbox-bot-key-service.ts` | `getBotKeyStatus`, `pushBotKeyToSandbox` — DB read/write + outbound POST to sandbox + DDP progress/status events |
+| `apps/meteor/server/services/privos-sandbox-bot-key-push-retry.ts` | Classifies failed pushes (transient sandbox failure vs real refusal) and bounds server-side automatic repair |
 | `apps/meteor/app/api/server/v1/agent-privos-sandbox-bot-key.ts` | REST routes `agents.sandbox.botKeyStatus` (GET) and `agents.sandbox.pushBotKey` (POST) |
 | `apps/meteor/server/models/BotPrivOSSandboxKey.ts` | Mongo collection — stores `sha256(token)` per `(botId, roomId, privosSandboxId)` |
 | `apps/meteor/client/hooks/aiChat/useBotPrivOSSandboxKeyStatus.ts` | React Query hook — status polling + push mutation |
@@ -36,6 +37,26 @@ re-evaluate per-bot — not per-room.
 5. Sandbox writes `.env` to `data/projects/{projectId}/` with `PRIVOS_URL`, `PRIVOS_BOT_KEY`, `PRIVOS_BOT_ID`, `PRIVOS_ROOM_ID`, `PRIVOS_PROJECT_ID`.
 6. Chat stores `sha256(botToken)` in `BotPrivOSSandboxKeys` so the next status check can detect token rotation without leaking the token.
 
+## Automatic Repair — Server Is the Sole Initiator
+
+When a room's key is stale (rotation, config change, sandbox state lost), the **server**
+starts the repair push itself; the client never initiates an automatic push. Callers that
+do trigger an unattended push (e.g. an app via `sandbox:botkey:push`) mark it with
+`auto: true` in the `pushBotKey` body. Two rules bound the repair:
+
+- **Only a real refusal bounds it.** A push failure is classified by *what the sandbox
+  said*, not its HTTP status (`privos-sandbox-bot-key-push-retry.ts`):
+  - **Transient — does not count against the bound:** the sandbox was unreachable, replied
+    5xx (the sandbox failing, not refusing), or returned a transient code
+    (`project-operation-in-progress`, `envelope-rate-limited`,
+    `project-operation-preflight-failed`).
+  - **Refusal — counts and bounds the repair:** the sandbox explicitly rejected the key.
+- **Progress is visible even for a repair the client did not start** — see the DDP streams
+  below.
+
+The manual "Push bot key" CTA and `/push-bot-key` slash command remain for explicit
+user-driven pushes.
+
 ## Status Endpoint
 
 `GET /v1/agents.sandbox.botKeyStatus?roomId=…&botId=…` returns:
@@ -43,19 +64,38 @@ re-evaluate per-bot — not per-room.
 ```jsonc
 {
   "pushed": false,           // sha256(currentToken) === record.hash AND status === 'success'
+  "reason": "hash-mismatch", // why pushed is false: no-record | last-push-failed |
+                             // hash-mismatch | config-missing | sandbox-state-lost | sandbox-key-stale
   "hasBot": true,            // a bot was resolvable for the room+botId pair
-  "hasSandbox": true,          // the room has a PrivOS Sandbox configured
+  "hasSandbox": true,        // the room has a PrivOS Sandbox configured
   "canPush": true,           // caller has the right permissions
+  "canAutoPush": true,       // sandbox is configured, so automatic repair can run for any
+                             // member — independent of the caller's own push permissions
   "status": "success",       // last push outcome
   "pushedAt": "2026-04-29T…",
-  "privosSandboxId": "thanh-3000.roxane.one",
+  "needsForceOverwrite": true, // present only when the sandbox holds a diverged persona;
+                               // pass forceOverwritePersona on pushBotKey to replace it
   "errorMessage": "…"        // on failed pushes
 }
 ```
 
+`privosSandboxId` (the internal board host URL) is intentionally **not** exposed to
+clients/apps — `hasSandbox` conveys configured-state without leaking it.
+
 `pushed` re-becomes `false` when the bot's token rotates (hash mismatch),
 when the sandbox config changes (different `privosSandboxId`), or when the user
 switches to a bot that hasn't pushed to that sandbox yet.
+
+## DDP Streams
+
+Both are room streams (`packages/ddp-client/src/types/streams.ts`):
+
+| Stream | Payload |
+|--------|---------|
+| `bot-privos-sandbox-key-status-changed` | `{ botId?, reason: 'push' \| 'config-change' \| 'drift', status?: 'success' \| 'failed' \| 'drift', changedAt }` |
+| `bot-privos-sandbox-key-push-progress` | `{ botId, phase: 'writing-env' \| 'updating-proxy-env' \| 'persisting-identity' \| 'ensuring-project' \| 'reconciling' \| 'pulling' \| 'pushing' \| 'done' \| 'failed', percent, message, at }` |
+
+Clients render push progress from the stream regardless of who initiated the push.
 
 ## Agent Selector Re-validation
 

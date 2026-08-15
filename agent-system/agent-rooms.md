@@ -54,6 +54,20 @@ One reply at a time per room. A `Set<string>` tracks active rooms. If a room is 
 
 If PrivOS Sandbox errors, the bot sends: *"Sorry, I encountered an error processing your message. Please try again."*
 
+## Engaging an Agent Outside Its Room (mentions & replies)
+
+In shared rooms where an agent bot is a member (`server/configuration/bot.ts`), the agent
+is engaged when a message addresses it. Three address forms are equivalent and pass
+through the same permission gates:
+
+1. **@-mention** — the message mentions the agent bot.
+2. **Quote reply** — the message quotes one of the agent's messages (the quoted author is
+   resolved from the quote attachment's `message_link`).
+3. **Thread reply** — the message is posted in a thread whose root message the agent
+   authored (covers agent broadcasts that have no ownership record).
+
+A message the agent itself authored never re-engages it.
+
 ## Context Files
 
 Uploaded to MinIO during agent creation. PrivOS Sandbox auto-syncs files from MinIO using `projectId = roomId`.

@@ -87,6 +87,46 @@ Send a message in an AI chat session, updating attached contexts automatically.
 - Updates session's `attachedContexts` with provided contexts
 - Emits real-time message event to subscribed clients
 - AI agent receives message with context information
+- **Stages** the generation worker job in memory instead of enqueuing it — the
+  generation does not start until `ai-messages.startGeneration` is called (see below)
+
+---
+
+### Start Generation
+
+```http
+POST /v1/ai-messages.startGeneration
+```
+
+Second step of the two-step generation handshake. `ai-messages.send` creates the AI
+message placeholder and stages the worker job in an in-memory store; the client waits
+until its `agent-chat` DDP subscription is established, then calls this endpoint to
+actually enqueue the worker. Until it fires, no stream-chunk / new-message event for the
+new message is emitted, so a subscribed client receives every event in real time.
+
+**Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | Yes | The AI message ID returned by `ai-messages.send` |
+
+**Behavior:**
+- **Authorization:** the caller must have room access, and either be the user whose
+  `send` staged the job (the staged job is its own authorization) or pass the
+  active-chat access check.
+- **Idempotent on consume:** a missing staged job (already started, or expired)
+  returns `{ started: false, alreadyStartedOrExpired: true }` — client retries are
+  harmless. Exactly one consumer wins the staged job.
+- **Orphaned stages fail visibly:** a job nobody consumed within the **5-minute TTL**
+  is never dropped silently — the AI message is marked failed with *"Sorry, this
+  request was never started. Please try again."* instead of spinning as `sending`
+  forever.
+
+**Response:**
+
+```json
+{ "success": true, "started": true }
+```
 
 ---
 

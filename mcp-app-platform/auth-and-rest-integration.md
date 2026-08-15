@@ -211,8 +211,8 @@ operation. Two REST routes (`app/api/server/v1/agent-privos-sandbox-bot-key.ts`)
 
 | Path | Method | Purpose |
 | --- | --- | --- |
-| `agents.sandbox.botKeyStatus` | GET | Read push status → `{ pushed, hasBot, hasSandbox, canPush, status? }` |
-| `agents.sandbox.pushBotKey` | POST | Provision project + push/refresh the bot key |
+| `agents.sandbox.botKeyStatus` | GET | Read push status → `{ pushed, reason?, hasBot, hasSandbox, canPush, canAutoPush, status?, pushedAt?, needsForceOverwrite?, errorMessage? }`. `reason` explains a `pushed: false` (`no-record` \| `last-push-failed` \| `hash-mismatch` \| `config-missing` \| `sandbox-state-lost` \| `sandbox-key-stale`); `canAutoPush` reports that the sandbox is configured, so the server-side automatic repair can run for any member independent of the caller's own push permissions |
+| `agents.sandbox.pushBotKey` | POST | Provision project + push/refresh the bot key. Body: `roomId`, optional `botId`, `auto` (marks an unattended push — the server is the sole initiator of automatic repair and bounds retries on real refusals only), `forceOverwritePersona`, `bootstrapPush` |
 
 ### Reachability
 
@@ -307,7 +307,7 @@ There is no separate delete endpoint — sync is the add/remove mechanism. Both 
 | Path | Method | Purpose |
 | --- | --- | --- |
 | `rooms.listPrivOSSandboxSkills` | POST | List the skills available to the room → `{ skills: [{ id, name, description? }] }` |
-| `rooms.syncPrivOSSandboxSkills` | POST | Set the room's enabled skills to exactly `componentIds` |
+| `rooms.syncPrivOSSandboxSkills` | POST | Set the room's enabled skills to exactly `componentIds`. Optional `agentSetIds` syncs the room's agent-set selection the same way: **omitted** leaves the current selection untouched, an explicit **`[]` clears it** — never default it to `[]` on a components-only sync |
 
 ### Reachability
 
@@ -328,7 +328,42 @@ await app.rest({
   method: 'POST', path: 'rooms.syncPrivOSSandboxSkills',
   body: { rid: roomId, componentIds: ['skill-a', 'skill-b'] },
 });
+
+// Also sync the room's agent-set selection (omit agentSetIds to leave it untouched;
+// pass [] to clear it)
+await app.rest({
+  method: 'POST', path: 'rooms.syncPrivOSSandboxSkills',
+  body: { rid: roomId, componentIds: ['skill-a'], agentSetIds: ['set-1'] },
+});
 ```
+
+## Uploading agent sets (workspace Agent Factory)
+
+A workspace administrator can upload agent-set archives through an app. Because an agent set
+carries executable skills, this is the highest-risk scope a marketplace app can request
+(risk `critical`, workspace context, interactive user only). Two REST routes
+(`app/api/server/v1/agent-privos-sandbox-agent-sets.ts`):
+
+| Path | Method | Purpose |
+| --- | --- | --- |
+| `agents.sandbox.agentSets.preview` | POST | Submit archives (`{ archives: [{ fileName, base64 }] }`) → the board's projected item list + a `sessionId` |
+| `agents.sandbox.agentSets.confirm` | POST | Commit a previewed session (`{ sessionId }`) — all-or-nothing |
+
+### Reachability
+
+- **Frontend (`app.rest()`):** both routes reachable with the **`sandbox:agent-sets:upload`**
+  scope (`server/services/mcp-rest-allowlist.ts`).
+- **Server-side gate:** both routes enforce the native **`manage-privos-agent-sets`**
+  (workspace admin) permission, so the scope only widens reachable paths — an app can never
+  install a set on its own authority. The board's secure extraction remains the sole
+  validation authority; the hub only streams bytes within the board's own limits.
+- **App attestation:** the hub attests the calling app itself via an `x-mcp-app-attestation`
+  token minted server-side (`server/services/mcp-app-attestation.ts`). The app identity is
+  derived from that token — any app id claimed in a request body is ignored.
+
+The [PrivOS demo MCP app](https://github.com/PrivOS-AI/privos-mcp-app-demo/blob/main/src/ui/agent-set-upload-panel.tsx)
+contains a reference upload panel, and declares the scope at `context: "workspace"` in its
+`privos-app.json`.
 
 ## Security — bot token leakage & privilege escalation
 

@@ -36,7 +36,6 @@ Tools apps can call via `callServerTool()` or React hooks:
 | Tool | Scope | Description |
 |------|-------|-------------|
 | `mcpapp.context.get` | — | User + room context: userId, username, signed userToken, appId, roomId/name/slug/type, appUrl, user roles, isAgentRoom flag, agent/default bot |
-| `mcpapp.bot.createAgent` | bot:agent:create | Create one agent bot owned by the exact active parent installation; returns no credential |
 | `mcpapp.bot.joinCurrentRoom` | bot:room:join | Add the associated bot to the Hub-resolved current Room; accepts no Room or bot selector |
 | `mcpapp.bot.getCurrentRoomIdentity` | bot:identity:read | Return safe associated-bot identity only with ordinary membership in the Hub-resolved current Room |
 | `mcpapp.bot.getMe` | — | Validate a bot token, return bot identity |
@@ -220,8 +219,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `users:read` | Read user profiles |
 | `rooms:read` | Read room metadata and members |
 | `rooms:write` | Create/update rooms |
-| `bot:agent:create` | Create one agent bot owned by the exact parent V3 installation (workspace, interactive user only) |
-| `bot:room:join` | Add the installation-owned bot to the exact active child Room binding (interactive user only) |
+| `bot:room:join` | Add the installation-owned bot (declared via the manifest `agentBot` block, created by a workspace admin through `mcp-apps.bot-agent.create`) to the exact active child Room binding (interactive user only) |
 | `bot:identity:read` | Read safe associated-bot identity only for ordinary membership in the exact active child Room binding |
 | `bot:message:send` | Send messages/DMs/attachments acting as a bot (runtime identity via bot token) |
 | `db:schema:read` | List collections and read schema definitions |
@@ -234,6 +232,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `sandbox:wake` | Wake/establish a room's Sandbox VM without re-pushing the bot key (`agents.sandbox.wake`) + poll its state (`agents.sandbox.vmState`) (room admin) |
 | `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history (`ai-messages.sessions` / `.getSession` / `.list`) |
 | `sandbox:ai-chat:write` | Send messages in a room's AI Chat, start the agent generation, and cancel an in-flight run (`ai-messages.send` / `.startGeneration` / `.cancel`) |
+| `sandbox:agent-sets:upload` | Submit agent-set archives to the workspace Agent Factory for an admin to confirm (`agents.sandbox.agentSets.preview` / `.confirm`). Workspace-context, interactive user only, risk `critical`; the endpoints additionally enforce the native `manage-privos-agent-sets` permission, so the scope only widens reachable paths |
 
 ### Tools that do NOT require a scope
 

@@ -259,6 +259,13 @@ Map<`${agentId}:${triggerId}`, timestamp>
 
 Prevents rapid-fire when many events happen in quick succession.
 
+### No AskUser in Trigger Turns
+
+Agent-room harness rules (`server/services/agent-prompt-injection.ts`) forbid the agent
+from using the `AskUser` tool in orchestrator (agent-room) sessions: a trigger fires with
+nobody watching, so nothing would ever answer — the turn would hang and hold the
+project's lease until it is reaped.
+
 ### Context Payload
 
 Event data is serialized as context appended to the trigger's `promptTemplate`:

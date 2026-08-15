@@ -27,7 +27,7 @@ equivalent**:
 |----------|-------------|
 | [Context Tools](./tools-context.md) | Get current user/room context |
 | [App Storage Tools](./tools-app.md) | `mcpapp.app.*` — per-app `localData` key/value store |
-| [Bot Tools](./tools-bot.md) | Create an installation-owned agent bot for approved Rooms, or use legacy token-selected messaging |
+| [Bot Tools](./tools-bot.md) | Use the manifest-declared, admin-created installation-owned agent bot in approved Rooms, or legacy token-selected messaging |
 | [Database Tools](./tools-database.md) | `mcpapp.db.*` — schema, CRUD, query, aggregate |
 
 ## Authentication
@@ -69,8 +69,7 @@ Successful responses include `"success": true` along with the endpoint-specific 
 | `users:read` | Read user profiles |
 | `rooms:read` | Read room metadata and members |
 | `rooms:write` | Create/update rooms |
-| `bot:agent:create` | Create one agent bot owned by the exact parent MCP installation (workspace, interactive user only) |
-| `bot:room:join` | Add that installation-owned bot to the exact approved Room (interactive user only) |
+| `bot:room:join` | Add the installation-owned bot (declared in the manifest `agentBot` block, created by a workspace admin) to the exact approved Room (interactive user only) |
 | `bot:identity:read` | Read safe identity only when that bot has ordinary membership in the exact approved Room |
 | `bot:message:send` | Send messages/DMs/attachments as a bot (runtime identity via bot token) |
 | `db:schema:read` | List collections and read schema definitions |
@@ -79,6 +78,7 @@ Successful responses include `"success": true` along with the endpoint-specific 
 | `db:write` | Create/update/delete records (soft-delete) |
 | `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history |
 | `sandbox:ai-chat:write` | Send messages in a room's AI Chat, start the agent generation, and cancel an in-flight run |
+| `sandbox:agent-sets:upload` | Submit agent-set archives to the workspace Agent Factory (`agents.sandbox.agentSets.preview` / `.confirm`); endpoints additionally require the workspace-admin `manage-privos-agent-sets` permission |
 
 ### Scope-free tools
 
