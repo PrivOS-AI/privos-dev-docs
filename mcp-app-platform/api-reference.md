@@ -74,7 +74,7 @@ Tools apps can call via `callServerTool()` or React hooks:
 
 **POST `/api/v1/mcp-apps.generate-pair-url`** (Admin only)
 
-Generates a one-time pairing URL for relay app developers to use during `npm start`.
+Generates a one-time pairing URL for relay app developers to enter at `npm run pair`.
 
 **Request:**
 ```json

@@ -443,12 +443,25 @@ For apps behind NAT, firewall, or private networks, use the relay connection typ
    - URL: `https://chat.privos.com/pair?token=pair_abc_123xyz` (1-hour expiry)
    - Share URL with app developer
 
-2. **Developer starts app with pairing URL**:
+2. **Developer pairs the app**:
    ```bash
-   npm start
-   # ℹ️  Enter pairing URL (or press Enter to skip):
+   npm run pair      # or: pnpm pair
+   # Enter the one-time pairing URL from Hub Admin:
    # Paste: https://chat.privos.com/pair?token=pair_abc_123xyz
    ```
+
+   The command takes no arguments — it asks for the URL, so the URL never lands in shell
+   history. On success it starts the app for you, continuing into `start` through whichever
+   package manager you invoked it with. Pairing is a one-time step: every later restart uses
+   what pairing persisted and needs no URL.
+
+   **A v3 standalone app pairs TWICE.** It announces its `privos-app.json` over the pairing
+   socket, so no admin ever handles the manifest file. The first run only REGISTERS the app —
+   the Hub grants nothing, reports `awaitingApproval`, and the app neither receives dispatch
+   trust nor starts, because trust belongs to the generation an approved permission ceiling
+   creates. An admin approves the declared permissions in Hub Admin > Apps, then the developer
+   runs `npm run pair` again with a fresh URL from that app's own settings; that second run
+   receives trust and starts the app.
 
 3. **App exchanges token for credentials**:
    - Sends `pair_token` to `POST /api/v1/mcp-apps.pair-status`
@@ -579,7 +592,7 @@ connectRelay();
 ### Relay App Architecture
 
 **No HTTP server needed.** Relay apps:
-- Use `npm start` to connect to PrivOS via WebSocket
+- Use `npm run pair` once to pair, then `npm start` to connect to PrivOS via WebSocket
 - Serve manifest via Node.js/Express embedded in the relay app package
 - UI is built with Vite, compiled to static HTML, sent via `resources/read` JSON-RPC
 - Admin portal inlines UI via data URI in pairing metadata

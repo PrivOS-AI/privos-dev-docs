@@ -26,7 +26,7 @@
 5. PrivOS generates a pairing URL (1-hour expiry):
    - Format: `https://chat.privos.com/pair?token=pair_abc_123xyz`
 6. **Share the pairing URL with the app developer**
-7. Developer enters URL during `npm start` → credentials auto-saved to .env
+7. Developer enters URL at `npm run pair` → credentials persisted, app starts
 8. Waiting UI shows status with polling until app pairs
 9. On pairing complete, admin can view credentials (clientId, clientSecret) in app settings
 

@@ -33,7 +33,7 @@ PrivOS Hub Host (MCP Client connects directly)
 
 ### Relay Connection
 ```
-Admin generates pairing URL → Developer enters during npm start
+Admin generates pairing URL → Developer enters it at `npm run pair`
                               ↓
 Developer's MCP App Server → Exchanges token for clientId + clientSecret
                               ↓

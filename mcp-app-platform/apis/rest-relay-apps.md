@@ -32,7 +32,7 @@ No body required. Uses the authenticated user's context.
 
 1. Admin generates a pairing URL
 2. Share the `pairUrl` with the relay app developer
-3. Developer runs `npm start` with the pairing URL
+3. Developer runs `npm run pair` and enters the pairing URL when prompted
 4. Poll `mcp-apps.pair-status` to check when pairing completes
 5. Once paired, the response includes `clientId`, `clientSecret`, and `relayUrl`
 
