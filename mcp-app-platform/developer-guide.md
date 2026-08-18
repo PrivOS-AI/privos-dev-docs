@@ -491,6 +491,22 @@ For apps behind NAT, firewall, or private networks, use the relay connection typ
    });
    ```
 
+### Re-pairing after an uninstall/reinstall
+
+Admin uninstall never deletes the app's catalog entry — it's retained
+(`suspended`) so the admin can re-approve later. But re-approval provisions a
+**brand-new generation and a brand-new OAuth client id/secret**. The old
+credentials are dead: dispatch refuses commands against an uninstalled
+generation.
+
+Your app's persisted identity file (default `./privos-standalone-identity.json`,
+override via `PRIVOS_STANDALONE_IDENTITY_FILE`) is written with `wx` — it
+refuses to overwrite a file that's already there. Before running `npm run pair`
+again for the new pairing URL, **delete the old identity file**, or pairing
+fails with `IDENTITY_FILE_ALREADY_EXISTS`. There is no automatic migration
+between generations; re-pairing from scratch is the only path back after an
+uninstall.
+
 ### Manual Credential Entry (Fallback)
 
 If the pairing URL is lost, retrieve credentials from admin:

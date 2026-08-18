@@ -148,3 +148,27 @@ Configurable per app in Admin → Apps → Settings:
 5. Click **Install** to add the app to the room
 6. Installed apps show **Open** (opens as room tab) and **Uninstall** buttons
 7. Installed apps also appear in the folder menu under **"Installed Apps"** section
+
+## Uninstalling a v3 BYO (standalone) App
+
+A schemaVersion-3 BYO app — installed straight from its `privos-app.json`
+without going through the marketplace — uses the **same one-button flow** as a
+marketplace app: Settings → Uninstall → type UNINSTALL → Uninstall
+permanently. There is no separate BYO uninstall path, and it is never blocked
+by the BYO-install feature switch — disabling new installs never strands an
+admin with an app they can't remove.
+
+Uninstall tears down the runtime generation, room bindings, env config
+(including encrypted secrets), the app's agent bot, and its relay OAuth client
+and tokens. The app's catalog row survives (status `suspended`) with its
+manifest retained, which is what lets an admin re-approve it later without
+re-uploading the manifest — re-approval provisions a fresh generation and a new
+OAuth client, so the app must re-pair to pick up new credentials.
+
+`mcp-apps.delete` refuses an app that still has a live generation
+(`error-active-generation-use-uninstall`) — use Settings → Uninstall instead.
+Delete stays correct for a paired-but-never-approved app, an already-suspended
+app, or a legacy non-v3 app.
+
+Full BYO install/operate detail lives in the hub's
+[install-and-operate-your-own-mcp-app.md](https://github.com/PrivOS-AI/privos-hub/blob/privos-mt/docs/mcp-app-platform/install-and-operate-your-own-mcp-app.md).
