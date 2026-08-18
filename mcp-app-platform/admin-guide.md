@@ -160,10 +160,15 @@ admin with an app they can't remove.
 
 Uninstall tears down the runtime generation, room bindings, env config
 (including encrypted secrets), the app's agent bot, and its relay OAuth client
-and tokens. The app's catalog row survives (status `suspended`) with its
-manifest retained, which is what lets an admin re-approve it later without
-re-uploading the manifest — re-approval provisions a fresh generation and a new
-OAuth client, so the app must re-pair to pick up new credentials.
+and tokens. The app then **disappears from the admin list**, exactly as a
+marketplace app does — the two acquisition modes look the same to an admin.
+
+The catalog row is retained behind that (status `suspended`, manifest intact)
+for audit and reinstall reuse, reachable only via
+`GET /api/v1/mcp-apps.list?includeUninstalled=true`. Re-approving it provisions
+a fresh generation and a new OAuth client, so the app must re-pair to pick up
+new credentials. There is no admin-UI affordance for `includeUninstalled` yet,
+so in practice reinstalling means pairing the app server again.
 
 `mcp-apps.delete` refuses an app that still has a live generation
 (`error-active-generation-use-uninstall`) — use Settings → Uninstall instead.
