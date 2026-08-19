@@ -59,6 +59,7 @@ PrivOS Hub Host
 | Doc | Description |
 |-----|-------------|
 | [Auth & REST Integration](./auth-and-rest-integration.md) | REST-first model, frontend session vs backend bot token, security |
+| [Runtime Modes](./runtime-modes.md) | One app across managed / standalone / development — `serveApp`, transport & trust bootstrap |
 | [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
 | [React SDK](./react-sdk-reference.md) | `@privos_ai/app-react` hooks (`usePrivosApp`, `usePrivosContext`, `useLists`, etc.) |
