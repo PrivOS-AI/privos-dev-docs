@@ -62,8 +62,11 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `mcpapp.db.count` | db:read | Count records matching filter |
 | `mcpapp.db.aggregate` | db:read | Aggregation (count/sum/avg/min/max) |
 | `mcpapp.db.populate` | db:read | Resolve reference fields (1-level) |
+| `mcpapp.objects.put` | db:write | Create or exactly adopt one immutable, content-addressed, room-private object |
+| `mcpapp.objects.head` | db:read | Read metadata for one exact object (no content) |
+| `mcpapp.objects.get` | db:read | Read one exact object's metadata + content, integrity-verified |
 
-> **Database API:** See [apis/tools-database.md](./apis/tools-database.md) for full database tool documentation with examples.
+> **Database API:** See [apis/tools-database.md](./apis/tools-database.md) for full database and object-storage tool documentation with examples.
 >
 > **Data operations (lists, items, files, folders, messages, rooms, users):** call the hub
 > REST API via `app.rest()` — see [Auth & REST Integration](./auth-and-rest-integration.md).
@@ -226,7 +229,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `db:schema:write` | Register/update/drop app DB collections and schemas |
 | `db:read` | Read records, query, count, aggregate |
 | `db:write` | Create/update/delete records (soft-delete) |
-| `sandbox:generate` | Run a Sandbox agent generation (sync/async) and upload files to attach |
+| `sandbox:generate` | Run a Sandbox agent generation (sync/async), upload files to attach, and — for an `operationId`-dispatched attempt — observe/cancel it and read its LLM evidence (see [Auth & REST Integration](./auth-and-rest-integration.md#idempotent-dispatch-with-operationid)) |
 | `sandbox:skills:use` | List + select which Sandbox skills are enabled for a room (room admin) |
 | `sandbox:botkey:push` | Provision the room's Sandbox project + push/refresh its bot key (room admin) |
 | `sandbox:wake` | Wake/establish a room's Sandbox VM without re-pushing the bot key (`agents.sandbox.wake`) + poll its state (`agents.sandbox.vmState`) (room admin) |

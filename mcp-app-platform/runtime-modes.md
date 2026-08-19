@@ -69,11 +69,57 @@ concern and are the *only* differences left between modes:
   identity file and never triggers pairing. Pair out-of-band with `npm run pair`;
   it prints an **SSH-host-key-style fingerprint** (`SHA256:…`) for the operator to
   verify (TOFU). `serveApp` surfaces `StandaloneIdentityError` /
-  `RuntimeModeError` verbatim if the file is missing or invalid.
+  `RuntimeModeError` verbatim if the file is missing or invalid. See
+  [Pairing outcomes](#pairing-outcomes) below for what `npm run pair` can
+  return and how a lost approval response recovers.
 - **Managed provenance** is portal-brokered; **standalone** provenance is
   TOFU + an admin-approved capability ceiling + an out-of-band fingerprint check
   + NTP/JWKS reachability. Managed dispatch assertions carry a 30-second budget
   with zero headroom — **NTP is a hard requirement** on both ends.
+
+## Pairing outcomes
+
+`@privos_ai/app-server@0.8.0` makes `npm run pair`'s result a discriminated
+`PairingResult` union instead of one shape — this is a **breaking TS API change**
+from 0.7.x for any code that inspected the return value directly (published SDK
+0.7.3 clients on the wire are unaffected; the Hub response now carries both the
+legacy and the new fields). `pairOverWebSocket` / `pairAndAwaitApproval` /
+`pairFromDescriptor` all resolve to one of:
+
+- **`{ state: 'legacy-complete' }`** — a pre-v3 Hub generation acknowledged the
+  pairing; credentials are real but `awaitingApproval` may be `true` if nothing
+  has been granted yet. No `trust` payload.
+- **`{ state: 'pending-approval' }`** — v3 registration succeeded and is
+  recorded durably (`pairingVersion: 2`, `pairingId`, `manifestDigest`,
+  `permissionContractHash`, `declaredPermissionCeiling`, `fingerprint`), but an
+  admin has not yet approved the permission ceiling. `awaitingApproval` is
+  always `true`. No dispatch trust yet — the app does not start from this
+  result alone.
+- **`{ state: 'complete' }`** — the admin-approved ceiling produced a full
+  `RuntimeDispatchTrustV3` payload (`trust`) and, unless
+  `persistIdentityFile: false` was passed, the standalone identity file was
+  written to `identityFilePath`.
+
+### Recovering a lost approval response — `resumeStandalonePairing()`
+
+A `pending-approval` result also writes a **separate, non-dispatchable pending
+identity file** (distinct from the final identity file — it carries no trust and
+cannot be used to serve requests). If the process restarts, or the approval
+response is lost, before the admin approves, `resumeStandalonePairing()` reads
+that pending file, re-authenticates over `?pairingCompletion=1`, and:
+
+- replays to `pending-approval` again if still unapproved (cross-checking the
+  echoed pairing/manifest/permission identity against the pending file — any
+  mismatch is a hard error, never a silent re-registration), or
+- promotes straight to `complete` (same identity/consistency checks, then
+  persists the final identity file) if the admin approved while the app was
+  down.
+
+This is a single explicit call an operator/app makes to resume one specific
+pending pairing — not a polling loop (that's what `pairAndAwaitApproval`'s
+internal poll against `mcp-apps.standalone.pair-poll` already does while the
+process stays up). The durable recovery verifier behind the pending file is
+domain-separated and expires after 24h.
 
 ## Health and readiness
 

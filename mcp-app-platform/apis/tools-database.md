@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `mcpapp.db.*` tools give apps a relational database with schema registration, Firestore-style query builder, typed references, and migration support.
+The `mcpapp.db.*` tools give apps a relational database with schema registration, Firestore-style query builder, typed references, and migration support. `mcpapp.objects.*` (see [App-Owned Objects](#app-owned-objects-content-addressed-storage) below) gives apps a companion content-addressed blob store under the same `db:read`/`db:write` scopes, for content that doesn't fit a typed record.
 
 **Data scope:** Apps choose `scope: 'global' | 'room'` per collection.
 - **Global:** `app_{appId}_{collection}` — shared across all rooms
@@ -238,6 +238,53 @@ Resolve reference fields to full documents (1-level deep, max 5 fields, max 1000
 | `collection` | string | Yes |
 | `ids` | string[] | Yes |
 | `fields` | string[] | Yes |
+
+---
+
+## App-Owned Objects (Content-Addressed Storage)
+
+`mcpapp.objects.*` gives an app a private, room-bound blob store for content the typed
+`mcpapp.db.*` records don't fit well (attachments, generated artifacts, evidence files).
+Objects are immutable and content-addressed: the key is the object's own SHA-256 digest,
+so the same content written twice is a no-op ("exact-adopt"), not a duplicate.
+
+**Isolation:** every object is private to the exact `(app, room)` pair that wrote it —
+there is no cross-room or cross-app read path, and no `scope: 'global'` option (unlike
+`mcpapp.db.*` collections).
+
+### `mcpapp.objects.put`
+
+| | |
+|---|---|
+| **Scope** | `db:write` |
+
+| Arg | Type | Required | Description |
+|-----|------|----------|--------------|
+| `digest` | string | Yes | `sha256:<64 lowercase hex>` — must match the actual SHA-256 of `dataBase64` |
+| `dataBase64` | string | Yes | Canonical base64 content, max 32 MiB decoded |
+| `mediaType` | string | Yes | MIME type, e.g. `application/pdf` |
+
+Returns `{ digest, size, mediaType, createdAt, adopted }`. `adopted: true` means an object
+with this exact digest already existed in this room for this app and was reused as-is (no
+new write); `adopted: false` means this call created it. Writing the same digest again
+with **different** `mediaType` or size is rejected as a content-addressed metadata
+conflict — the digest is a hard identity, not a mutable key.
+
+### `mcpapp.objects.head` / `mcpapp.objects.get`
+
+| | |
+|---|---|
+| **Scope** | `db:read` |
+
+| Arg | Type | Required |
+|-----|------|----------|
+| `digest` | string | Yes |
+
+`head` returns metadata only (`{ digest, size, mediaType, createdAt, adopted: true }`, no
+content). `get` returns the same metadata plus `dataBase64` — the hub re-verifies the
+stored bytes against the digest on every read and fails if they don't match. Reading a
+digest this app/room never wrote (or wrote under a different app/room) returns "object not
+found" — objects are never visible outside the exact pair that created them.
 
 ---
 

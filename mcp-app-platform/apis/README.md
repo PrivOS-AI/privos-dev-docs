@@ -28,7 +28,7 @@ equivalent**:
 | [Context Tools](./tools-context.md) | Get current user/room context |
 | [App Storage Tools](./tools-app.md) | `mcpapp.app.*` — per-app `localData` key/value store |
 | [Bot Tools](./tools-bot.md) | Use the manifest-declared, admin-created installation-owned agent bot in approved Rooms, or legacy token-selected messaging |
-| [Database Tools](./tools-database.md) | `mcpapp.db.*` — schema, CRUD, query, aggregate |
+| [Database Tools](./tools-database.md) | `mcpapp.db.*` — schema, CRUD, query, aggregate; `mcpapp.objects.*` — content-addressed object storage |
 
 ## Authentication
 

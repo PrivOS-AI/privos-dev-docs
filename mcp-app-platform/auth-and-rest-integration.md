@@ -87,8 +87,11 @@ gated on the caller having access to `roomId`:
 |---|---|---|
 | `agents.sandbox.upload` | POST | Upload a file, get a `tempId` to attach to a generation |
 | `agents.sandbox.generate` | POST | One-shot **synchronous** agent generation → `{ text }` |
-| `agents.sandbox.generate-async` | POST | Enqueue a generation → `{ attemptId, taskId }` immediately |
+| `agents.sandbox.generate-async` | POST | Enqueue a generation → `{ attemptId, taskId }` immediately. Accepts an optional caller-stable `operationId` — see [Idempotent dispatch](#idempotent-dispatch-with-operationid) |
 | `agents.sandbox.attempt-status` | GET | Poll an async generation → `{ status, text? }` |
+| `agents.sandbox.attempt-observation` | GET | Full attempt state (phase, pending question, output) for an `operationId`-dispatched attempt — see [below](#observing-cancelling-and-reading-evidence) |
+| `agents.sandbox.attempt-cancel` | POST | Cancel a running `operationId`-dispatched attempt |
+| `agents.sandbox.attempt-evidence` | GET | Per-call LLM provenance for an `operationId`-dispatched attempt |
 
 ### Call — `agents.sandbox.generate`
 
@@ -165,11 +168,74 @@ curl -X POST https://<hub>/api/v1/agents.sandbox.upload \
 
 Pass the returned `tempId` in `generate`'s `fileIds`.
 
+### Idempotent dispatch with `operationId`
+
+`generate-async` accepts an optional `operationId` (string, ≤256 chars). Pass one raw,
+caller-chosen id per logical operation (e.g. a UI action's own idempotency key):
+
+```json
+{ "roomId": "ROOM_ID", "prompt": "...", "operationId": "my-caller-chosen-id" }
+```
+
+The hub derives a stable attempt identity from `{ operationId, callerId }` plus the
+resolved room/executor/project/workspace/task — so a retried call with the **same**
+`operationId` and the **same** request converges on the **same attempt** instead of
+starting a duplicate. The response gains `adopted` / `replayed` booleans (only present
+when `operationId` was supplied) so the caller can tell a fresh dispatch from one that
+reused an existing attempt. If the same `operationId` is replayed with a **different**
+request (different prompt, model, room, etc.), the call fails closed with `operationId
+is already bound to a different Sandbox request` rather than silently running the new
+request or silently returning the old result.
+
+Passing `operationId` is also the prerequisite for the observation/cancel/evidence
+endpoints below — an attempt dispatched without one has no stable identity, and those
+three endpoints will return a "not found" style failure for it.
+
+### Observing, cancelling, and reading evidence
+
+For an attempt dispatched with `operationId`, three endpoints give an app fuller control
+than plain `attempt-status` polling. All three re-check room access and re-verify the
+caller is the original dispatcher (`callerId`) on every call.
+
+**`agents.sandbox.attempt-observation`** (`GET`, query `roomId`, `attemptId`) — full attempt
+state:
+
+```jsonc
+{
+  "attemptId": "...", "taskId": "...", "projectId": "...", "workspaceId": "...",
+  "status": "running" | "completed" | "failed" | "cancelled" | "unknown",
+  "phase": "...",                       // Sandbox-reported phase string, e.g. waiting-for-user
+  "createdAt": 0, "startedAt": 0, "updatedAt": 0, "completedAt": 0,
+  "terminalCause": { "code": "...", "message": "..." } | null,
+  "pendingQuestion": { "toolUseId": "...", "questions": [/* ... */], "timestamp": 0 } | null,
+  "output": [/* ... */], "outputTruncated": false,
+  "questionBridge": { "toolUseId": "...", "threadMessageId": "...", "postedMessageId": "...", "status": "..." } | null,
+  "source": "room" | "global"
+}
+```
+
+A non-null `pendingQuestion` (typically with `phase: "waiting-for-user"`) means the
+attempt is blocked on `AskUserQuestion`; answer it with the backend-only
+`agents.sandbox.answer` route (`{ roomId, attemptId, toolUseId, answers }`) — not part of
+the `sandbox:generate` frontend allowlist, so only a bot-token/header-auth caller can
+answer directly. Approval-class questions additionally require the answering user to
+hold the room `owner` role.
+
+**`agents.sandbox.attempt-cancel`** (`POST`, body `{ roomId, attemptId }`) → `{ status,
+cancelled, ...worker fields, source }`. `status` is worker-authoritative — cancelling an
+attempt that has already reached `completed`/`failed` returns that real terminal status
+rather than rewriting it to `cancelled`.
+
+**`agents.sandbox.attempt-evidence`** (`GET`, query `roomId`, `attemptId`) → `{ attemptId,
+calls: [...], source }` — the per-LLM-call provenance (model/provider/tokens) recorded
+for the attempt, for cost/audit purposes.
+
 ### Reachability
 
 - **Backend (bot token):** works — these are normal header-auth REST routes.
 - **Frontend (`app.rest()`):** reachable with the **`sandbox:generate`** scope, which maps
-  to `agents.sandbox.generate` / `generate-async` / `attempt-status` / `upload`
+  to `agents.sandbox.generate` / `generate-async` / `attempt-status` /
+  `attempt-observation` / `attempt-cancel` / `attempt-evidence` / `upload`
   (`server/services/mcp-rest-allowlist.ts`). In-iframe apps should use the **async + poll**
   pair — the host-bridge postMessage default times out at 10s (`PrivosAppProvider`
   `sendRequest`), while a sandbox generation can take minutes:
