@@ -14,6 +14,7 @@
 
 ### Direct Apps
 - **Iframe sandbox**: deny-by-default — no `allow-same-origin` (prevents cookie/localStorage theft)
+- **Host storage isolation**: `app.storage` (host-mediated `localStorage`) is namespaced `mcp-app:{appId}:{key}` with the `appId` stamped by the host, not the iframe payload — one app cannot read or overwrite another's values; a surface with no resolved `appId` is refused
 - **Permissions**: camera/microphone only granted if declared in `_meta.ui.permissions`
 - **CSP**: app-declared CSP from `_meta.ui.csp` enforced
 - **Scope enforcement**: every tool call checked against app's granted scopes

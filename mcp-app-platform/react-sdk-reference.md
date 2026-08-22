@@ -8,7 +8,7 @@ Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with Priv
 
 | Hook | Returns | Description |
 |------|---------|-------------|
-| `usePrivosApp()` | `McpApp` | MCP app instance for `app.rest()`, `app.uploadFile()`, and `callServerTool()` |
+| `usePrivosApp()` | `McpApp` | MCP app instance for `app.rest()`, `app.uploadFile()`, `app.storage`, and `callServerTool()` |
 | `usePrivosContext()` | `PrivosContext` | `userId`, `username`, `theme`, `roomId`, `roomName`, `userRoles`, `effectiveScopes?`, `roomSlug?`, `appId?`, `appUrl?` — see note below on extra runtime fields |
 | `usePrivosCapability(scope)` | `{ resolved, granted, scope }` | Presentation/degradation helper only — the Hub remains the sole authorization authority, this never gates real access |
 | `usePrivosTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call. Skips the fetch while any arg value is empty/null/undefined |
@@ -119,6 +119,44 @@ await app.uploadFile({
 
 > The app never exceeds the current user's own permissions — the server still
 > enforces per-room ACL and read-only restrictions on every call.
+
+### app.storage — persistent per-app key/value store (SDK ≥ 0.5)
+
+A small string key/value store the app can rely on across sessions. The app
+document runs in a **sandboxed opaque origin**, so its own `localStorage` throws
+or is wiped between loads. `app.storage` proxies over the host bridge to the
+**host's** `localStorage`, where the host writes each value under a per-app
+namespace — `mcp-app:{appId}:{key}` — stamping the `appId` itself (never trusting
+the iframe payload). One app therefore **cannot read or overwrite** another app's
+keys, and a surface with no resolved `appId` is refused rather than sharing a
+bucket. No manifest scope is required.
+
+```tsx
+const app = usePrivosApp();
+
+await app.storage.set('ui:language', 'vi');
+const lang = await app.storage.get('ui:language'); // 'vi' | null
+await app.storage.remove('ui:language');
+```
+
+| Method | Signature | Notes |
+|--------|-----------|-------|
+| `get` | `(key: string) => Promise<string \| null>` | `null` when never set |
+| `set` | `(key: string, value: string) => Promise<void>` | overwrites; values are strings — serialize objects yourself |
+| `remove` | `(key: string) => Promise<void>` | no-op if absent |
+
+**Scope & durability.** Isolated **per app** (by `appId`) and stored **per browser
+profile** — it is *not* synced across devices and is *not* per-user on its own
+(add a `userId` prefix to the key if two accounts may share a browser profile).
+Keep the server (`mcpapp.db`) as the source of truth for anything that must
+follow the user across devices, and use `app.storage` as a fast local cache or
+for device-local UI preferences.
+
+**Bridge protocol.** `app.storage` sends JSON-RPC requests `host/storage.get`,
+`host/storage.set`, `host/storage.remove` (params `{ key, value? }`) to the host
+over `postMessage`; the host replies `{ value }` / `{ ok: true }`. An app built
+against an SDK older than 0.5 can call these bridge methods directly against a
+namespace-aware host.
 
 ## usePrivosContext
 
