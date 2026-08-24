@@ -45,7 +45,8 @@ tools: [{
     ui: {
       resourceUri: 'ui://my-app/dashboard.html',
       permissions: [],                              // camera, microphone, etc.
-      csp: { 'script-src': ['https://cdn.example.com'] }
+      csp: { 'script-src': ['https://cdn.example.com'] },
+      hideAiChat: true                              // optional, see below
     }
   }
 }]
@@ -53,6 +54,17 @@ tools: [{
 
 - Tools **with** `_meta.ui` → iframe rendering in room tab
 - Tools **without** `_meta.ui` → text-only (no UI)
+
+### Hiding the hub AI chat launcher (`ui.hideAiChat`)
+
+Set `hideAiChat: true` on the tool that becomes the app's **room tab** entry point to opt that surface out of the hub AI chat: while the tab is active, no floating AI chat launcher icon is shown at all (including the room-level one). Leaving the tab restores the launcher. Use it when your app ships its own assistant UI and a second chat icon would confuse users.
+
+Notes:
+- Only a boolean literal `true` counts; the marketplace schema rejects non-boolean values at publish time.
+- With the launcher hidden the host reports `chatSurfaceSupported: false` over the bridge, so `host/chat.register` chat delegation is unavailable — the two mechanisms are alternatives, not layers.
+- The flag is scoped to the roomTab tool; declaring it on a sidebar/standalone UI tool has no effect (those surfaces have no launcher).
+- A hub chat window the user already opened before entering the tab stays open by design; only the launcher icon is suppressed.
+- Delivered like any manifest change: republish (marketplace) or version bump + admin Refresh → approve (standalone).
 
 ## 3. Build the UI
 
