@@ -12,6 +12,7 @@ Detailed API reference organized by category.
 | [Installations](./rest-installations.md) | Install/uninstall apps in rooms |
 | [Settings](./rest-settings.md) | Update app settings and permissions |
 | [Tool Execution](./rest-tool-call.md) | Execute MCP tools via REST |
+| [Notification Tool](./tools-notifications.md) | Create governed room-member notifications |
 | [UI Resources](./rest-ui-resource.md) | Fetch app UI HTML resources |
 | [Item Query](./items-query.md) | `items.query` — filtered, cursor-paginated item retrieval |
 

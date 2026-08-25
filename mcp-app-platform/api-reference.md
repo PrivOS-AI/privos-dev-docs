@@ -42,6 +42,7 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `mcpapp.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
 | `mcpapp.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
 | `mcpapp.bot.sendAttachment` | bot:message:send | Send photo/video/audio/document/voice to a room or DM (via fileId or fileUrl) |
+| `mcpapp.notifications.create` | `notifications:write` | Notify one active member of the app's approved room through bell, native mobile, and Web Push |
 | `mcpapp.app.getLocalData` | — | Get app's localData storage |
 | `mcpapp.app.setLocalData` | — | Set/update app's localData |
 | `mcpapp.app.deleteLocalData` | — | Delete key from localData |
@@ -219,6 +220,7 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `files:write` | Upload/update/delete files and folders |
 | `messages:read` | Read messages in authorized rooms |
 | `messages:send` | Send messages in authorized rooms |
+| `notifications:write` | Notify one active member of the approved room through bell, native mobile, and Web Push |
 | `users:read` | Read user profiles |
 | `rooms:read` | Read room metadata and members |
 | `rooms:write` | Create/update rooms |
