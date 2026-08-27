@@ -6,6 +6,29 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-08-27
+
+### Publish MCP apps from the folder — `privos-app publish` CLI
+
+**Summary:** Publishing an MCP app version no longer means hand-driving Portal
+calls or a bespoke `.mjs` script. `privos-app publish` (shipped in
+`@privos_ai/app-server@0.9.0`, bin `privos-app`, `privos-app-lint` alias) runs
+package → lint → authorize → upload → version → submit from the app folder.
+Authorization is either a one-time **browser approval** on `client.privos.io`
+(OAuth device-code → 60-minute publish grant bound to one archive + listing) or a
+**publisher token** (`pvp_…`, hashed, scoped, revocable, ≤ 90-day) whose
+create/rotate/revoke are step-up-gated (email code / magic link + TOTP). Every CLI
+credential is a scoped grant or a hashed token limited to the publish route
+allowlist — never a browser session. Always on in production (no feature flag).
+`create-privos-mcp-app@0.4.0` scaffolds the `publish:marketplace` script and the
+`privos-app-publish` skill into `.claude/`, `.privos/`, `.agents/`, `.gemini/`.
+Docs: [Publishing CLI](./mcp-app-platform/publishing-cli.md).
+
+**Changes:**
+- `privos-portal` (`5b6b674`) — publisher-auth dispatcher (session / `pvp_` / `pvg_`), `MarketplacePublisherToken` + step-up-gated routes, device-code publish authorization + HMAC grant, publish-route allowlist, GC job. Deployed to all 3 control nodes.
+- `privos-cloud` (`c001bab`) — `/marketplace/publish` approval page + Publisher tokens panel in Creator Studio.
+- `@privos_ai/app-server@0.9.0` — `privos-app` CLI + `privos-app-publish` skill; `create-privos-mcp-app@0.4.0` scaffolds them.
+
 ## 2026-07-13
 
 ### Cancel in-flight AI Chat runs — `sandbox:ai-chat:write` gains `ai-messages.cancel`
