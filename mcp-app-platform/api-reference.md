@@ -232,12 +232,12 @@ GET /api/v1/file-management.files/{fileId}/content/{filename}
 | `db:read` | Read records, query, count, aggregate |
 | `db:write` | Create/update/delete records (soft-delete) |
 | `sandbox:generate` | Run a Sandbox agent generation (sync/async), upload files to attach, and — for an `operationId`-dispatched attempt — observe/cancel it and read its LLM evidence (see [Auth & REST Integration](./auth-and-rest-integration.md#idempotent-dispatch-with-operationid)) |
-| `sandbox:skills:use` | List + select which Sandbox skills are enabled for a room (room admin) |
+| `sandbox:skills:use` | List catalog (with per-room `selected`), read the room selection (`rooms.getPrivOSSandboxSelection`), and enable/disable skills + agent sets for a room — replace or merge mode (room admin) |
 | `sandbox:botkey:push` | Provision the room's Sandbox project + push/refresh its bot key (room admin) |
 | `sandbox:wake` | Wake/establish a room's Sandbox VM without re-pushing the bot key (`agents.sandbox.wake`) + poll its state (`agents.sandbox.vmState`) (room admin) |
 | `sandbox:ai-chat` | List a room's AI Chat sessions and read their message history (`ai-messages.sessions` / `.getSession` / `.list`) |
 | `sandbox:ai-chat:write` | Send messages in a room's AI Chat, start the agent generation, and cancel an in-flight run (`ai-messages.send` / `.startGeneration` / `.cancel`) |
-| `sandbox:agent-sets:upload` | Submit agent-set archives to the workspace Agent Factory for an admin to confirm (`agents.sandbox.agentSets.preview` / `.confirm`). Workspace-context, interactive user only, risk `critical`; the endpoints additionally enforce the native `manage-privos-agent-sets` permission, so the scope only widens reachable paths |
+| `sandbox:agent-sets:upload` | Manage the workspace Agent Factory catalog: submit agent-set archives for an admin to confirm (`agents.sandbox.agentSets.preview` / `.confirm`) and remove a set (`agents.sandbox.agentSets.delete`, refused while any room still references it). Workspace-context, interactive user only, risk `critical`; the endpoints additionally enforce the native `manage-privos-agent-sets` permission, so the scope only widens reachable paths |
 
 ### Tools that do NOT require a scope
 

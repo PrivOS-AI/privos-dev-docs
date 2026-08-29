@@ -363,43 +363,62 @@ curl "https://<hub>/api/v1/agents.sandbox.vmState?roomId=ROOM_ID" \
 # → { "vmState": "running" }
 ```
 
-## Selecting room skills (sync + remove)
+## Selecting room skills & agent sets
 
-Per-room skill selection is a single **sync** endpoint that takes the **full desired set**
-of `componentIds`. Adding a skill = include its id; removing one = re-sync without it.
-There is no separate delete endpoint — sync is the add/remove mechanism. Both routes
-(`app/api/server/v1/rooms.ts`):
+Per-room plugin selection covers standalone skills (`componentIds`) and agent sets
+(`agentSetIds`). Three room routes (`app/api/server/v1/rooms.ts`):
 
 | Path | Method | Purpose |
 | --- | --- | --- |
-| `rooms.listPrivOSSandboxSkills` | POST | List the skills available to the room → `{ skills: [{ id, name, description? }] }` |
-| `rooms.syncPrivOSSandboxSkills` | POST | Set the room's enabled skills to exactly `componentIds`. Optional `agentSetIds` syncs the room's agent-set selection the same way: **omitted** leaves the current selection untouched, an explicit **`[]` clears it** — never default it to `[]` on a components-only sync |
+| `rooms.listPrivOSSandboxSkills` | POST | Workspace **catalog** annotated per room → `{ skills: [{ id, name, description?, type?, selected }] }`. `type` is `'skill' \| 'agent_set'`; `selected` reflects the room's stored selection |
+| `rooms.syncPrivOSSandboxSkills` | POST | Enable/disable for the room — replace mode or merge mode (below) |
+| `rooms.getPrivOSSandboxSelection` | GET | Read the room's selection: hub-stored lists + the sandbox's effective (installed) selection → `{ source, stored: { skills, agentSets }, sandbox: { selectedComponents, selectedAgentSets } \| null, projectIds }` |
+
+### Replace vs merge on `rooms.syncPrivOSSandboxSkills`
+
+The two modes are mutually exclusive in one request:
+
+- **Replace:** `componentIds?` / `agentSetIds?` — each supplied array is the COMPLETE
+  desired selection for its own kind. **Omitted** leaves that kind untouched, an explicit
+  **`[]` clears it** — never default a kind to `[]` on a one-kind sync.
+- **Merge:** `addComponentIds?` / `removeComponentIds?` / `addAgentSetIds?` /
+  `removeAgentSetIds?` — applied on top of the room's stored selection, so an app can
+  enable its own agent set without knowing (or clobbering) the rest of the room's
+  selection. `remove` wins over `add` for the same id.
+
+The response reports `{ source, succeeded, failed, applied: { componentIds, agentSetIds } }`
+— `applied` is the complete selection that was synced.
 
 ### Reachability
 
-- **Frontend (`app.rest()`):** reachable with the **`sandbox:skills:use`** scope.
-- **Server-side gate:** both routes enforce **`edit-room`** (room admin), independent of the
-  scope. The selected skills sync into the room project's `.privos/skills/` and are picked
-  up on the next agent generation.
+- **Frontend (`app.rest()`):** all three routes reachable with the **`sandbox:skills:use`**
+  scope.
+- **Server-side gate:** the sync/list routes enforce **`edit-room`** (room admin); the
+  selection read enforces room access. The selected skills sync into the room project's
+  `.privos/skills/` and are picked up on the next agent generation.
 
 ```ts
-// List options
+// List catalog + per-room selected flags in one read
 const { body: avail } = await app.rest({
   method: 'POST', path: 'rooms.listPrivOSSandboxSkills',
   body: { rid: roomId, useGlobal: true },
 });
 
-// Enable exactly these (omit an id to remove it)
+// Replace: enable exactly these (omit an id to remove it)
 await app.rest({
   method: 'POST', path: 'rooms.syncPrivOSSandboxSkills',
   body: { rid: roomId, componentIds: ['skill-a', 'skill-b'] },
 });
 
-// Also sync the room's agent-set selection (omit agentSetIds to leave it untouched;
-// pass [] to clear it)
+// Merge: enable this app's agent set without touching anything else
 await app.rest({
   method: 'POST', path: 'rooms.syncPrivOSSandboxSkills',
-  body: { rid: roomId, componentIds: ['skill-a'], agentSetIds: ['set-1'] },
+  body: { rid: roomId, addAgentSetIds: ['set-1'] },
+});
+
+// Read back the effective selection (covers syncs done in the sandbox Board UI)
+const { body: sel } = await app.rest({
+  method: 'GET', path: `rooms.getPrivOSSandboxSelection?roomId=${roomId}`,
 });
 ```
 
@@ -407,22 +426,23 @@ await app.rest({
 
 A workspace administrator can upload agent-set archives through an app. Because an agent set
 carries executable skills, this is the highest-risk scope a marketplace app can request
-(risk `critical`, workspace context, interactive user only). Two REST routes
+(risk `critical`, workspace context, interactive user only). Three REST routes
 (`app/api/server/v1/agent-privos-sandbox-agent-sets.ts`):
 
 | Path | Method | Purpose |
 | --- | --- | --- |
 | `agents.sandbox.agentSets.preview` | POST | Submit archives (`{ archives: [{ fileName, base64 }] }`) → the board's projected item list + a `sessionId` |
 | `agents.sandbox.agentSets.confirm` | POST | Commit a previewed session (`{ sessionId }`) — all-or-nothing |
+| `agents.sandbox.agentSets.delete` | POST | Remove an agent set from the workspace catalog (`{ agentSetId }`). Refused with `{ error: 'agent-set-in-use', referencedRooms: [...] }` while any room still references the set — disable it there first via merge-mode `removeAgentSetIds` |
 
 ### Reachability
 
-- **Frontend (`app.rest()`):** both routes reachable with the **`sandbox:agent-sets:upload`**
+- **Frontend (`app.rest()`):** all routes reachable with the **`sandbox:agent-sets:upload`**
   scope (`server/services/mcp-rest-allowlist.ts`).
-- **Server-side gate:** both routes enforce the native **`manage-privos-agent-sets`**
+- **Server-side gate:** all routes enforce the native **`manage-privos-agent-sets`**
   (workspace admin) permission, so the scope only widens reachable paths — an app can never
-  install a set on its own authority. The board's secure extraction remains the sole
-  validation authority; the hub only streams bytes within the board's own limits.
+  install or remove a set on its own authority. The board's secure extraction remains the
+  sole validation authority; the hub only streams bytes within the board's own limits.
 - **App attestation:** the hub attests the calling app itself via an `x-mcp-app-attestation`
   token minted server-side (`server/services/mcp-app-attestation.ts`). The app identity is
   derived from that token — any app id claimed in a request body is ignored.
