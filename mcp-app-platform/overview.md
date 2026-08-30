@@ -63,6 +63,7 @@ PrivOS Hub Host
 | [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
 | [React SDK](./react-sdk-reference.md) | `@privos_ai/app-react` hooks (`usePrivosApp`, `usePrivosContext`, `useLists`, etc.) |
+| [Theme Inheritance](./theme-inheritance.md) | How an app inherits the workspace theme — `--base-*` token broadcast, `hostCapabilities.theme`, SDK auto-apply |
 | [Database API](./apis/tools-database.md) | `mcpapp.db.*` tools — schema, CRUD, query, references |
 | [Admin Guide](./admin-guide.md) | Register direct/relay apps, configure install perms |
 | [Security & Data Model](./security-and-data-model.md) | Sandbox, OAuth, relay security, schema |

@@ -9,7 +9,7 @@ Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with Priv
 | Hook | Returns | Description |
 |------|---------|-------------|
 | `usePrivosApp()` | `McpApp` | MCP app instance for `app.rest()`, `app.uploadFile()`, `app.storage`, and `callServerTool()` |
-| `usePrivosContext()` | `PrivosContext` | `userId`, `username`, `theme`, `roomId`, `roomName`, `userRoles`, `effectiveScopes?`, `roomSlug?`, `appId?`, `appUrl?` — see note below on extra runtime fields |
+| `usePrivosContext()` | `PrivosContext` | `userId`, `username`, `theme`, `roomId`, `roomName`, `userRoles`, `effectiveScopes?`, `roomSlug?`, `appId?`, `appUrl?`, `themeTokens?` — see note below on extra runtime fields |
 | `usePrivosCapability(scope)` | `{ resolved, granted, scope }` | Presentation/degradation helper only — the Hub remains the sole authorization authority, this never gates real access |
 | `usePrivosTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call. Skips the fetch while any arg value is empty/null/undefined |
 | `useLists(roomId)` | `{ data, loading, error, refetch }` | Lists in room |
@@ -163,7 +163,7 @@ namespace-aware host.
 Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:
 
 ```tsx
-const { roomId, userId, username, theme, roomName, userRoles, effectiveScopes, roomSlug, appId, appUrl } = usePrivosContext();
+const { roomId, userId, username, theme, roomName, userRoles, effectiveScopes, roomSlug, appId, appUrl, themeTokens } = usePrivosContext();
 ```
 
 The TypeScript `PrivosContext` type only declares the fields above, but the hook's
@@ -180,6 +180,11 @@ const isAgentRoom: boolean | undefined = ctx.isAgentRoom;
 ```
 
 - `theme` (`'light'` | `'dark'`) — updates in real-time when the user toggles theme
+- `themeTokens` (`Record<string, string>`, optional) — the 12 curated `--base-*` workspace design
+  tokens for the current mode, re-sent on every mode flip and live admin theme save.
+  `PrivosAppProvider` already writes each one onto this document's `<html>` as a CSS custom
+  property automatically — see [Theme Inheritance](./theme-inheritance.md) for the full contract
+  and how to consume it directly instead of (or alongside) the auto-applied CSS variables.
 - `appId` / `roomSlug` / `appUrl` (`basic:information`) — this app's id, the room slug, and the deep-link URL to the app inside the room (`${ROOT_URL}/{channel|direct|group}/{roomSlug}/mcpapp/{appId}`)
 
 Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).

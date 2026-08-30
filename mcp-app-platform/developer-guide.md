@@ -217,6 +217,11 @@ app.post('/.well-known/mcp/register', express.json(), async (req, res) => {
 
 ## 7. Theme Sync (Light/Dark Mode)
 
+> For the full workspace colour/radius/font token contract (`themeTokens` on
+> `HOST_CONTEXT_CHANGED`, `hostCapabilities.theme`, and the `@privos_ai/app-react` SDK's automatic
+> `var(--base-*)` application) see [Theme Inheritance](./theme-inheritance.md). This section covers
+> just the `theme` light/dark flag and a manually-maintained fallback palette.
+
 PrivOS pushes theme changes to apps in real-time via `HOST_CONTEXT_CHANGED` PostMessage.
 
 ### How It Works
@@ -291,7 +296,7 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
 | `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready |
-| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change) |
+| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips and live theme saves — see [Theme Inheritance](./theme-inheritance.md)) |
 | `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `mcpapp.bot.sendMessage`, `mcpapp.db.create`). For lists/files/messages/rooms/users, use the REST API via `app.rest()` instead. |
 | `rooms/upload` | App → host | `{ roomId, fileName, base64Data, mimeType?, description?, uploadOnly? }` | `{ message: ... }` (default) **or** `{ file: { _id, name, type, size, url } }` (when `uploadOnly: true`) | Upload a file into a room using the host user's credentials. Default behavior also posts a user-authored message. Pass `uploadOnly: true` to upload only (no message) — useful when you want a bot to be the sole author of the resulting message via `mcpapp.bot.sendAttachment`. |
 | `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |

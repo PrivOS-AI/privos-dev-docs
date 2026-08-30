@@ -6,6 +6,12 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-08-30
+
+**Docs + reference demo:** Added [`mcp-app-platform/theme-inheritance.md`](./mcp-app-platform/theme-inheritance.md) documenting the `--base-*` theme-token broadcast contract, and a **Theme inheritance** tab in the `privos-mcp-app-demo` reference app showing it live.
+
+---
+
 ## 2026-08-27
 
 ### Publish MCP apps from the folder — `privos-app publish` CLI
