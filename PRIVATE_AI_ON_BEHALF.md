@@ -62,9 +62,9 @@ credential the transport does not carry. See [`ROOM_CUSTOM_PERMISSIONS.md`](ROOM
 ("Limitation — no agent write-on-behalf"). (An agent given the room `owner`/`admin` role can write as
 **itself** — a separate, deliberate config, not this feature.)
 
-## Rollout
+## Availability
 
-Behind the boolean setting **`AI_Chat_On_Behalf_Enabled`** (default **OFF**). The setting is a
-server-enforced, per-turn kill switch: when off, on-behalf sessions cannot be created and existing
-ones stop accepting new turns; legacy shared-room AI chat is unaffected either way. Enable on the dev
-tenant first.
+Always on wherever the universal assistant is available — there is no separate feature flag. The
+control appears for any member inside a shared (non-DM) room, and every turn is still gated by
+`canAccessUniversalAssistant` (the universal-assistant master switch + per-user allowlist). Disabling
+the universal assistant disables this along with it.
