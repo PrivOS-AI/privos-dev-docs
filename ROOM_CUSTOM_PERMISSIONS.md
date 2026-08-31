@@ -93,8 +93,28 @@ every chokepoint immediately, and an async sweep removes their subscriptions to 
 they can no longer read; deleting a permission also pulls the dangling id from item grant arrays.
 Residual: already-issued presigned file URLs live until their TTL.
 
+## Limitation — no agent write-on-behalf
+
+Distinguish two cases:
+
+- **As a user (impersonation) — not supported.** An agent can **read** items honoring these grants
+  under a user's ACL (via the user's own app-UI session, or the planned private "on my behalf"
+  assistant session), but an **autonomous agent cannot write on a user's behalf** — it cannot set
+  `additionalReaders`/`additionalEditors`, reassign, edit, or delete *as the user*. The sandbox agent
+  authenticates as the app's execution bot (not any user) over a per-`(room,bot)` transport that
+  carries no per-turn, per-user, un-spoofable identity. Autonomous write-as-a-user is deferred pending
+  a per-attempt credential foundation.
+- **As itself (its own bot identity) — supported, config-gated.** `setItemAccess` and the item write
+  gates authorize against the **acting principal** via a room-role check. So if a room owner
+  deliberately gives the agent bot the room `owner`/`admin` role, the bot **can** set grants, reassign,
+  and edit/delete isolated items — attributed to the bot, scoped to the authority granted. Bound the
+  trigger surface by controlling room membership. (A bot can never be *assigned* a custom permission as
+  a grantee — that is human-only; this is about the bot holding a room role.)
+
 ## See also
 
+- [`PRIVATE_AI_ON_BEHALF.md`](PRIVATE_AI_ON_BEHALF.md) — the private "on my behalf" AI-chat session
+  reads a shared room's items under the member's own ACL (honoring these grants); reads only.
 - [`room-scoped-apis/items.md`](room-scoped-apis/items.md) — the internal item routes now filter
   isolated items by visibility and gate writes.
 - [`MCP_APP_PLATFORM.md`](MCP_APP_PLATFORM.md) — scope declaration + mediated tool calls.
