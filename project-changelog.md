@@ -6,6 +6,26 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-08-31
+
+### Room custom permissions & item access grants (`additionalReaders` / `additionalEditors`)
+
+**Summary:** Room owners/admins can define per-room **custom permissions** and assign
+them to human members, then grant read/edit on individual **isolated-list** items to
+permission holders via two new item fields, `additionalReaders` and `additionalEditors`
+(additive; inert on non-isolated lists; edit implies read; read grants cascade to
+sub-items, write does not). Isolated-list visibility is split into read vs write
+predicates resolved from one cached subscription read. New REST endpoints
+`rooms.customPermissions.{list,create,update,delete,assign,unassign,assignments,members}`
+(owner/admin, human-only assignment) and MCP scopes `custom-permissions:read` /
+`custom-permissions:write` with tools `mcpapp.rooms.customPermissions.{list,members,setItemAccess}`
+(catalog version `2026-08-31`). Per-item write enforcement on REST/internal/MCP routes ships
+behind `Isolated_Item_Write_ACL_Enforce` (log-only by default); a read bypass on the internal
+room item routes is closed and item comment-room subscriptions are reclaimed on grant revocation.
+Docs: [Room Custom Permissions](./ROOM_CUSTOM_PERMISSIONS.md).
+
+---
+
 ## 2026-08-30
 
 **Docs + reference demo:** Added [`mcp-app-platform/theme-inheritance.md`](./mcp-app-platform/theme-inheritance.md) documenting the `--base-*` theme-token broadcast contract, and a **Theme inheritance** tab in the `privos-mcp-app-demo` reference app showing it live.

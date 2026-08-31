@@ -19,6 +19,12 @@ All endpoints require:
 - `x-api-key`: Internal API key
 - `Authorization: Bearer <JWT_TOKEN>`: Room-specific JWT token
 
+> **Isolated lists:** on a list with `isolatedList: true` these routes now filter reads and gate
+> writes by per-item visibility. Items expose optional `additionalReaders` / `additionalEditors`
+> (custom-permission ids) that additively grant read / read+edit to permission holders. See
+> [Room Custom Permissions](../ROOM_CUSTOM_PERMISSIONS.md). Per-item write enforcement is behind
+> `Isolated_Item_Write_ACL_Enforce` (log-only by default).
+
 ---
 
 ## Endpoints
