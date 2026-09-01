@@ -1,6 +1,14 @@
 # Building app-level authorization on isolated-list data
 
-A guide for MCP app builders: how to give your app a real per-record authorization model —
+> **For AI coding agents / assistants:** this file is the authoritative spec for adding per-record
+> read/write authorization to a PrivOS MCP app. Read it end to end before writing code. Do exactly
+> what the **Rules (MUST / MUST NOT)** section says and follow the **Implementation checklist**; do
+> not invent your own permission storage, roles table, or ACL engine — the Hub already enforces this
+> model. The exact tool argument shapes are in the tables below (they are the contract); the runnable
+> reference is the `privos-mcp-app-demo` **Custom Permissions** tab (`src/ui/custom-permissions-panel.tsx`).
+> If a rule here conflicts with older docs, this file wins.
+
+A guide for MCP app builders (human or AI): how to give your app a real per-record authorization model —
 "who may read this record, who may edit it" — **without** writing your own permission engine, by
 reusing two platform primitives:
 
@@ -43,20 +51,32 @@ chokepoint (revoking the permission drops the access).
 
 ---
 
-## Who is allowed to do what (the invariants you must design around)
+## Rules (MUST / MUST NOT)
 
-- **Only a room owner/admin may set `additionalReaders` / `additionalEditors` or the `ASSIGNEE`
-  field on an isolated-list item.** Enforced by one Hub policy (`checkItemGrantFieldWrite`) on every
-  write path, via a raw owner/admin role check — a plain member (or a DM participant) is refused.
-  So the "grant access" actions in your UI only work when the current user is an owner/admin; design
-  the affordance to appear/enable accordingly and surface the Hub's denial politely otherwise.
-- **Custom permissions are assigned to humans only.** Bot and `app` principals cannot be *granted*
-  a permission (be a holder). This model is for human role-based access, not for widening a bot's reach.
-- **Every permission id must exist in the room's catalog.** Setting a grant to an unknown id is
-  rejected.
-- Your app acts **as the current user** (see next section), so it can never exceed what that user
-  could do in the Lists UI — an app installed by a member simply gets "permission denied" on the
-  owner-only steps. That is the security guarantee, not a limitation to work around.
+These are enforced by the Hub; your implementation must respect them or it will get runtime denials.
+
+- **MUST** store records that need per-record ACL on a list created with `isolatedList: true`. On a
+  non-isolated list, `additionalReaders`/`additionalEditors` are **inert** (the item is already
+  room-readable) — do not rely on them there.
+- **MUST** do all reads/writes on the current user's session via the `mcpapp.*` tools (the mediated
+  `execution: 'user'` path). Your app acts AS the user and can never exceed that user's Lists-UI
+  powers — this is the security guarantee.
+- **MUST** treat setting `additionalReaders` / `additionalEditors` / `ASSIGNEE` on an isolated item
+  as **room owner/admin only** (Hub policy `checkItemGrantFieldWrite`, raw role check). Gate the
+  "grant access" affordance on the current user being owner/admin, and surface the Hub's denial
+  politely when they are not.
+- **MUST** use only permission ids that exist in the room's catalog (`...customPermissions.list`);
+  an unknown id is rejected.
+- **MUST** put a read-only grant in `additionalReaders` and a read+write grant in `additionalEditors`
+  (do not also list the same id in `additionalReaders` when it is already an editor).
+- **MUST NOT** build your own roles table, permission store, or ACL check — read/enforce through the
+  Hub tools; it is the source of truth and applies grants at every chokepoint (incl. revocation).
+- **MUST NOT** try to assign a custom permission to a bot or `app` principal — roles are granted to
+  **human members only**.
+- **MUST NOT** route per-user reads/writes through internal service-key endpoints — those bypass the
+  per-user ACL by design.
+- **MUST NOT** rely on an AI agent to set grants or edit items *as a user* — grant management is a
+  human owner/admin action (see "Limits to design for").
 
 ---
 
@@ -106,6 +126,29 @@ To *inspect* access ("who can read/edit this record, what roles exist here?"), r
 view to degrade to role names without member identities when the viewer is not owner/admin.
 
 ---
+
+## Implementation checklist (agent-actionable)
+
+When adding this to an app, do these in order:
+
+1. **Declare scopes** in `privos-app.json` `permissions[]`: `lists:read` (+ `lists:write` if the app
+   creates/edits records), and `custom-permissions:read` / `custom-permissions:write` if the app shows
+   or sets grants. Give each a `reason` + `degradedBehavior`. Re-run `npm run build` (regenerates +
+   lints the manifest) after any manifest change.
+2. **Model records as isolated-list items** (`mcpapp.lists.create { isolatedList: true }`), not a
+   custom store — you get the row-level ACL for free.
+3. **Read via the user session** with `mcpapp.lists.getItems` / `mcpapp.lists.query*` — the returned
+   set is already filtered to what the current user may see; render exactly that (a shorter list is
+   correct, not an error).
+4. **Show roles + access** (optional) with `mcpapp.rooms.customPermissions.list` (any member) and
+   `...members` (owner/admin only → degrade to role names without member identities otherwise).
+5. **Grant/revoke** with `mcpapp.rooms.customPermissions.setItemAccess { itemId, additionalReaders?,
+   additionalEditors? }`, gated in the UI on the current user being room owner/admin; wrap it so a Hub
+   denial (non-owner) is shown as a clear message, not a crash.
+6. **Do not** create/assign permissions from the app — those are human owner/admin REST actions
+   (`rooms.customPermissions.create` / `.assign`).
+7. **Handle the optional-scope-absent case**: if `custom-permissions:*` is not granted, disable the
+   grant UI with the declared degraded behavior rather than calling the tool.
 
 ## Verifying it works (two/three accounts, real Hub)
 
