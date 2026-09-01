@@ -113,6 +113,9 @@ Distinguish two cases:
 
 ## See also
 
+- [`APP_AUTHORIZATION_WITH_ISOLATED_LISTS.md`](APP_AUTHORIZATION_WITH_ISOLATED_LISTS.md) — builder
+  guide: how an MCP app uses isolated lists + these Readable/Editable grants as its own per-record
+  authorization model (with the `privos-mcp-app-demo` Custom Permissions tab as the worked example).
 - [`PRIVATE_AI_ON_BEHALF.md`](PRIVATE_AI_ON_BEHALF.md) — the private "on my behalf" AI-chat session
   reads a shared room's items under the member's own ACL (honoring these grants); reads only.
 - [`room-scoped-apis/items.md`](room-scoped-apis/items.md) — the internal item routes now filter
