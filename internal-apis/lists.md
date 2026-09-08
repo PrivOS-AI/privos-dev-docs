@@ -386,6 +386,19 @@ owner/admin, the item's creator, and any user in an `ASSIGNEE` field on that ite
 field is what drives this — assigning a user is how you grant them visibility
 into an otherwise isolated item.
 
+Members holding a room custom permission named in an item's `additionalReaders` /
+`additionalEditors` also see it (see `ROOM_CUSTOM_PERMISSIONS.md`).
+
+**Delegated viewer on the internal room routes.** Every `GET /api/v1/internal/rooms/:roomId/*`
+route accepts an optional `x-privos-delegated-user` header carrying a hub-minted per-attempt
+grant (RS256, `typ: privos-delegated-read`). The header is set by the tenant sandbox proxy, never by
+a client or container (inbound copies are stripped). When it verifies, the isolated-list filters run
+for the grant's `sub` instead of the bot bearer — nothing else about the request changes. A bad
+signature or a bearer that is not the grant's bot returns `403 delegated-read-forgery`; any non-GET
+with the header returns `403 delegated-read-write-denied`; an unknown/expired/revoked grant, room
+mismatch, lost membership or the setting `Agent_Delegated_Read_Enabled` being OFF silently drops
+the header and answers as the bot. Details: `DELEGATED_READ_AS_ASKER.md`.
+
 ---
 
 ### Manage Field Definitions

@@ -97,13 +97,14 @@ Residual: already-issued presigned file URLs live until their TTL.
 
 Distinguish two cases:
 
-- **As a user (impersonation) — not supported.** An agent can **read** items honoring these grants
-  under a user's ACL (via the user's own app-UI session, or the planned private "on my behalf"
-  assistant session), but an **autonomous agent cannot write on a user's behalf** — it cannot set
-  `additionalReaders`/`additionalEditors`, reassign, edit, or delete *as the user*. The sandbox agent
-  authenticates as the app's execution bot (not any user) over a per-`(room,bot)` transport that
-  carries no per-turn, per-user, un-spoofable identity. Autonomous write-as-a-user is deferred pending
-  a per-attempt credential foundation.
+- **As a user (impersonation) — reads yes, writes no.** An agent can **read** items honoring these
+  grants under a user's ACL in three places: the user's own app-UI session, the private "on my behalf"
+  assistant session, and — behind `Agent_Delegated_Read_Enabled` — the room bot in the AI Chat window
+  of a dedicated-mode room ([`DELEGATED_READ_AS_ASKER.md`](DELEGATED_READ_AS_ASKER.md)). The
+  per-attempt read grant is GET-only by construction: any write carrying it is refused with
+  `delegated-read-write-denied`. An **autonomous agent cannot write on a user's behalf** — it cannot
+  set `additionalReaders`/`additionalEditors`, reassign, edit, or delete *as the user*; writes stay a
+  human action.
 - **As itself (its own bot identity) — supported, config-gated.** `setItemAccess` and the item write
   gates authorize against the **acting principal** via a room-role check. So if a room owner
   deliberately gives the agent bot the room `owner`/`admin` role, the bot **can** set grants, reassign,
@@ -118,6 +119,8 @@ Distinguish two cases:
   authorization model (with the `privos-mcp-app-demo` Custom Permissions tab as the worked example).
 - [`PRIVATE_AI_ON_BEHALF.md`](PRIVATE_AI_ON_BEHALF.md) — the private "on my behalf" AI-chat session
   reads a shared room's items under the member's own ACL (honoring these grants); reads only.
+- [`DELEGATED_READ_AS_ASKER.md`](DELEGATED_READ_AS_ASKER.md) — the sandbox room bot reading isolated
+  lists as the asker in the AI Chat window (dedicated rooms, flag-gated, reads only).
 - [`room-scoped-apis/items.md`](room-scoped-apis/items.md) — the internal item routes now filter
   isolated items by visibility and gate writes.
 - [`MCP_APP_PLATFORM.md`](MCP_APP_PLATFORM.md) — scope declaration + mediated tool calls.

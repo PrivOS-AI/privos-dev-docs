@@ -56,6 +56,9 @@ If PrivOS Sandbox errors, the bot sends: *"Sorry, I encountered an error process
 
 ## Engaging an Agent Outside Its Room (mentions & replies)
 
+Mention and thread replies are room-visible, so they always answer with the bot's own access —
+isolated lists are never read as the mentioning user there (see `DELEGATED_READ_AS_ASKER.md`).
+
 In shared rooms where an agent bot is a member (`server/configuration/bot.ts`), the agent
 is engaged when a message addresses it. Three address forms are equivalent and pass
 through the same permission gates:
@@ -67,6 +70,20 @@ through the same permission gates:
    authored (covers agent broadcasts that have no ownership record).
 
 A message the agent itself authored never re-engages it.
+
+## Sandbox mode: collocated vs dedicated
+
+A room's agent runs in one of two sandbox modes, chosen per room (proxy-persisted project `mode`):
+
+| Mode | Container | Built-in tools | Use |
+|---|---|---|---|
+| **collocated** (default on tenants seeded with collocation) | shared VM core for many rooms/bots | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill` only — `Bash`, `Task*` and `mcp__*` are **denied by policy** | cheap chat agents without shell skills |
+| **dedicated** | one container per `(room, bot)` | full set incl. `Bash`/`Task*` | agents whose skills run scripts (the hub `privos-list` / `privos-assistant` skills need `Bash`), and delegated reads (`DELEGATED_READ_AS_ASKER.md`) |
+
+Symptoms of a skill room left collocated: the agent reports "no shell / Bash tool available", and
+the AI Chat window shows the `dedicated-mode-required` notice. Switching is an operator action on
+the tenant sandbox proxy (`POST /api/sandbox/projects/<projectId>/mode {"mode":"dedicated"}` then
+`/start`); the hub sends the room's `collocated` directive on every dispatch.
 
 ## Context Files
 

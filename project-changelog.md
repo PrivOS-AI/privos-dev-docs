@@ -6,6 +6,28 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-09-08
+
+### Delegated read as the asker — sandbox room bot in the AI Chat window
+
+**Summary:** Behind the new workspace setting `Agent_Delegated_Read_Enabled` (default OFF), a
+room's default agent bot answering in the **AI Chat window** of a **dedicated-mode** room reads
+the room's isolated lists with the **asker's** access (owner/admin all; creator, assignee and
+`additionalReaders`/`additionalEditors` holders their own items; plain member none). The hub
+mints a per-attempt RS256 read grant (`typ: privos-delegated-read`, ≤ 15 min), registers it
+with the tenant sandbox proxy over the admin tier before dispatch, the proxy injects
+`x-privos-delegated-user` only on allow-listed GET egress while one attempt is live, and every
+`internal/rooms` GET verifies it (forgery → 403 `delegated-read-forgery`, non-GET → 403
+`delegated-read-write-denied`, everything else degrades to the bot view with a
+`delegated-read-degraded` notice). Reads only; mention/thread replies, collocated rooms,
+successor attempts and `assistant.*` stay on the bot's own access. AI Chat window sessions are
+now creator-only (join/access-request/auto-approve refused for window sessions). Also closes a
+pre-existing unfiltered `internal/rooms/:rid/lists/:listId` read and makes
+`GET internal/rooms/:rid/lists` return the first page when `offset`/`count` are omitted. Setting
+OFF = previous behaviour, no redeploy. Requires the matching sandbox proxy (board forwards
+`/api/delegated-read/*`). Docs: [Delegated read as the asker](./DELEGATED_READ_AS_ASKER.md),
+[Agent rooms — sandbox mode](./agent-system/agent-rooms.md#sandbox-mode-collocated-vs-dedicated).
+
 ## 2026-08-31
 
 ### Room custom permissions & item access grants (`additionalReaders` / `additionalEditors`)

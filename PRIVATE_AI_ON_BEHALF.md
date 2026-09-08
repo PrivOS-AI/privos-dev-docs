@@ -68,3 +68,11 @@ Always on wherever the universal assistant is available — there is no separate
 control appears for any member inside a shared (non-DM) room, and every turn is still gated by
 `canAccessUniversalAssistant` (the universal-assistant master switch + per-user allowlist). Disabling
 the universal assistant disables this along with it.
+
+## Related: the sandbox room bot in the AI Chat window
+
+The same per-persona result is available from a room's **default agent bot** (sandbox agent with
+skills) when a member uses the room's **AI Chat window**, via a per-attempt read grant instead of a
+DM surface. Unlike this feature it is **off by default** (`Agent_Delegated_Read_Enabled`), requires
+the room's sandbox in **dedicated mode**, and never applies to `@mention`/thread replies. See
+[`DELEGATED_READ_AS_ASKER.md`](DELEGATED_READ_AS_ASKER.md).
