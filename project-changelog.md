@@ -6,6 +6,27 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-09-10
+
+### Isolated-list item attachments — write-side authorization
+
+**Summary:** Closed a gap where mutations of an isolated-list item's attachments were gated by
+the **read** predicate (upload) or **nothing** beyond room-write (rename/move/delete of file and
+folder). A user who could only *see* an item (a read grant, or a sibling-item assignee) could
+upload into, rename, move, or delete that item's files — and a move could relocate the file to a
+channel-public folder. Added `canWriteItemFolder` / `canWriteFileByItemFolder`
+(`apps/meteor/app/api/server/lib/list-item-folder-access.ts`) delegating to
+`isItemWritableInIsolatedList` (owner/admin, creator, assignee, or `additionalEditors` only —
+`additionalReaders` never grants write, and write does not cascade through ancestors). Wired into
+upload, `PUT files/:fileId` (source + move destination), `files/:fileId/rename`,
+`DELETE files/:fileId`, `PUT folders/:folderId`, `folders/:folderId/rename`, and
+`DELETE folders/:folderId` in `fileManagement.ts`. Gates run after the existing room-write/shared
+gates, so they only tighten. Non-isolated lists, deleted items, and non-item folders are
+unaffected. Covered by `list-item-folder-access.spec.ts` (7 tests). Docs:
+[Isolated-list item attachments](./file-management/isolated-list-item-attachments.md).
+
+---
+
 ## 2026-09-08
 
 ### Delegated read as the asker — sandbox room bot in the AI Chat window
