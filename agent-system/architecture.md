@@ -48,6 +48,12 @@
 └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
+This diagram is the **PrivOS Sandbox runtime** (`customFields.agentRuntime.kind`
+absent or `'sandbox'`). A bot with `kind: 'harness'` replaces the "PrivOS
+Sandbox HTTP Client" box with a WSS relay to an operator-owned bridge CLI
+instead — same dispatch call site, same reply contract; see
+[Agent Harness Runtime](./agent-harness-runtime.md).
+
 ## Data Flow: User Message → Agent Reply
 
 ```
