@@ -67,6 +67,41 @@ useQuery({
 
 Mutations invalidate the query to refetch after toggle/delete/add.
 
+## Messages during a reply (mid-turn steering policy)
+
+When a new message reaches an agent bot while it is still generating a reply in
+the **same session** (same thread / AI-chat window), its behavior is governed by
+a per-agent policy, editable in Agent Settings via the "When a new message
+arrives while replying" select and stored at
+`customFields.agentTurnPolicy.onNewMessage` (default `steer`). Read/write through
+`GET`/`POST /v1/agents.turnPolicy` (owner or `view-user-administration` only —
+never bare `edit-bot`, no bot-self path). The policy is runtime-agnostic (sandbox
+and harness agents alike).
+
+| Policy | What the user sees |
+|---|---|
+| `steer` (default) | No parallel reply. The new message is delivered into the running turn; the agent keeps working and takes it into account. The new message keeps its own bubble but gets no separate reply — it shows "Added to the reply above." |
+| `queue` | The new message waits until the current reply finishes, then runs with its own reply. |
+| `interrupt` | The current reply is stopped and the new message replaces it; the stopped reply keeps its partial text with "— interrupted, continued below". |
+| `owner-interrupt` | Only the bot owner can interrupt; everyone else's message waits. |
+
+Only the **same sender** may steer or interrupt their own running turn; another
+member's message always waits (except the owner under `owner-interrupt`).
+
+**Native vs fallback per runtime.** "Steer" and "interrupt" try a native
+mid-turn injection first, falling back to cancel-and-remerge when the runtime
+can't inject:
+
+| Runtime | Native steer | Fallback |
+|---|---|---|
+| Sandbox, `privos-agent-sdk` provider | `POST /api/attempts/:id/steer` → `Session.steer()`, drained at the next turn boundary | cancel + merged re-prompt |
+| Sandbox, Claude CLI / Codex / Antigravity | none | cancel + merged re-prompt |
+| Harness, adapter advertising `_meta.steering.supported` (claude-agent-acp, codex-acp) | `turn.steer` → ACP `_session/steering` → `injected` | cancel + merged re-prompt |
+| Harness, other adapters (Cursor, Goose, custom) | none | cancel + merged re-prompt |
+
+The fallback and native paths share the same framing wording, so the agent is
+oriented identically either way.
+
 ## AgentTriggerForm
 
 File: `client/views/room/agent-settings/AgentTriggerForm.tsx`
