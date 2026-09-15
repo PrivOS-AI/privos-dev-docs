@@ -119,6 +119,23 @@ npm run dev
 
 **Author:** supports string (`"John Doe"`) or object (`{ name, email?, website? }`). String auto-converts to `{ name }`.
 
+### UI build output and bundling
+
+Declaring a `ui://` resource (or, for an INSTANT app, `ui.entryPoints`) means
+your app ships a signed UI bundle. Two manifest fields govern it:
+
+- **`ui.distDir`** — your UI build's output directory, relative to
+  `privos-app.json` (default `dist`). Set this if your build tool writes
+  elsewhere, e.g. `{ "ui": { "distDir": "dist/ui" } }` for a Vite config with a
+  non-default `outDir`.
+- **`executionMode: "INSTANT"`** — a frontend-only app with no runtime at all.
+  See [INSTANT apps](./instant-apps.md) for the full manifest contract
+  (`ui.entryPoints`, forbidden fields, the `agent` section).
+
+See [The signed UI bundle](./ui-bundle.md) for what `ui.distDir` feeds into,
+what the Hub does with it at install/upgrade, and the refusal codes you'll see
+if it's misconfigured.
+
 ## 6. App Server Requirements
 
 ### HTTP Headers

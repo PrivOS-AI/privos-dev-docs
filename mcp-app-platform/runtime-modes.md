@@ -144,3 +144,12 @@ is a boot error.
 
 One convention: **`pair`** (out-of-band trust bootstrap) and **`start`**
 (`serveApp`, mode auto-resolved). There is no per-mode start script.
+
+## A fourth kind: INSTANT (no runtime at all)
+
+Everything above assumes your app has a process to run somewhere — managed,
+standalone, or your laptop. An [INSTANT app](./instant-apps.md) has none of
+that: no `serveApp`, no transport, no trust bootstrap, because there is no
+server. Its UI is preloaded into the workspace once, the same way a managed or
+self-hosted runtime app's UI is — see [The signed UI bundle](./ui-bundle.md)
+for that mechanism, which is shared across all three runnable/preloaded kinds.

@@ -126,6 +126,27 @@ and `package.json` (they must match, else `MANIFEST_IDENTITY_MISMATCH`).
   (`403 PUBLISHER_TOKEN_SCOPE` / `PUBLISHER_TOKEN_NOT_ALLOWED`).
 - Re-publishing the same semver fails fast with `VERSION_SEMVER_EXISTS` (exit 2).
 
+## The UI bundle
+
+A version whose manifest declares a UI doesn't reach `PUBLISHED` without one:
+after admin approval, the build node runs `privos-app bundle-ui` over your
+built UI (`ui.distDir`) and the Portal signs the resulting bundle's digest.
+The installing Hub verifies that digest before the app ever goes active. See
+[The signed UI bundle](./ui-bundle.md) for the full flow, the refusal codes
+(`MARKETPLACE_V3_UI_BUNDLE_MISSING`, `UI_BUNDLE_INGEST_FAILED:<code>`, …), and why an unchanged
+UI reuses its already-published bundle.
+
+## INSTANT apps
+
+An INSTANT app (`executionMode: "INSTANT"`, no server, no `Dockerfile`) goes
+through this same pipeline with the Dockerfile requirement skipped — but only
+once the listing's `supportedExecutionModes` includes `"INSTANT"` (Creator
+Studio has no editor for this yet; ask a marketplace admin). Run
+`privos-app publish --dry-run` before a real publish: the plain `lint --publish`
+check does not catch every manifest problem `publish` itself rejects (e.g.
+duplicate permission `feature` ids). See [INSTANT apps](./instant-apps.md) for
+the full manifest contract and publish checklist.
+
 ## After submit
 
 The CLI has no `status`/`whoami` command. Review progress

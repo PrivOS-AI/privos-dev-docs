@@ -14,6 +14,19 @@ MCP-compatible platform for embedding third-party apps in PrivOS Hub rooms via s
 - Deny-by-default iframe sandbox (no `allow-same-origin`)
 - **Optional credential push**: after direct-app connect, the Hub POSTs `{appId, clientId, clientSecret}` to your `/.well-known/mcp/register` endpoint (best-effort, 404 = skipped)
 
+### App kinds (Admin → MCP Apps)
+
+Every installed app shows as one of three kinds to a workspace admin — this is
+about how the app *runs*, orthogonal to the direct/relay *transport* above:
+
+- **Standalone Relay** — the developer runs their own app server and connects
+  over the relay (registered via Register Relay). Serves its UI live from that
+  server; the Hub never stores it.
+- **Runtime** — runs on the PrivOS marketplace runtime or a self-hosted
+  runtime. The UI is preloaded into the workspace via the
+  [signed UI bundle](./ui-bundle.md); tool calls go to the runtime.
+- **Instant** — frontend only, no server to run. See [INSTANT apps](./instant-apps.md).
+
 ## Architecture
 
 ### Direct Connection
@@ -61,6 +74,8 @@ PrivOS Hub Host
 | [Auth & REST Integration](./auth-and-rest-integration.md) | REST-first model, frontend session vs backend bot token, security |
 | [Runtime Modes](./runtime-modes.md) | One app across managed / standalone / development — `serveApp`, transport & trust bootstrap |
 | [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
+| [The signed UI bundle](./ui-bundle.md) | `bundle-ui`, `ui.distDir`, install/upgrade verification, refusal codes |
+| [INSTANT apps](./instant-apps.md) | Frontend-only apps: manifest contract, data in Lists, publish checklist |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
 | [React SDK](./react-sdk-reference.md) | `@privos_ai/app-react` hooks (`usePrivosApp`, `usePrivosContext`, `useLists`, etc.) |
 | [Theme Inheritance](./theme-inheritance.md) | How an app inherits the workspace theme — `--base-*` token broadcast, `hostCapabilities.theme`, SDK auto-apply |
