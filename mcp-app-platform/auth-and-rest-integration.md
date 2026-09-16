@@ -24,7 +24,7 @@
 | Context | Credential | Identity (whose permissions) | Who provisions |
 |---|---|---|---|
 | **Frontend** (iframe UI) | The logged-in user's session token, used **by the host** | The current user | Nothing — reuse the existing login |
-| **Backend** (app's own MCP/server process) | A **bot token** (`privos_…`) in `X-Auth-Token` + `X-User-Id` | A dedicated least-privilege bot user | App owner configures it once |
+| **Backend** (app's own MCP/server process) | A bot credential in `X-Auth-Token` + `X-User-Id` | A dedicated least-privilege bot user | Legacy: app owner generates a token once. Schema-v3 (recommended): the installation-owned agent bot, Hub-provisioned and delivered — see below |
 
 ### Frontend — reuse the user session (no bot token)
 
@@ -75,6 +75,68 @@ curl -X POST https://<hub>/api/v1/file-management.files.upload \
 
 (Header auth is the standard session-token path — `app/api/server/ApiClass.ts`,
 "Session auth (X-Auth-Token + X-User-Id)".)
+
+This is the **legacy, manually-provisioned** path: the app owner generates the token and stores it
+in the app's config by hand. It still works, but a schema-v3 Library Runtime app should prefer the
+installation-owned agent bot below, which the Hub provisions and delivers for you.
+
+### Backend — installation-owned agent bot (schema-v3, recommended)
+
+Instead of a hand-generated token, the app declares a bot in its manifest and the Hub mints,
+delivers, and rotates the credential. The backend never generates or stores the secret itself.
+
+**1. Declare the bot and where the credential lands.** The manifest needs the `agentBot` block
+**and both** reserved env keys (one without the other is refused — the pair authenticates together):
+
+```jsonc
+{
+  "agentBot": { "name": "My App Bot", "slug": "my-app-bot" },
+  "env": [
+    { "key": "PRIVOS_AGENT_BOT_CREDENTIAL", "required": false, "secret": true },
+    { "key": "PRIVOS_AGENT_BOT_USER_ID",    "required": false, "secret": false }
+  ]
+}
+```
+
+Declaring `agentBot` alone is not enough: without the env keys the Hub falls back to a show-once
+value the admin must copy by hand. See
+[apis/tools-bot.md § Issuing and receiving the credential](apis/tools-bot.md#issuing-and-receiving-the-credential)
+for the full delivery contract (managed = env at restart; relay = hot push, no restart).
+
+**2. Call Hub REST as the bot via the SDK.** `createAgentBotHubClient` re-reads the credential on
+every call (so a re-issue is picked up hot) and attaches the `x-user-id` / `x-auth-token` pair. It
+reads the env pair first, then the value the Hub hot-adopted over the relay channel — so
+`process.env` being empty is normal and correct. **Never read `process.env` directly.**
+
+```ts
+import { createAgentBotHubClient } from '@privos_ai/app-server';
+import { resolveHubOrigin } from './resolve-hub-origin'; // mode-aware Hub origin lookup
+
+const hub = createAgentBotHubClient({ resolveHubOrigin });
+
+const res = await hub.authorizedFetch('/api/v1/mcp-apps.tool-call', {
+  method: 'POST',
+  requiredScope: 'db:write',        // documentation-only at the client; the Hub enforces server-side
+  retryMode: 'never',               // 'never' for non-idempotent writes; 'safe-methods' | 'idempotent' otherwise
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ mcpAppId, toolName, arguments: args, roomId }),
+});
+if (!res.ok) {
+  // 401 = credential wrong/rotated (distinct from absent); other 4xx/5xx = Hub refusal.
+  throw new Error(`Hub REST as bot failed: HTTP ${res.status}`);
+}
+```
+
+Mode-specific factories exist when you would rather not write `resolveHubOrigin`:
+`createAgentBotHubClientFromWorkloadIdentity(client)` (managed) and
+`createAgentBotHubClientFromHubOrigin(origin)` (standalone). For the raw pair or a diagnostic state,
+use `readAgentBotCredential()` (`{ botUserId, token } | null`) and `getAgentBotCredentialState()`
+(`'absent' | 'live' | 'rejected'`). Errors: `AgentBotCredentialAbsentError` (nothing delivered yet —
+degrade, don't crash) and `AgentBotHubUnreachableError` (origin unresolved / Hub unreachable — not a
+401).
+
+The bot only reaches endpoints its granted scopes allow (Hub maps scope → REST path via the
+allowlist); `requiredScope` at the client is documentation, not the authority.
 
 ## Calling the Sandbox agent (REST client-facing)
 

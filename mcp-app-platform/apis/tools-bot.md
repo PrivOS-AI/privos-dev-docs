@@ -28,6 +28,50 @@ An app that declares no `agentBot` gets `BOT_AGENT_NOT_DECLARED` from the admin 
 association survives an in-place generation upgrade of the same installation; a new manifest
 declaration is required to move the identity.
 
+### Issuing and receiving the credential
+
+Creating the bot does **not** deliver a usable credential — that is a separate, admin-driven step.
+The credential is the pair the Hub authenticates REST calls from: `x-user-id` (the bot user id)
+plus `x-auth-token` (the secret). A backend calls ordinary Hub REST as its bot with this pair; the
+frontend never touches it.
+
+**Declaring where the credential lands (required for automatic delivery).** For the Hub to deliver
+the credential to your app automatically, the manifest MUST declare **both** reserved env keys — one
+without the other is refused, because the pair authenticates together:
+
+```jsonc
+"env": [
+  { "key": "PRIVOS_AGENT_BOT_CREDENTIAL", "required": false, "secret": true },
+  { "key": "PRIVOS_AGENT_BOT_USER_ID",    "required": false, "secret": false }
+]
+```
+
+Declaring `agentBot` alone is **not** enough. An app that declares the bot but omits these keys is
+handled correctly by the Hub, but falls into the show-once fallback below.
+
+**Issuing.** A workspace admin issues (and later re-issues) the credential from
+Admin > Apps > {app} > Settings — never the app itself. Re-issue is an atomic rotation: the previous
+credential dies immediately and exactly one live replacement is minted.
+
+**Delivery** depends on the installation's runtime mode:
+
+| Mode | How it arrives | When the running app sees it |
+|------|----------------|------------------------------|
+| Managed / marketplace (`PRIVOS_MANAGED_RUNTIME`) | Written into the app's encrypted env config | As the two env vars, on container **(re)start** — after the admin clicks **Apply environment**. There is no live config-fetch. |
+| Standalone / relay (self-host, dev) | Pushed as an ES256-signed control notification over the Relay WebSocket | **In-process, hot** — the SDK persists it to the standalone identity file and adopts it live, **no restart**. Offline at issue time ⇒ redelivered on next reconnect. |
+
+Because of the relay path, `process.env.PRIVOS_AGENT_BOT_CREDENTIAL` can be empty while the app
+still holds a working credential. Read it through the SDK (`readAgentBotCredential()` /
+`createAgentBotHubClient`, see [auth-and-rest-integration.md](../auth-and-rest-integration.md)),
+which checks the env pair first and the hot-adopted value second — never `process.env` directly.
+
+**Fallback (show-once).** If the manifest does not declare both keys — or the Hub has no secret-store
+encryption key — the Hub cannot deliver automatically. It then shows the credential to the admin
+**exactly once** at issue time with the note *"This app does not declare a field to receive
+credentials automatically. Copy this value now."* The admin pastes it into the app's own secret
+config by hand. "A credential is live" in Settings means one exists server-side, not that the app
+received it.
+
 ### Room tools
 
 | Tool | Scope | Arguments | Result |
