@@ -15,7 +15,7 @@
 ### Direct Apps
 - **Iframe sandbox**: deny-by-default — no `allow-same-origin` (prevents cookie/localStorage theft)
 - **Host storage isolation**: `app.storage` (host-mediated `localStorage`) is namespaced `mcp-app:{appId}:{key}` with the `appId` stamped by the host, not the iframe payload — one app cannot read or overwrite another's values; a surface with no resolved `appId` is refused
-- **Permissions**: camera/microphone only granted if declared in `_meta.ui.permissions`
+- **Permissions**: the valid `_meta.ui.permissions` set is `camera`, `microphone`, `screen-wake-lock`; anything else is dropped server-side. A feature is granted (on the iframe `allow` / Permissions-Policy) only if declared — `screen-wake-lock` has no `sandbox` token, so it rides `allow`, never the sandbox. Wake Lock only takes effect when the parent document also permits it; the app must request it inside a user gesture and re-request after `visibilitychange`.
 - **CSP**: app-declared CSP from `_meta.ui.csp` enforced
 - **Scope enforcement**: every tool call checked against app's granted scopes
 - **Room membership**: validated for room-scoped tools (messages, lists)
