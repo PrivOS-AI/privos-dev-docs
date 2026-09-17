@@ -136,6 +136,34 @@ See [The signed UI bundle](./ui-bundle.md) for what `ui.distDir` feeds into,
 what the Hub does with it at install/upgrade, and the refusal codes you'll see
 if it's misconfigured.
 
+### Managed runtime size (`runtime` + `resources`)
+
+`resources` (`{ memoryMb, cpus, tmpSizeMb }`) is what the App Cluster actually
+allocates for a managed install. Optionally, declare `runtime` to pin those
+numbers to one of the platform's flat-monthly billing sizes instead of
+picking arbitrary values:
+
+```json
+"runtime": { "minimumSize": "S", "recommendedSize": "S" },
+"resources": { "memoryMb": 512, "cpus": 0.5, "tmpSizeMb": 64 }
+```
+
+| Size | Memory | CPU | Buyer price |
+|---|---|---|---|
+| XS | 256 MB | 0.25 | $3/mo |
+| S | 512 MB | 0.5 | $5/mo |
+| M | 1024 MB | 1 | $10/mo |
+| L | 2048 MB | 2 | $20/mo |
+| XL (v3-only) | 4096 MB | 4 | $40/mo |
+
+When `runtime` is present, `resources.memoryMb` and `resources.cpus` **must
+equal** the `recommendedSize` row exactly — the Portal rejects a manifest that
+declares a recommendation and then requests different resources.
+`minimumSize` is the floor the app is tested against; a buyer running below
+`recommendedSize` (once a size picker ships) is trading cost for OOM risk they
+accept themselves, not the app's fault. `tmpSizeMb` is unrelated to sizing and
+not part of this table.
+
 ## 6. App Server Requirements
 
 ### HTTP Headers
