@@ -158,6 +158,64 @@ over `postMessage`; the host replies `{ value }` / `{ ok: true }`. An app built
 against an SDK older than 0.5 can call these bridge methods directly against a
 namespace-aware host.
 
+### app.startMicrophone / app.requestWakeLock — host-brokered devices (SDK ≥ 0.7)
+
+The app document runs in an **opaque origin**, and browsers refuse `getUserMedia`
+and the Wake Lock API there, even when the iframe `allow` attribute delegates the
+feature (Chrome throws `NotAllowedError` / `SecurityError`). The host does it
+instead: it opens the microphone under the hub origin (the browser prompt names
+the hub) and streams **mono signed 16-bit PCM** frames back, and it holds the
+screen wake lock for you.
+
+```tsx
+const app = usePrivosApp();
+
+// Must run inside a click/keypress handler.
+const mic = await app.startMicrophone?.({
+  sampleRate: 16000,                     // preferred; read mic.sampleRate for the real one
+  onData: (chunk: Int16Array) => ws.send(chunk),
+  onEnded: (reason) => setRecording(false), // device unplugged / permission revoked
+});
+if (!mic?.granted) {
+  // mic.reason: 'not_declared' | 'user_activation_required' | 'denied' | 'unavailable' | 'unsupported_host'
+  // unsupported_host (or no startMicrophone): older hub, fall back to navigator.mediaDevices.getUserMedia
+}
+// later
+mic.stop();
+
+const lock = await app.requestWakeLock?.(); // { granted: true } | { granted: false, reason }
+app.releaseWakeLock?.();
+```
+
+Rules:
+
+- **Declare it.** The rendered tool must list `microphone` / `screen-wake-lock`
+  in `_meta.ui.permissions`, or the host answers `not_declared`.
+- **User gesture.** `startMicrophone` must be called from a click/keypress
+  handler inside the app (the host checks that the app frame has focus and
+  the page has a fresh activation). Otherwise the host answers
+  `user_activation_required`.
+- **Per-app consent.** The first time an app asks, the hub shows its own
+  prompt: "<App> wants to use your microphone — Allow / Block". Allow is
+  remembered per user and app; Block answers `denied` for that request only.
+  The browser's own permission prompt (for the hub site) comes after it, once.
+- **One capture per document.** Starting again replaces the previous capture.
+  The host releases the mic and the wake lock when the app document reloads or
+  the host unmounts. Switching room tabs keeps both running.
+- **Wake lock** is re-acquired by the host whenever the page becomes visible
+  again, until `releaseWakeLock()`.
+- **Camera is not brokered.** A camera stream cannot be streamed as cheaply as
+  PCM, so opaque-origin apps cannot use the camera today.
+
+**Bridge protocol.** Requests: `host/microphone.start` `{ sampleRate?,
+echoCancellation?, noiseSuppression?, autoGainControl? }` → `{ granted: true,
+streamId, sampleRate, encoding: 'pcm_s16le', channels: 1 }` or `{ granted:
+false, reason }`; `host/microphone.stop` `{ streamId }`; `host/wakeLock.request`
+→ `{ granted, reason? }`; `host/wakeLock.release`. Host notifications:
+`ui/microphone.data` `{ streamId, pcm: ArrayBuffer }` (buffer transferred) and
+`ui/microphone.ended` `{ streamId, reason }`. `ui/initialize.hostCapabilities`
+carries `microphone: true, wakeLock: true` on hubs that broker.
+
 ## usePrivosContext
 
 Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:

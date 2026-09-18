@@ -6,6 +6,25 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-09-18
+
+### MCP apps — host-brokered microphone and screen wake lock
+
+**Summary:** MCP apps that declared `microphone` still got `NotAllowedError` from `getUserMedia`,
+even with `allow="microphone"` on the iframe. The app frame runs in an opaque origin
+(`window.origin === "null"`, the sandbox deliberately omits `allow-same-origin`), and Chrome
+refuses the microphone and Wake Lock to an opaque origin. The hub now captures the mic under its
+own origin and streams mono PCM16 to the app (`host/microphone.start|stop`, `ui/microphone.data|ended`),
+and holds the screen wake lock (`host/wakeLock.request|release`). Both are gated on the rendered
+tool's declared `ui.permissions`; the mic also requires a user gesture in the app and a per-app
+hub consent prompt (Allow remembered per user + app). Hub:
+`client/views/room/mcp-apps/mcp-app-media-broker.ts` + `use-mcp-bridge-host.ts`, wired into the
+room tab, room host, standalone page and window host. SDK: `@privos_ai/app-react` 0.7.0
+`startMicrophone()` / `requestWakeLock()` / `releaseWakeLock()`, returning `unsupported_host` on
+older hubs. Docs: [React SDK reference](./mcp-app-platform/react-sdk-reference.md).
+
+---
+
 ## 2026-09-10
 
 ### Isolated-list item attachments — write-side authorization

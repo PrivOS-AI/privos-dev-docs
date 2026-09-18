@@ -52,7 +52,7 @@ tools: [{
 }]
 ```
 
-Valid `ui.permissions` values are `camera`, `microphone`, and `screen-wake-lock`; any other value is dropped server-side. A declared permission is added to the app iframe's `allow` (Permissions-Policy) attribute. Wake Lock only takes effect when the parent document also permits it; the app must request it inside a user gesture (`navigator.wakeLock.request('screen')`) and re-request after `visibilitychange`, since the sentinel is released when the tab is hidden.
+Valid `ui.permissions` values are `camera`, `microphone`, and `screen-wake-lock`; any other value is dropped server-side. A declared permission is added to the app iframe's `allow` (Permissions-Policy) attribute. The app iframe runs in an opaque origin, where browsers refuse `getUserMedia` and Wake Lock anyway, so capture the microphone and hold the wake lock through the host with `app.startMicrophone()` / `app.requestWakeLock()` (SDK ≥ 0.7, see the React SDK reference). The declaration is what the host checks before brokering. Camera is not brokered.
 
 - Tools **with** `_meta.ui` → iframe rendering in room tab
 - Tools **without** `_meta.ui` → text-only (no UI)
