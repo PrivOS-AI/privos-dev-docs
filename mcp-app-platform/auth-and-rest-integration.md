@@ -208,6 +208,13 @@ curl "https://<hub>/api/v1/agents.sandbox.attempt-status?roomId=ROOM_ID&attemptI
 # when done    → { "status": "completed" | "failed" | "cancelled", "text": "..." }
 ```
 
+Both `roomId` and `attemptId` are **required** query params on every `attempt-status`
+poll (as they are on `attempt-observation` / `attempt-cancel` / `attempt-evidence`, and in
+the request body of `generate` / `generate-async` / `upload` / `answer`). Omitting or
+mistyping a required string param fails with HTTP 400
+`{ "success": false, "error": "<param> is required and must be a string" }` — the offending
+field is named (no opaque `Match error: Expected string, got undefined`).
+
 The hub keeps **no job state** — the attempt lives in the Sandbox (enqueued with
 `request_method: 'queue'`); `attempt-status` proxies the Sandbox's status and, on a
 terminal status, extracts the assistant text from the attempt logs
