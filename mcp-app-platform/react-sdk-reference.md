@@ -87,6 +87,41 @@ await app.rest({
 | `query` | `Record<string, string \| number \| boolean>` | optional querystring |
 | `body` | `any` | optional JSON body |
 | `timeoutMs` | `number` | optional host-bridge response timeout override (default 10000) |
+| `responseType` | `'json' \| 'blob'` | optional; `'blob'` resolves binary downstreams as a `Blob` (see below) |
+
+#### Binary downstreams (file download / content)
+
+The proxy is a JSON route, so a downstream that answers with bytes
+(`file-management.files/{fileId}/download`, `/content`) is delivered as a
+base64 envelope in `body.result` (`RestBinaryResult`). By default only
+non-JSON, non-`text/*` bodies are wrapped: `.md`/`.txt`/`.csv` content keeps
+arriving as a plain string in `body.result`, JSON files as parsed JSON.
+Requires hub `tenant.240` or later (older hubs decode binary as UTF-8 text).
+
+```json
+{ "statusCode": 200, "body": { "result": { "dataBase64": "...", "mimeType": "image/png", "fileName": "shot.png", "size": 2944 } } }
+```
+
+Pass `responseType: 'blob'` to force the envelope for every successful
+downstream (text and JSON files included) and have the host decode it for you:
+
+```tsx
+const { body: blob, fileName } = await app.rest({
+  method: 'GET',
+  path: `file-management.files/${fileId}/download`,
+  responseType: 'blob',
+});
+const url = URL.createObjectURL(blob);
+const a = Object.assign(document.createElement('a'), { href: url, download: fileName ?? 'file' });
+a.click();
+URL.revokeObjectURL(url);
+```
+
+`fileName` comes from the downstream `Content-Disposition`; `blob.type` / `blob.size`
+carry `mimeType` / `size`. Without `responseType: 'blob'` decode `dataBase64` yourself.
+Base64 is transport-only — persist the `fileId`, not the bytes. Whole file is buffered
+in one reply: bodies over 32 MiB are rejected (`statusCode` 400), and large files may
+need a higher `timeoutMs`.
 
 ### app.uploadFile() — multipart file upload
 

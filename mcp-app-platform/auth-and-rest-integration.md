@@ -585,6 +585,11 @@ bridge/SDK:
 - **Enforcement is server-side (authoritative):** route `POST /api/v1/mcp-apps.rest-call`
   runs the call as the user and rejects out-of-allowlist requests (403). The host bridge
   forwards to it (`host/rest.request`); the iframe never sees the token.
+- **Binary downstreams** (`file-management.files/:id/download`, `/content`) are returned by the
+  proxy as a base64 envelope `{ result: { dataBase64, mimeType, fileName, size } }`
+  (`server/services/mcp-rest-binary-response.ts`, 32 MiB cap). JSON and `text/*` bodies keep
+  the legacy string/JSON `result` unless the app passes `responseType: 'blob'`, which forces
+  the envelope and makes the host bridge hand back a `Blob`.
 - **Multipart upload** can't tunnel through the JSON proxy, so `host/file.upload` posts
   directly to `file-management.files.upload` as the user; the host gates it on `files:write`
   (the iframe reaches REST only via the trusted host bridge).
@@ -599,6 +604,9 @@ const res = await app.rest({ method: 'GET', path: `file-management.files.channel
 
 // Send a message (needs messages:send)
 await app.rest({ method: 'POST', path: 'chat.sendMessage', body: { message: { rid: roomId, msg: 'hi' } } });
+
+// Download file bytes as a Blob (needs files:read)
+const { body: blob, fileName } = await app.rest({ method: 'GET', path: `file-management.files/${fileId}/download`, responseType: 'blob' });
 
 // Upload a file (needs files:write)
 await app.uploadFile({ channelId: roomId, fileName: 'report.pdf', base64Data, mimeType: 'application/pdf' });
