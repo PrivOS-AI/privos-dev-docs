@@ -119,7 +119,7 @@ broken one.
 ```bash
 npm run build           # your normal UI build (e.g. vite build → dist/)
 npm run manifest:lint   # privos-app lint privos-app.json — structural checks
-npx privos-app bundle-ui --check   # what publish-lint runs internally; --out to inspect the tar locally
+npx -p @privos_ai/app-server privos-app bundle-ui --check   # what publish-lint runs internally; --out to inspect the tar locally
 ```
 
 The build node runs the same `bundle-ui` step at publish time — see

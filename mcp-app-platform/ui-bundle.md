@@ -21,7 +21,7 @@ bundle step, not the Hub — fix it before publishing.
 ## `privos-app bundle-ui`
 
 ```bash
-npx privos-app bundle-ui [--dist <dir>] [--out <file>] [--check] [--cwd <path>]
+npx -p @privos_ai/app-server privos-app bundle-ui [--dist <dir>] [--out <file>] [--check] [--cwd <path>]
 ```
 
 | Flag | Meaning |
