@@ -82,23 +82,23 @@ Generates a one-time pairing URL for relay app developers to enter at `npm run p
 
 **Request:**
 ```json
-{
-  "manifestUrl": "https://myapp.example.com/.well-known/mcp/manifest.json"
-}
+{}
 ```
+
+Send `{ "mcpAppId": "<id>" }` instead to pair an app that was already installed from its manifest.
 
 **Response:**
 ```json
 {
-  "pairUrl": "https://chat.privos.com/pair?token=eyJ...",
-  "pairToken": "pair_abc_123xyz",
-  "expiresIn": 3600
+  "pairUrl": "wss://<hub>/api/v1/mcp-apps.relay?pair=<token>",
+  "pairToken": "<token>",
+  "fingerprint": "<hub fingerprint>"
 }
 ```
 
 ### Check Pairing Status
 
-**GET `/api/v1/mcp-apps.pair-status?token=pair_abc_123xyz`** (Admin)
+**GET `/api/v1/mcp-apps.pair-status?token=<token>`** (Admin)
 
 Check pairing progress during relay setup flow.
 

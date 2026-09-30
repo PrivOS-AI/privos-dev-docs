@@ -17,18 +17,18 @@
 ### Relay App (via Admin Portal — Auto-Pairing)
 
 1. Navigate to **Admin → Apps** (`/admin/mcp-apps`)
-2. Click **Generate Pairing URL**
-3. Enter manifest URL (e.g., `https://myapp.example.com/.well-known/mcp/manifest.json`)
-4. Optionally configure:
-   - **Wake URL**: HTTPS endpoint PrivOS calls to wake app (if offline)
-   - **Queue TTL**: How long to queue messages while app is offline (default: 1 hour)
-   - **Queue Max Size**: Max messages to buffer (default: 1000)
-5. PrivOS generates a pairing URL (1-hour expiry):
-   - Format: `https://chat.privos.com/pair?token=pair_abc_123xyz`
-6. **Share the pairing URL with the app developer**
-7. Developer enters URL at `npm run pair` → credentials persisted, app starts
-8. Waiting UI shows status with polling until app pairs
-9. On pairing complete, admin can view credentials (clientId, clientSecret) in app settings
+2. Click **Add Standalone Relay App**. The Hub creates a one-time pairing URL at once (1-hour expiry):
+   - Format: `wss://<hub>/api/v1/mcp-apps.relay?pair=<token>`
+   - No manifest URL is entered: the app announces its own `privos-app.json` when it pairs.
+3. **Share the pairing URL with the app developer**, and keep the **Hub fingerprint** for the check in step 5.
+   - `POST /api/v1/mcp-apps.generate-pair-url` returns the URL and the fingerprint together. The admin screen shows the URL only; the fingerprint is also available from `GET /api/v1/mcp-apps.standalone.fingerprint`.
+4. The developer runs `npm run pair` and pastes the URL. The app registers with the Hub and prints the fingerprint it received.
+5. **Compare the two fingerprints over another channel** (a call or a separately verified chat), the same way you would accept an SSH host key. If they differ, do not approve.
+6. The waiting screen polls until the app registers, then opens the approval dialog listing the permissions the app announced. Choose what to grant and approve. The developer's `npm run pair` has been waiting for this: it then receives its credentials, writes its identity file and starts.
+7. After pairing you can tune the wake URL and the queue limits (see [Managing Relay Settings](#managing-relay-settings)).
+
+How to keep the paired app running, update its manifest, and uninstall or re-pair it is in
+[Install and operate your own MCP app](./install-and-operate-your-own-mcp-app.md).
 
 ### Via API
 
@@ -42,19 +42,15 @@ curl -X POST -H "Content-Type: application/json" \
 # Generate pairing URL for relay app
 curl -X POST -H "Content-Type: application/json" \
   -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
-  -d '{
-    "manifestUrl": "https://myapp.example.com/.well-known/mcp/manifest.json",
-    "wakeUrl": "https://myapp.example.com/wake",
-    "queueTtlMs": 3600000,
-    "queueMaxSize": 1000
-  }' \
+  -d '{}' \
   http://localhost:3000/api/v1/mcp-apps.generate-pair-url
 
-# Response: { "pairUrl": "https://...", "pairToken": "pair_abc_123xyz", "expiresIn": 3600 }
+# Response: { "pairUrl": "wss://<hub>/api/v1/mcp-apps.relay?pair=<token>", "pairToken": "<token>", "fingerprint": "<hub fingerprint>" }
+# To pair an app that is already installed from its manifest, send {"mcpAppId": "<id>"} instead.
 
 # Check pairing status (poll this endpoint to watch for app pairing)
 curl -H "X-Auth-Token: $TOKEN" -H "X-User-Id: $UID" \
-  "http://localhost:3000/api/v1/mcp-apps.pair-status?token=pair_abc_123xyz"
+  "http://localhost:3000/api/v1/mcp-apps.pair-status?token=<token>"
 
 # Install in a room
 curl -X POST -H "Content-Type: application/json" \
@@ -167,13 +163,12 @@ The catalog row is retained behind that (status `suspended`, manifest intact)
 for audit and reinstall reuse, reachable only via
 `GET /api/v1/mcp-apps.list?includeUninstalled=true`. Re-approving it provisions
 a fresh generation and a new OAuth client, so the app must re-pair to pick up
-new credentials. There is no admin-UI affordance for `includeUninstalled` yet,
-so in practice reinstalling means pairing the app server again.
+new credentials. The admin apps list shows it when **Show uninstalled apps**
+is enabled. Reinstalling means pairing the app server again.
 
 `mcp-apps.delete` refuses an app that still has a live generation
 (`error-active-generation-use-uninstall`) — use Settings → Uninstall instead.
 Delete stays correct for a paired-but-never-approved app, an already-suspended
 app, or a legacy non-v3 app.
 
-Full BYO install/operate detail lives in the hub's
-[install-and-operate-your-own-mcp-app.md](https://github.com/PrivOS-AI/privos-hub/blob/privos-mt/docs/mcp-app-platform/install-and-operate-your-own-mcp-app.md).
+Full install and operate detail: [Install and operate your own MCP app](./install-and-operate-your-own-mcp-app.md).

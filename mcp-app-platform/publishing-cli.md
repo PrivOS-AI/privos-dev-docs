@@ -27,6 +27,37 @@ npx -p @privos_ai/app-server privos-app --help
 The unscoped npm name `privos-app` is not this package, so never hand it to a
 package runner on its own.
 
+## Before your first publish
+
+Do this once per app in Creator Studio on `client.privos.io`. The CLI publishes the
+code identity only; the listing is web-side.
+
+1. **Enrol as a creator.** Sign in with the account that will own the listing and open
+   Creator Studio. On the first visit, enter a creator display name and enrol. The
+   account that creates a listing owns it, and ownership cannot be moved from the UI
+   later. Publishing is open to enabled creators only; see
+   [Who can publish](#who-can-publish).
+2. **Create a draft listing** of type `MCP_APP` with a name, tagline, description,
+   pricing and a category. Its **slug derives from the app id** (`name` in
+   `privos-app.json`): lower-cased, every run of characters other than `a-z` and `0-9`
+   becomes one hyphen, at most 63 characters. The app id `ai.acme.okr` needs the slug
+   `ai-acme-okr`. The Portal refuses to bind a listing whose slug differs.
+3. **INSTANT apps only: the marketplace team sets the INSTANT execution mode on the
+   listing.** A new listing defaults to the managed-runtime mode and refuses an INSTANT
+   archive until the mode is set. Ask the marketplace team before the first upload.
+4. **Complete the listing content a first version needs.** A first version is refused
+   with `409 LISTING_CONTENT_INCOMPLETE` until the listing has:
+   - a primary category, at least 3 features and at least 2 use cases;
+   - a support email or URL, a documentation URL, a privacy policy URL and a terms URL;
+   - an icon, and at least 2 screenshots each with alt text and a caption.
+
+   Uploaded images are reviewed by the marketplace team. The error message lists what
+   is missing, and no version number is used up.
+
+Later versions reuse the listing, its execution mode, its content and its approved
+media. Release an update by bumping `version` in both `privos-app.json` and
+`package.json`, committing, and running `npm run publish:marketplace` again.
+
 ## Two authorization modes
 
 Both terminate in the **same scoped grant** the Portal honors on the publish

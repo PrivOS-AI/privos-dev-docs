@@ -11,15 +11,17 @@ Generate a one-time pairing URL for relay app developers to use during setup.
 
 ### Request
 
-No body required. Uses the authenticated user's context.
+No body required. Uses the authenticated user's context. Send `{ "mcpAppId": "<id>" }` to
+create a pairing URL for an app that was already installed from its manifest.
 
 ### Response
 
 ```json
 {
   "success": true,
-  "pairUrl": "https://chat.privos.com/pair?token=eyJ...",
-  "pairToken": "pair_abc_123xyz"
+  "pairUrl": "wss://<hub>/api/v1/mcp-apps.relay?pair=<token>",
+  "pairToken": "<token>",
+  "fingerprint": "<hub fingerprint>"
 }
 ```
 
@@ -27,6 +29,7 @@ No body required. Uses the authenticated user's context.
 |-------|------|-------------|
 | `pairUrl` | string | Full URL to share with relay app developer |
 | `pairToken` | string | Token to poll pairing status |
+| `fingerprint` | string | Hub fingerprint. Compare it with the one the app prints at pairing, over another channel |
 
 ### How It Works
 
@@ -54,7 +57,7 @@ Poll this endpoint to check if a relay app has completed the pairing flow.
 | `token` | string (query) | Yes | The pairing token from `generate-pair-url` |
 
 ```
-GET /api/v1/mcp-apps.pair-status?token=pair_abc_123xyz
+GET /api/v1/mcp-apps.pair-status?token=<token>
 ```
 
 ### Response — Waiting
