@@ -86,13 +86,33 @@ export default function App() {
 }
 ```
 
-## 4. Run Dev Server
+## 4. Develop Over Relay
 
-```bash
-npm run dev
-# MCP server → http://localhost:3001
-# UI dev    → http://localhost:5173
-```
+Develop inside a real workspace rather than against `localhost`. The Hub treats an
+app in development exactly like one in production: the same Relay protocol, the same
+signed dispatch, the same verified caller and the same permission approval. Pairing
+once takes far less procedure than a marketplace upload and review.
+
+1. **Pair once.** A workspace admin creates a pairing URL (see the
+   [Admin Guide](./admin-guide.md#relay-app-via-admin-portal--auto-pairing)). Run
+   `npm run pair` in your own terminal and paste the URL when asked. The command
+   registers the app, waits while the admin approves the permissions it announces,
+   then starts the app. Details and the fingerprint check are in
+   [Relay Apps](#9-relay-apps-websocket-connection).
+2. **Run with a live UI.** `npm run dev` runs the paired app and serves its UI live
+   from a dev server on your machine, so edits show up in the workspace without a
+   rebuild. The page in the workspace loads the UI from that dev server, so the
+   browser that shows the workspace must run on the same machine, or reach the dev
+   server's port through a forwarded port.
+3. **Run the built UI.** `npm run build`, then `npm start`. It uses the same pairing
+   and serves the built UI, which is how the app runs on a host that stays up. See
+   [Install and operate your own MCP app](./install-and-operate-your-own-mcp-app.md).
+
+A change to `privos-app.json` reaches the workspace through **Refresh** and
+**Approve update** in the app's settings; see the operator guide.
+
+An app id is live once per workspace. To install the same app from the marketplace
+into a workspace where you developed it over Relay, uninstall the Relay copy first.
 
 ## 5. Manifest Format
 
@@ -120,6 +140,22 @@ npm run dev
 **Icon:** 96x96, PNG or SVG. Relative URLs resolved against server base URL.
 
 **Author:** supports string (`"John Doe"`) or object (`{ name, email?, website? }`). String auto-converts to `{ name }`.
+
+### Declaring the verified actor capability
+
+```json
+"capabilities": { "verifiedActor": true }
+```
+
+A managed (marketplace) runtime app receives the acting user only if its manifest
+declares this. The Hub then signs an `actor` claim (user id, username and, for a room
+dispatch, the room id) into the dispatch assertion, and `@privos_ai/app-server`
+surfaces it as `context.actor` in your tool handlers. Without the declaration the
+assertion carries no actor and `context.actor` is undefined. Only the value `true`
+counts. Declare it when a tool needs to know who is calling, and take the caller from
+`context.actor`, never from a tool argument. A Relay app gets the caller from the
+signed user token instead; see
+[Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity).
 
 ### UI build output and bundling
 
@@ -503,57 +539,36 @@ For apps behind NAT, firewall, or private networks, use the relay connection typ
 
 ### Setup — Auto-Pairing Flow
 
-1. **Admin generates pairing URL** (see [Admin Guide](./admin-guide.md))
-   - URL: `https://chat.privos.com/pair?token=pair_abc_123xyz` (1-hour expiry)
-   - Share URL with app developer
+1. **Admin generates a pairing URL** (see [Admin Guide](./admin-guide.md#relay-app-via-admin-portal--auto-pairing)).
+   - URL shape: `wss://<hub>/api/v1/mcp-apps.relay?pair=<token>`, valid for one hour.
+   - The admin shares it with you, together with the Hub fingerprint (the `fingerprint` field of the same API response).
 
-2. **Developer pairs the app**:
+2. **Developer pairs the app** in their own terminal:
    ```bash
    npm run pair      # or: pnpm pair
    # Enter the one-time pairing URL from Hub Admin:
-   # Paste: https://chat.privos.com/pair?token=pair_abc_123xyz
    ```
 
    The command takes no arguments — it asks for the URL, so the URL never lands in shell
-   history. On success it starts the app for you, continuing into `start` through whichever
-   package manager you invoked it with. Pairing is a one-time step: every later restart uses
-   what pairing persisted and needs no URL.
+   history. Pairing is one run of `pairAndAwaitApproval` from `@privos_ai/app-server`:
 
-   **A v3 standalone app pairs TWICE.** It announces its `privos-app.json` over the pairing
-   socket, so no admin ever handles the manifest file. The first run only REGISTERS the app —
-   the Hub grants nothing, reports `awaitingApproval`, and the app neither receives dispatch
-   trust nor starts, because trust belongs to the generation an approved permission ceiling
-   creates. An admin approves the declared permissions in Hub Admin > Apps, then the developer
-   runs `npm run pair` again with a fresh URL from that app's own settings; that second run
-   receives trust and starts the app.
+   1. It **registers** the app. The app announces its `privos-app.json` over the pairing
+      socket, so no admin ever handles the manifest file. The Hub grants nothing yet.
+   2. It prints the **Hub fingerprint**. Compare it with the one the admin has, over
+      another channel (a call or a separately verified chat), before you trust this Hub.
+   3. It **waits** for an admin to approve the announced permissions in Hub Admin > Apps
+      (30 minutes by default, then it stops with a timeout error).
+   4. On approval it receives the Hub's dispatch trust, **writes the identity file**, and
+      **starts** the app through the package manager you invoked it with.
 
-3. **App exchanges token for credentials**:
-   - Sends `pair_token` to `POST /api/v1/mcp-apps.pair-status`
-   - Receives `clientId`, `clientSecret`, `relayUrl`
-   - Auto-saves to `.env` (or creates `.env.local`)
+   Pairing is a one-time step: every later restart uses the identity file and needs no URL.
 
-4. **App obtains OAuth token and connects**:
-   ```bash
-   POST /oauth/token
-   grant_type=client_credentials
-   client_id=CLIENT_ID
-   client_secret=CLIENT_SECRET
-
-   # Returns: { "access_token": "...", "expires_in": 3600 }
-   ```
-
-5. **App connects to relay WebSocket**:
-   ```typescript
-   const token = await getOAuthToken();
-   const ws = new WebSocket('wss://chat.privos.com/api/v1/mcp-apps.relay', {
-     headers: { Authorization: `Bearer ${token}` }
-   });
-
-   ws.on('message', (data) => {
-     const msg = JSON.parse(data);
-     handleMcpMessage(msg);
-   });
-   ```
+3. **Where pairing stores credentials.** Not in `.env`. The result is one identity file,
+   `./privos-standalone-identity.json` (mode `0600`; override the path with
+   `PRIVOS_STANDALONE_IDENTITY_FILE`). While approval is pending, a separate owner-only file,
+   `./privos-standalone-identity.pending.json`, holds the registration; it carries no
+   dispatch trust. The file holds relay credentials and dispatch trust: never commit it,
+   copy it into an image, or put its contents in an environment file.
 
 ### Re-pairing after an uninstall/reinstall
 
@@ -672,7 +687,7 @@ connectRelay();
 ### Relay App Architecture
 
 **No HTTP server needed.** Relay apps:
-- Use `npm run pair` once to pair, then `npm start` to connect to PrivOS via WebSocket
+- Run `npm run pair` once (it starts the app after approval); every later start is `npm start`, which connects to PrivOS via WebSocket
 - Serve manifest via Node.js/Express embedded in the relay app package
 - UI is built with Vite, compiled to static HTML, sent via `resources/read` JSON-RPC
 - Admin portal inlines UI via data URI in pairing metadata

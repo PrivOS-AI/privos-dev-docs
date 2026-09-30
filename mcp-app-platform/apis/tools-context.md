@@ -6,12 +6,10 @@ Get the current user and room context. No scope required for the base fields;
 the `basic:information` identifiers (`appId`, `roomSlug`, `appUrl`) are always
 included too.
 
-This tool is also the **reliable delivery path** for the caller's signed
-identity: it returns `username` and a short-lived `userToken` (see
-[Signed user identity](#signed-user-identity) below). The host additionally
-pushes these via `HOST_CONTEXT_CHANGED`, but that push can be missed if it
-fires before the iframe attaches its message listener — so always treat this
-tool's response as the source of truth.
+The response also carries `username` and a short-lived `userToken` (see
+[Signed user identity](#signed-user-identity) below). `usePrivosContext()` in
+`@privos_ai/app-react` does not pass the token on to your UI code, and a UI must
+never forward it to a backend as proof of identity.
 
 | | |
 |---|---|
@@ -75,7 +73,7 @@ Standalone (no room context):
 |-------|------|-------------|
 | `userId` | string | Current authenticated user ID |
 | `username` | string | Current user's username |
-| `userToken` | string | Short-lived RS256 JWT proving the caller's identity — verify against the hub JWKS (see [Signed user identity](#signed-user-identity)) |
+| `userToken` | string | Short-lived RS256 JWT signed by the hub. It is meant for the app backend, which receives it from the hub's dispatch — see [Signed user identity](#signed-user-identity) |
 | `appId` | string | This app's ID — also the `/mcpapp/<appId>` segment of its in-room URL (`basic:information`) |
 | `roomId` | string \| null | Current room ID (null when called outside a room) |
 | `roomName` | string | Room name (only present when `roomId` is set) |
@@ -102,11 +100,11 @@ const context = await app.callServerTool({
 ### Example (React Hook)
 
 ```tsx
-import { useServerTool } from '@anthropic/mcp-react-sdk';
+import { usePrivosContext } from '@privos_ai/app-react';
 
 function MyComponent() {
-  const { data: context } = useServerTool('mcpapp.context.get');
-  return <div>Room: {context?.roomName}</div>;
+  const { roomName } = usePrivosContext();
+  return <div>Room: {roomName}</div>;
 }
 ```
 
@@ -117,35 +115,40 @@ function MyComponent() {
 — the hub holds the private key; apps only ever fetch the public key.
 
 Claims: `sub` (userId), `preferred_username`, `aud` (appId), `rid` (roomId, when
-in a room), standard `iss`/`iat`/`exp`.
+in a room), standard `iss`/`iat`/`exp`. When the app holds the `rooms:roles:read`
+scope the hub also adds the caller's own `room_roles` and `workspace_roles`.
 
-Verify it on your backend against the hub JWKS at
-`GET /.well-known/mcp-apps/jwks.json` (public keys only). Never trust a
-client-supplied `userId` without a token that verifies.
+**The UI never forwards a token.** `usePrivosContext()` does not expose it (see
+[React SDK › Signed user token](../react-sdk-reference.md#signed-user-token)). The
+UI calls your backend through the host bridge, and the hub attaches the verified
+caller to the dispatch it sends to your app server:
 
-**Frontend → backend flow (relay & direct apps):** read the token from the
-context, forward it to your backend, verify, then trust the identity.
+| App type | Where the backend gets the caller |
+|---|---|
+| Relay | `params._meta.privosUser.userToken` on each dispatched request, verified against the hub JWKS |
+| Direct HTTP | `Authorization: Bearer <jwt>` plus `X-MCP-User-Id` on each dispatched request |
+| Managed runtime | the `actor` claim of the signed dispatch assertion, present only when the manifest declares [`capabilities.verifiedActor: true`](../developer-guide.md#declaring-the-verified-actor-capability) |
+
+`@privos_ai/app-server` does the verification for you and surfaces the result as
+`context.actor` in your tool handlers. For a paired (standalone) Relay app,
+`connectRelay` verifies the relay token automatically; a missing or invalid token
+leaves `context.actor` undefined, so check it (`assertActorAvailable`) and refuse
+the call rather than falling back to a `userId` argument.
+
+To verify a token yourself, for example in an app-owned HTTP route, use the SDK
+instead of hand-rolling the signature check. It pins RS256 and checks the expiry
+and the audience:
 
 ```typescript
-// frontend (React SDK) — there is no dedicated usePrivosUserToken() hook;
-// usePrivosContext() merges the mcpapp.context.get response, so userToken is
-// on the returned object even though it isn't in the PrivosContext TS type.
-import { usePrivosContext } from '@privos_ai/app-react';
-const { userToken } = usePrivosContext() as Record<string, any>;
-// send `userToken` to your backend tool call / endpoint
+import { buildHubUserTokenAuthOptions, verifyUserToken } from '@privos_ai/app-server';
 
-// backend (Node, no JWT lib needed — plain crypto)
-import crypto from 'node:crypto';
-const jwks = await (await fetch(`${PRIVOS_URL}/.well-known/mcp-apps/jwks.json`)).json();
-const [h, p, s] = token.split('.');
-const jwk = jwks.keys.find((k) => k.kid === JSON.parse(Buffer.from(h, 'base64url')).kid);
-const pub = crypto.createPublicKey({ key: jwk, format: 'jwk' });
-const ok = crypto.createVerify('RSA-SHA256').update(`${h}.${p}`).end().verify(pub, Buffer.from(s, 'base64url'));
-const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
-// ok === true → trust claims.sub / claims.preferred_username
+// The hub publishes its public keys at `/.well-known/mcp-apps/jwks.json`.
+const auth = buildHubUserTokenAuthOptions({
+  hubOrigin: 'https://<your-hub>',
+  audience: '<your app id>', // the token's `aud`
+});
+
+const result = await verifyUserToken(token, auth, assertedUserId); // assertedUserId is optional
+if (!result.ok) throw new Error(result.message); // fail closed
+const { userId, username, roomId } = result.actor;
 ```
-
-> Note: the direct-HTTP tool-call path also forwards the token to the app server
-> as `Authorization: Bearer <jwt>` + `X-MCP-User-Id`. The relay (WebSocket)
-> transport does not carry per-request headers, so relay app backends obtain the
-> token via the frontend (context) as shown above.

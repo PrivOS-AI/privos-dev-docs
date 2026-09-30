@@ -109,10 +109,11 @@ find-or-create race and how it's resolved.
 ## Permissions
 
 Declare only what the UI actually calls, same as any other app — least
-privilege, `context`/`executionContext` per scope, and an optional
-`degradedBehavior` string for anything marked `requirement: "optional"` so a
-user who declines it still gets a coherent (if reduced) app instead of a
-broken one.
+privilege, `context`/`executionContext` per scope. Every permission marked
+`requirement: "optional"` must carry a `degradedBehavior` string of at least 10
+characters that says what the app does without it, so a user who declines it
+still gets a coherent (if reduced) app instead of a broken one. A permission
+marked `requirement: "required"` must not declare `degradedBehavior`.
 
 ## Build and bundle
 

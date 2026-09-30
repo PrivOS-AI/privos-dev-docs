@@ -259,18 +259,11 @@ Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:
 const { roomId, userId, username, theme, roomName, userRoles, effectiveScopes, roomSlug, appId, appUrl, themeTokens } = usePrivosContext();
 ```
 
-The TypeScript `PrivosContext` type only declares the fields above, but the hook's
-underlying fetch is the same `mcpapp.context.get` tool call documented in
-[Tools — Context](./apis/tools-context.md), whose response also carries `userToken`,
-`roomType`, `isAgentRoom`, `agentBot`, `defaultBot` when relevant. Those extra fields
-are present on the object at runtime but aren't in the type — read them off a cast,
-matching the app's own untyped-extras pattern:
-
-```tsx
-const ctx = usePrivosContext() as Record<string, any>;
-const userToken: string | undefined = ctx.userToken;
-const isAgentRoom: boolean | undefined = ctx.isAgentRoom;
-```
+The hook's underlying fetch is the `mcpapp.context.get` tool call documented in
+[Tools — Context](./apis/tools-context.md). It copies only the fields listed above
+into the returned object; every other field of that response is dropped, including
+the `userToken` the Hub puts in it. The iframe gets display context, not a bearer or
+user token. See [Signed user token](#signed-user-token).
 
 - `theme` (`'light'` | `'dark'`) — updates in real-time when the user toggles theme
 - `themeTokens` (`Record<string, string>`, optional) — the 12 curated `--base-*` workspace design
@@ -284,18 +277,15 @@ Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guid
 
 ## Signed user token
 
-There is no `usePrivosUserToken()` hook. Read `userToken` off `usePrivosContext()`
-(cast as shown above) and forward it to your app **backend**, which verifies it
-against the hub JWKS — this proves *who* the caller is without your app being able
-to forge it. Never trust a client-supplied `userId` without a token that verifies.
-
-```tsx
-const { userToken } = usePrivosContext() as Record<string, any>;
-// POST it to your backend, e.g. as Authorization: `Bearer ${userToken}`
-```
-
-Backend verification + claims are documented in
-[Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity).
+`usePrivosContext()` does not expose a user token, and there is no
+`usePrivosUserToken()` hook. Do not read a token in the UI and forward it to your
+backend, and do not send a `userId` from the UI as proof of who is calling. Call your
+backend through the host bridge instead (`callServerTool()`, `app.rest()`,
+`uploadFile()`): the Hub knows the logged-in user and puts the verified caller into
+the dispatch it sends to your app server. Your backend then reads the acting user
+from the tool-call context (`context.actor`) — see
+[Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity)
+for how a backend receives and verifies that identity.
 
 ## usePrivosTool
 
