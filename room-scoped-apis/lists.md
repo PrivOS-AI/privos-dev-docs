@@ -8,6 +8,13 @@ When the target room belongs to a team, the GET endpoints can also surface cross
 
 **Base Path:** `/api/v1/internal/rooms/:roomId/lists`
 
+## Access Rules
+
+- **Room access** is always required: the caller must be able to access the room in the URL.
+- **App-owned lists.** A list created by an MCP app carries an app owner. Reading it needs room access only, but writing it (changing the list, its fields or stages, or any of its items) is limited to the app's own installation bot and to human room owners, admins and leaders. Any other caller, including a bot that holds a room role, is refused (`error-not-allowed`, or `error-unauthorized` when the route also needs a room role the caller lacks). In the batch endpoints the refusal is reported per element in `errors` instead of failing the whole request.
+- **Managing lists needs a room role.** Creating, updating or deleting a list, batch create and batch delete, and every field and field-option write (create, update, delete) require room owner, admin or leader (in a direct message, any participant). A caller without one gets `error-unauthorized`. Reads need room access only.
+- **Deleting is recoverable.** A deleted list is soft-deleted: its stages and items are kept and the list, with the deleting user, appears on the admin Recovery page. Deletion never removes stages or items.
+
 ## Authentication
 
 All endpoints require:
@@ -284,7 +291,7 @@ curl -X PUT "https://your-domain.com/api/v1/internal/rooms/ROOM_ID/lists/LIST_ID
 DELETE /api/v1/internal/rooms/:roomId/lists/:listId
 ```
 
-**Description:** Deletes a list and all its associated stages and items.
+**Description:** Soft-deletes the list. Its stages and items are kept so an admin can recover it. Requires room owner, admin or leader.
 
 **Response:**
 
@@ -681,7 +688,7 @@ POST /api/v1/internal/rooms/:roomId/lists/batch-delete
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `listIds` | array | Yes | Array of list IDs to delete |
-| `deleteItems` | boolean | No | Also delete items (default: false) |
+| `deleteItems` | boolean | No | Confirms that a list that still has items may be deleted (default: false). Items are kept either way; the list is soft-deleted |
 
 **Response:**
 
@@ -708,7 +715,8 @@ POST /api/v1/internal/rooms/:roomId/lists/batch-delete
 | `error-list-not-found` | List not found |
 | `error-invalid-params` | Missing or invalid parameters |
 | `error-forbidden` | List is not visible in this room or team context |
-| `error-unauthorized` | Missing permission to enable or modify cross-team workflow |
+| `error-unauthorized` | Caller is not a room owner, admin or leader (list and field writes), or lacks permission to enable or modify cross-team workflow |
+| `error-not-allowed` | Caller cannot access the room, or the list is app-owned and the caller is not its installation bot or a room owner, admin or leader |
 | `error-field-not-found` | Field definition not found |
 | `error-option-not-found` | Field option not found |
 | `error-invalid-field-type` | Field doesn't support the operation |

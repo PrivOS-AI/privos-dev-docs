@@ -636,6 +636,15 @@ POST /api/v1/internal/rooms/:roomId/items/batch-delete
 | `error-invalid-field` | Field not found in list |
 | `error-item-has-children` | Item has child items |
 | `error-forbidden` | Item doesn't belong to this room |
+| `error-not-allowed` | Caller cannot access the room, cannot modify the item on an isolated list, or the list is app-owned and the caller is not its installation bot or a room owner, admin or leader |
+
+---
+
+## Access Rules
+
+- **Room access** is always required: the caller must be able to access the room in the URL.
+- **App-owned lists.** A list created by an MCP app carries an app owner. Reading it needs room access only, but writing it (changing the list, its fields or stages, or any of its items) is limited to the app's own installation bot and to human room owners, admins and leaders. Any other caller, including a bot that holds a room role, is refused (`error-not-allowed`, or `error-unauthorized` when the route also needs a room role the caller lacks). In the batch endpoints the refusal is reported per element in `errors` instead of failing the whole request.
+- **Items need no room role.** Any caller with room access can create, update, move and delete items on an ordinary list, subject to the isolated-list rules.
 
 ---
 

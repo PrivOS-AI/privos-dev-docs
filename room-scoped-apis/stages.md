@@ -213,7 +213,7 @@ DELETE /api/v1/internal/rooms/:roomId/stages/:stageId
 |-----------|------|----------|-------------|
 | `moveItemsToStageId` | string | Conditional | Target stage for existing items |
 
-**Description:** Deletes a stage. If the stage contains items, you must specify a target stage to move them to.
+**Description:** Deletes a stage. If the stage contains items, you must specify a target stage to move them to. Requires room owner, admin or leader.
 
 **Response:**
 
@@ -326,7 +326,7 @@ POST /api/v1/internal/rooms/:roomId/stages/batch-delete
 | `stageIds` | array | Yes | Array of stage IDs to delete |
 | `moveItemsToStageId` | string | Conditional | Target stage for existing items |
 
-**Description:** Deletes multiple stages. All items from deleted stages are moved to the target stage.
+**Description:** Deletes multiple stages. All items from deleted stages are moved to the target stage. Requires room owner, admin or leader.
 
 **Response:**
 
@@ -382,6 +382,16 @@ GET /api/v1/internal/rooms/:roomId/stages?listId=LIST_ID&teamId=TEAM_ID
 | `error-invalid-target-stage` | Target stage doesn't exist or is in a different list |
 | `error-stage-has-items` | Stage contains items (provide moveItemsToStageId) |
 | `error-forbidden` | Stage doesn't belong to a list in this room |
+| `error-unauthorized` | Deleting a stage requires room owner, admin or leader |
+| `error-not-allowed` | Caller cannot access the room, or the list is app-owned and the caller is not its installation bot or a room owner, admin or leader |
+
+---
+
+## Access Rules
+
+- **Room access** is always required: the caller must be able to access the room in the URL.
+- **App-owned lists.** A list created by an MCP app carries an app owner. Reading it needs room access only, but writing it (changing the list, its fields or stages, or any of its items) is limited to the app's own installation bot and to human room owners, admins and leaders. Any other caller, including a bot that holds a room role, is refused (`error-not-allowed`, or `error-unauthorized` when the route also needs a room role the caller lacks). In the batch endpoints the refusal is reported per element in `errors` instead of failing the whole request.
+- **Deleting a stage needs a room role.** `DELETE .../stages/:stageId` and `stages/batch-delete` require room owner, admin or leader. Creating and updating stages, and all reads, need room access only.
 
 ---
 
