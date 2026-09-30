@@ -5,15 +5,13 @@
 The Internal API provides endpoints for server-to-server communication within the PrivOS Hub application. These APIs are designed for internal services, AI agents, and trusted integrations to manage core resources like Lists, Items, Stages, Documents, Rooms, and Users.
 
 ## Base URL
-DEV:  
 
-BASE_URL= https://privos-hub-dev.roxane.one/
-API_KEY= dwVT6jcM-DI_Cs27nB4gaszG-wsBDvUJAkkuQt4RMuI
+Use your own Hub origin and the internal API key configured on that Hub:
 
-PROD:  
-
-BASE_URL= https://privos.roxane.one/
-API_KEY= ktRe4m91k8YZ2b5M90H_ZR8CzIouJvnsDgUMTw7n4UI
+```bash
+BASE_URL=https://<your-hub>/
+API_KEY=<your internal API key>
+```
 
 
 ```
