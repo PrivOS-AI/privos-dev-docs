@@ -1,5 +1,9 @@
 # App Platform — Developer Guide
 
+> **Build with an AI agent.** The [privos-mcp-app skill](https://github.com/PrivOS-AI/privos-mcp-app-skill)
+> (MIT) takes an agent such as Claude Code from an idea to an app that runs in your workspace over
+> Relay and is ready for the marketplace, following this guide.
+
 ## 1. Scaffold
 
 ```bash
