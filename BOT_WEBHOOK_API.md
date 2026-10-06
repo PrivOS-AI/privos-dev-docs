@@ -775,3 +775,4 @@ app.listen(PORT, () => {
 - Bot API Documentation: See `/docs/BOT_API_FEATURE.md`
 - Webhook Queue Architecture: See `/docs/WEBHOOK_QUEUE_ARCHITECTURE.md`
 - Example implementations: See `/examples/webhook-handlers/`
+- Credential vault for agent calls to external APIs: See `agent-system/credential-vault.md`
