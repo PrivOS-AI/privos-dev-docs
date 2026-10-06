@@ -37,7 +37,7 @@ Request body of `POST /api/v1/agents.a2a.send`:
   "fileIds": ["<upload ids that belong to the destination room>"] }
 ```
 
-- `to` is a non-empty array of bot ids without duplicates, or the literal `"team"` (every roster bot that is a member of the destination room, except the sender).
+- `to` is a non-empty array of bot ids without duplicates, or the literal `"team"` (every roster bot that is a member of the destination room, except the sender and the main bot; a teammate that fails a per-recipient rule is skipped, while the same bot named explicitly refuses the send).
 - `messageId` is the caller's idempotency key (`(from, messageId)` is unique). It must match `^m_[A-Za-z0-9_-]{8,64}$`. A repeated send returns `duplicate: true`.
 - `correlationId` is omitted on a chain's first message; the hub mints it and returns it. Later messages must name a chain the sender takes part in, carry its `teamId` and use its `roomId`.
 - `text` is at most 2000 characters and `data` at most 50000 characters serialized.
@@ -97,11 +97,11 @@ The hub never auto-invites a bot into a room and the room's default bot is never
 ## Chain, hop and caps
 
 - The first message pins the chain: team, room, thread root, initiator, accountable human and participants (which grow as recipients are added).
-- `hop` is computed by the hub (the hop of the message being answered plus one) and a send above hop 4 is refused (`a2a-hop-limit`).
+- `hop` is computed by the hub: one more than the highest hop already addressed to the sender on the chain (and than the `replyTo` row, which must be addressed to the sender). Pointing `replyTo` at an early message never resets the count. A send above hop 4 is refused (`a2a-hop-limit`).
 - A chain holds at most 20 rows; fan-out rows count individually (`a2a-chain-cap`).
 - A bot that starts a new chain from inside a running chain turn creates a child chain that inherits the parent's lineage and is charged to the root initiator.
 - Each (initiating bot, accountable human) pair may start `Agent_A2A_New_Chains_Per_Hour` new chains per UTC clock hour (default 20); beyond that the send is refused with `a2a-new-chain-rate` and audited. `0` refuses every new chain.
-- `kind: stop` through `send` is accepted only from the chain initiator (`a2a-stop-not-allowed` otherwise). Humans stop a chain with `POST agents.a2a.stop { correlationId, reason? }`. Stop is soft: no new wakes, rows are left as they are.
+- `kind: stop` through `send` is accepted only from the chain initiator (`a2a-stop-not-allowed` otherwise). Humans stop a chain with `POST agents.a2a.stop { correlationId, reason? }`. Stop is soft: queued FYI and urgent rows of the chain expire (`expired/stopped`), every other participant gets one `stop` message, running turns finish, and afterwards only `kind: result` from a participant is accepted (`a2a-chain-stopped` for anything else).
 
 ## Mailbox and delivery
 
@@ -111,11 +111,12 @@ In the destination room the hub posts one fixed line per record in the chain thr
 
 ## Approval flow
 
-1. A worker needing a consequential action (external message, delete, spend, production change, or whatever the team's risk tiers list) sends `kind: needs-approval` to the chain initiator with `data.approval`.
-2. The hub computes the tier from the team's `riskTiers`; unknown actions require approval; a tier declared by the worker is ignored. When the owner set the action's tier to auto, the hub decides on its own and the send response carries `decision: "auto"`.
+1. A worker needing a consequential action (external message, delete, spend, production change, or whatever its owner's risk tiers list) sends `kind: needs-approval` to exactly one bot, normally the chain initiator, with `data.approval = { action, draft? }`. The request is a card for a human, never a wake of the recipient.
+2. The hub computes the tier from the worker owner's entry in the team's `riskTiers` (one owner's tiers never apply to another owner's bots); unknown actions require approval; a tier declared by the worker is ignored. When the owner set the action's tier to auto, the hub decides on its own and the send response carries `decision: "auto"`.
 3. For an action that needs a human, the hub renders approve and deny buttons as the main bot in the worker owner's Universal Bot DM. The button handler resolves the stored button exactly once.
 4. Approve wakes the worker once with an `approval` row. Deny or a 24 hour expiry is final per (team, worker, action): a re-ask is refused with `a2a-approval-final`.
 5. External messages are always drafts; the worker puts the draft in `data.approval.draft` and never sends it itself.
+6. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. A question without options is an ordinary message to its recipient.
 
 ## Prompt block
 
@@ -148,7 +149,7 @@ Returned as `errorType` with HTTP 400 or 403.
 | Code | Meaning |
 |------|---------|
 | `a2a-disabled` | Kill switch is off |
-| `a2a-ub-disabled` | The main bot is disabled or not bound to this DM |
+| `a2a-ub-disabled` | The main bot is disabled, not allowed for the human, not sending from a bound DM, or cannot post an approval card to the approver |
 | `a2a-invalid-envelope` | Body failed validation (shape, caps, ids) |
 | `a2a-sender-not-on-roster` | Sender is not an eligible roster bot (a human token lands here) |
 | `a2a-not-team` | The team id has no a2a roster |
@@ -169,19 +170,21 @@ Returned as `errorType` with HTTP 400 or 403.
 | `a2a-chain-cap` | Chain is at 20 rows |
 | `a2a-new-chain-rate` | New-chain cap reached for this hour |
 | `a2a-main-bot-only-replies` | The main bot accepts replies on chains it started, not new tasks |
-| `a2a-stop-not-allowed` | Only the chain initiator may stop it |
+| `a2a-stop-not-allowed` | Only the chain initiator (through `send`) or the chain's human, a team moderator or an admin (through `agents.a2a.stop`) may stop it |
 | `a2a-chain-stopped` | The chain was stopped |
 | `a2a-approval-final` | The same action was denied or expired within 24 hours |
 | `a2a-file-not-in-room` | A `fileIds` entry is not an upload of the destination room |
+| `a2a-not-authorized` | Roster and roster-read routes: the caller lacks the team role, does not own the bot, or is a bot |
+| `a2a-not-found` | `agents.a2a.stop`: unknown chain |
 
 ## Other routes
 
 | Route | Who | Purpose |
 |-------|-----|---------|
-| `GET agents.a2a.team.members?teamId=` | roster bot | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
-| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | roster bot or admin (results are scoped to the caller's role) | `{ rows, count, offset, total }`; each row has `_id, correlationId, messageId, from, to, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data, approval` |
-| `POST agents.a2a.stop { correlationId, reason? }` | human only | Stop a chain |
-| `POST agents.a2a.teams.mark` | human with a team role | Maintain the roster; bots are refused |
+| `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
+| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of, with `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
+| `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
+| `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room | `add`: bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
 
 ## Using it
 
