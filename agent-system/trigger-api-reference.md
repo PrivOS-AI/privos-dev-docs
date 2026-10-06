@@ -14,6 +14,7 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
 | POST | `/v1/agents.triggers.run` | Yes | Manually fire a trigger |
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
+| POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
 
 ## Authorization
 
