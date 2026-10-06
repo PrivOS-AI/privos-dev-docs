@@ -28,6 +28,9 @@ upstream response back to the skill.
 | Agent-private | `bot-scope:<botId>` | The bot's creator and workspace admins | That bot's projects in any room |
 | Universal Bot | `bot-scope:universal-bot` | Workspace admins only | The Universal Bot's projects |
 
+A room that runs its own sandbox has no room vault: its sandbox address is editable by moderators, so owner secrets
+are never sent there. Use a shared or agent-private binding instead.
+
 Bots and app users can never manage bindings. The hub refuses every vault route for a bot or app principal, and a bot
 acting with its own bot key cannot reach `privos-sandbox.catalog.*` at all.
 
