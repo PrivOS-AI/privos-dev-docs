@@ -13,6 +13,7 @@ AI agents in PrivOS Hub — conversational bots powered by PrivOS Sandbox (Claud
 - [Self-Management Skills](./self-management-skills.md) — Skill files agents use to manage their own triggers
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md) — Bot-key push to PrivOS Sandbox, agent selector re-validation, mid-session context handover
 - [Agent Harness Runtime](./agent-harness-runtime.md) — Second runtime: an operator-owned ACP bridge (Claude Code / Codex / Cursor / Goose / custom) instead of PrivOS Sandbox — protocol, dispatch switch, relay lifecycle, pairing, per-room isolation
+- [Credential Vault](./credential-vault.md) — Egress-injected secrets for external APIs: shared, room and agent-private bindings, secret requests, coexistence with the bot key
 
 ## Concepts
 

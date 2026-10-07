@@ -171,3 +171,4 @@ Other endpoints that consume the same bearer token (`agents.sandbox.*`,
 - [Agent Rooms](./agent-rooms.md) — room provisioning, default bot custom fields
 - [Trigger API Reference](./trigger-api-reference.md) — `agents.triggers.*` endpoints
 - [Self-Management Skills](./self-management-skills.md) — how skills authenticate back to chat
+- [Credential Vault](./credential-vault.md) — external-API secrets injected at egress; the bot key and the vault share one proxy route but never touch each other's rows
