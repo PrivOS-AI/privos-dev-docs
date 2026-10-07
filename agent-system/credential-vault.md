@@ -190,6 +190,11 @@ deleted. The vault admin routes accept the board API key the hub uses, never age
 question with a clear refusal in board mode, because its shell and MCP servers do not receive vault variables there;
 use the Claude CLI provider or sandbox mode.
 
+**Intended use:** board mode is for private agents used by one person. Keys entered for them are not meant to be
+shared with other people's agents. A room that points at its own sandbox never gets the secure form: its sandbox address
+is editable by moderators, so the Hub sends keys only to the workspace sandbox. To use the vault with a board through a
+Hub, pair the board as the workspace sandbox.
+
 **Ceiling, accepted:** the CLI runs as the board's OS user, so a hostile agent on the same host can read the board's
 key and database and decrypt stored keys. Chat, logs, transcripts and model context stay clean. Use sandbox mode when
 agents must not be able to reach the keys at all.
