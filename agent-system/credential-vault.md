@@ -180,9 +180,13 @@ stream, so SSE works. Only bindings with an exact host get a base-URL variable.
 A board without a sandbox proxy (`PRIVOS_SANDBOX_MODE` unset) runs the same vault module in-process on loopback,
 with its own sqlite file and the same REST contract, so the hub's card, form and Vault tab work unchanged against the
 board URL. The board uses `CATALOG_SECRET_KEY` from its env when set, and otherwise generates a key once into its data
-directory (mode `0600`). Claude CLI agents get the vault variables in their process env (and their stdio MCP servers
-inherit them); a vault name never overrides a variable the board already sets for the agent, such as
-`ANTHROPIC_BASE_URL`. The board's built-in agent runtime (the `privos-agent-sdk` provider) answers a credential
+directory (mode `0600`) and keeps it in memory only. A check value stored next to it makes the vault refuse to start
+if a later start resolves to a different key, so stored keys are never silently orphaned. Claude CLI agents get the
+vault variables in their process env (and their stdio MCP servers inherit them). A vault name replaces an inherited
+or room `.env` variable of the same name, except reserved names and anything starting with `ANTHROPIC_`, which the
+agent itself needs; a binding's key and base-URL names are applied or skipped together. The relay listens on the
+vault's loopback port only, so a relay token is useless off the host, and it is revoked when the board project is
+deleted. The vault admin routes accept the board API key the hub uses, never agent keys. The board's built-in agent runtime (the `privos-agent-sdk` provider) answers a credential
 question with a clear refusal in board mode, because its shell and MCP servers do not receive vault variables there;
 use the Claude CLI provider or sandbox mode.
 
