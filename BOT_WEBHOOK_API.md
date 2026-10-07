@@ -510,7 +510,7 @@ curl -X POST https://your-privos-hub.com/api/v1/bot/sendVoice \
 
 ### POST /api/v1/bot/editMessage
 
-Edit a previously sent message.
+Edit a message this bot sent. Open clients see the change immediately. `bot.editMessage` is an alias of the same route.
 
 **Headers:**
 ```
@@ -519,6 +519,15 @@ Content-Type: application/json
 ```
 
 **Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `messageId` | string | yes | A message sent by this bot |
+| `text` | string | no | New text. Omit it to keep the current text |
+| `inlineKeyboard` | object or null | no | New inline keyboard (same shape as in `sendMessage`). Omit it to keep the current buttons. Send `null` or a keyboard with an empty `buttons` list to remove them |
+
+Send at least one of `text` or `inlineKeyboard`.
+
 ```json
 {
     "messageId": "msg123",
@@ -526,7 +535,7 @@ Content-Type: application/json
 }
 ```
 
-**cURL Example:**
+**cURL Example (change the text):**
 
 ```bash
 curl -X POST https://your-privos-hub.com/api/v1/bot/editMessage \
@@ -538,9 +547,25 @@ curl -X POST https://your-privos-hub.com/api/v1/bot/editMessage \
   }'
 ```
 
+**cURL Example (remove the buttons after a click, keep the text):**
+
+```bash
+curl -X POST https://your-privos-hub.com/api/v1/bot/editMessage \
+  -H "Authorization: Bearer privos_694b67f394ee87bd045c2ad1_a1b2c3d4e5f6" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messageId": "msg123",
+    "inlineKeyboard": null
+  }'
+```
+
+**Response:** `{ "messageId": "msg123", "text": "Updated text", "editedAt": "...", "success": true }` (`text` is present only when it was sent). A message that does not belong to the bot returns `400` with `Failed to edit message. Message may not belong to this bot.`
+
 ### POST /api/v1/bot/deleteMessage
 
-Delete a previously sent message.
+Delete a message this bot sent. Open clients remove it immediately, and thread reply counts and the room's last message are updated. The hub's message settings apply: when "Show deleted status" is on, a "message deleted" marker stays in its place. `bot.deleteMessage` is an alias of the same route.
+
+A message that does not belong to the bot, or that is already deleted, returns `400` with `Failed to delete message. Message may not belong to this bot.`
 
 **Headers:**
 ```

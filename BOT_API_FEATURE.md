@@ -347,19 +347,21 @@ reply_to_message_id: <message_id> # Optional: Reply to a message
 
 #### Edit Message
 ```
-POST /api/v1/bot/editMessage
+POST /api/v1/bot/editMessage            # alias: bot.editMessage
 Authorization: Bearer <bot_token>
 Content-Type: application/json
 
 {
-  "messageId": "<message_id>",
-  "text": "Updated message"
+  "messageId": "<message_id>",          # must be a message sent by this bot
+  "text": "Updated message",            # optional: omit to keep the text
+  "inlineKeyboard": null                # optional: omit to keep, null or empty buttons to remove
 }
 ```
+Send at least one of `text` or `inlineKeyboard`.
 
 #### Delete Message
 ```
-POST /api/v1/bot/deleteMessage
+POST /api/v1/bot/deleteMessage          # alias: bot.deleteMessage; only messages sent by this bot
 Authorization: Bearer <bot_token>
 Content-Type: application/json
 

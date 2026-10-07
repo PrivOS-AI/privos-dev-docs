@@ -139,6 +139,8 @@ The bot token itself is **never logged**. Only `appId` and `botUserId` appear in
 |------|-------|---------|
 | `mcpapp.bot.getMe` | — | Verify a bot token, return `{ _id, username, name }` |
 | `mcpapp.bot.sendMessage` | `bot:message:send` | Send text to a room (with optional reply, inline keyboard) |
+| `mcpapp.bot.editMessage` | `bot:message:send` | Edit the text or inline keyboard of a message this bot sent |
+| `mcpapp.bot.deleteMessage` | `bot:message:send` | Delete a message this bot sent |
 | `mcpapp.bot.sendDirectMessage` | `bot:message:send` | Send DM to a user (resolves DM room automatically) |
 | `mcpapp.bot.sendAttachment` | `bot:message:send` | Send photo/video/audio/document/voice to a room |
 
@@ -192,6 +194,60 @@ Send a text message to a room as the bot.
 - `Invalid or expired bot token` — token validation failed
 - `Bot is not a member of this room` — bot has no subscription
 - `Failed to send message` — service rejected (quota, room locked, etc.)
+
+---
+
+### `mcpapp.bot.editMessage`
+
+Edit a message this bot sent. Open clients see the change immediately. Use it to replace a "processing" reply with
+the result, or to lock a menu after a click by removing its buttons.
+
+### Arguments
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `botToken` | string | yes | Bot token |
+| `messageId` | string | yes | A message sent by this bot |
+| `text` | string | no | New text. Omit it to keep the current text |
+| `inlineKeyboard` | object or null | no | New inline keyboard. Omit it to keep the buttons; `null` or an empty `buttons` list removes them |
+
+Send at least one of `text` or `inlineKeyboard`.
+
+### Response
+
+```json
+{ "messageId": "msg_xyz", "botId": "bot_abc123" }
+```
+
+### Errors
+
+- `Provide text or inlineKeyboard` — neither field was sent
+- `Message text cannot be empty`
+- `Failed to edit message. Message may not belong to this bot.`
+
+---
+
+### `mcpapp.bot.deleteMessage`
+
+Delete a message this bot sent. Open clients remove it immediately, and thread reply counts and the room's last
+message are updated. When the hub shows deleted status, a "message deleted" marker stays in its place.
+
+### Arguments
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `botToken` | string | yes | Bot token |
+| `messageId` | string | yes | A message sent by this bot |
+
+### Response
+
+```json
+{ "messageId": "msg_xyz", "botId": "bot_abc123" }
+```
+
+### Errors
+
+- `Failed to delete message. Message may not belong to this bot or is already deleted.`
 
 ---
 

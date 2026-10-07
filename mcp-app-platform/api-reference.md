@@ -40,6 +40,8 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `mcpapp.bot.getCurrentRoomIdentity` | bot:identity:read | Return safe associated-bot identity only with ordinary membership in the Hub-resolved current Room |
 | `mcpapp.bot.getMe` | — | Validate a bot token, return bot identity |
 | `mcpapp.bot.sendMessage` | bot:message:send | Send a text message to a room as a bot |
+| `mcpapp.bot.editMessage` | bot:message:send | Edit the text or inline keyboard of a message the bot sent |
+| `mcpapp.bot.deleteMessage` | bot:message:send | Delete a message the bot sent |
 | `mcpapp.bot.sendDirectMessage` | bot:message:send | Send a DM to a user as a bot (shared-room required) |
 | `mcpapp.bot.sendAttachment` | bot:message:send | Send photo/video/audio/document/voice to a room or DM (via fileId or fileUrl) |
 | `mcpapp.notifications.create` | `notifications:write` | Notify one active member of the app's approved room through bell, native mobile, and Web Push |
