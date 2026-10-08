@@ -216,8 +216,9 @@ The save settles the request by id and resumes the agent once with the same valu
 saves for one request (two tabs, or the board form racing a Hub form) store one binding: the other gets "completed
 elsewhere" and its value is not stored. A rotate request opens the form with the value field only; a key that is not
 private to the agent is rotated in the Hub Vault tab. The form needs a board API key: on a board without one the
-agent is told at once that secure entry is unavailable, and the form explains how to set a key. Room and shared
-scopes stay a Hub-form feature.
+agent is told at once that secure entry is unavailable, and the form explains how to set a key. A board with no Hub
+room cannot name a hub host from its rooms, so its vault refuses every save (`invalid-scope-entry`) until the
+operator sets `PRIVOS_HUB_HOST` (or `PRIVOS_URL`) on the board. Room and shared scopes stay a Hub-form feature.
 
 **Intended use:** board mode is for private agents used by one person. Keys entered for them are not meant to be
 shared with other people's agents. A room that points at its own sandbox never gets the secure form: its sandbox address
