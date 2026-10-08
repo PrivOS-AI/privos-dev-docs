@@ -304,4 +304,10 @@ isolation level (a deliberate trade-off recorded in
 validation sessions 6–8): cross-room *file* access is bounded by the OS,
 cross-room *API* access is bounded by the hub's `respondTo` gate and
 membership rules only, same as the reference platform this design is modeled
-on.
+on. This holds for the harness runtime only, because the bridge runs on the
+operator's machine, outside the sandbox proxy. A sandbox-runtime agent works
+differently: its VM never holds the key, and the proxy attaches it at egress
+(see [Bot Key & Agent Switching](./bot-key-and-agent-switching.md)). The
+`privos` CLI egress transport and `privos hub dm reply` described in
+[Super Agent](./super-agent.md) therefore need a sandbox VM; a harness agent
+that is a super agent uses the CLI with `--bot-key` or `PRIVOS_BOT_KEY`.

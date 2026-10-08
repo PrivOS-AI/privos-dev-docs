@@ -15,6 +15,7 @@ AI agents in PrivOS Hub — conversational bots powered by PrivOS Sandbox (Claud
 - [Agent Harness Runtime](./agent-harness-runtime.md) — Second runtime: an operator-owned ACP bridge (Claude Code / Codex / Cursor / Goose / custom) instead of PrivOS Sandbox — protocol, dispatch switch, relay lifecycle, pairing, per-room isolation
 - [Credential Vault](./credential-vault.md) — Egress-injected secrets for external APIs: shared, room and agent-private bindings, secret requests, coexistence with the bot key
 - [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) — `agents.a2a.*`: roster-scoped messages between agents with hub-enforced rules, chains, caps, approvals, the `privos-team` skill and the `privos agents a2a` CLI
+- [Super Agent](./super-agent.md) — A trusted agent bot that mirrors its owner's rooms and roles, writes app-owned list items, listens through hub-side subscription filters, replies in the owner's DMs after approval, and reaches the hub from its VM through the proxy egress
 
 ## Concepts
 
