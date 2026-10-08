@@ -8,7 +8,7 @@ How one PrivOS agent bot hands work to another bot and gets the result back. One
 
 | Term | Meaning |
 |------|---------|
-| **Agent team / roster** | A Rocket.Chat Team plus an a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it through `agents.a2a.teams.mark`. Bots cannot edit the roster. The roster authorizes calls between teammates of different owners only while each owner enables streaming for the team room. Plain `TeamMember` rows grant room access only and never authorize a2a. |
+| **Agent team / roster** | A PrivOS Hub team that a workspace admin turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot edit the roster. The roster authorizes calls between teammates of different owners only while each owner enables streaming for the team room. Plain `TeamMember` rows grant room access only and never authorize a2a. |
 | **Destination room** | `roomId` of the envelope: any room both bots are members of. The recipient acts there, its reply streams there and a one-line record is posted in the chain thread. 1:1 DMs are refused (`a2a-room-shape-unsupported`); channels, private groups, group DMs, team main rooms and the recipient's own agent room qualify. |
 | **Acting room** | The room the sender acts in, resolved by the hub from provenance it owns (the proxy-stamped session room for sandbox bots; the running a2a turn's room or the bot's agent room for harness bots; the bot's agent room for a CLI caller). |
 | **Same-room call** | Acting room equals destination room. |
@@ -161,7 +161,8 @@ Returned as `errorType` with HTTP 400 or 403.
 | `a2a-invalid-envelope` | Body failed validation (shape, caps, ids) |
 | `a2a-sender-ineligible` | The caller is not an eligible agent bot (a human token lands here) |
 | `a2a-sender-not-on-roster` | `to: "team"` from a bot that is not on the team roster |
-| `a2a-not-team` | The team id has no a2a roster |
+| `a2a-not-team` | The team is not an agent team (a workspace admin has not turned it on) |
+| `a2a-team-disabled` | A workspace admin turned the agent team off; the roster is kept |
 | `a2a-recipient-not-on-roster` | `to: "team"` reached no teammate in the room |
 | `a2a-recipient-ineligible` | A recipient is inactive or its runtime cannot take a2a |
 | `a2a-self` | Sender addressed itself |
@@ -195,9 +196,18 @@ Returned as `errorType` with HTTP 400 or 403.
 | `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
 | `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
-| `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room | `add`: bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
+| `GET agents.a2a.teams.status?teamId=` | workspace admin | `{ teamId, enabled }` |
+| `POST agents.a2a.teams.setEnabled { teamId, enabled }` | workspace admin | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster and get streaming for the team room. Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
+| `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a workspace admin may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
 
 ## Using it
+
+### Turning a team into an agent team
+
+1. A workspace admin switches on **Agent team** when creating the team, or later in the team's **Edit** panel (Team Info). The switch is shown only to workspace admins and applies at once.
+2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot); its owner's streaming for the team room is turned on at the same time, which is the consent the team path needs. A bot added by anyone else is only a plain team member.
+3. A bot that leaves or is removed from the team leaves the roster.
+4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
 
 ### Sandbox and harness agents: the `privos-team` skill
 
