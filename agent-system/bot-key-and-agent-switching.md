@@ -8,9 +8,12 @@ kept in sync across agent changes.
 
 PrivOS Sandbox runs as a separate process (privos-sandbox). Skills and triggers
 running inside a sandbox project authenticate back to chat as the room bot via
-`Authorization: Bearer privos_<userId>_<secret>`. To do that, the bot's token
-must be stored in the project's `.env` on the sandbox side. The "Push bot key to
-PrivOS Sandbox" CTA in the AI chat input writes that file.
+`Authorization: Bearer <bot key>`. In sandbox mode (`PRIVOS_SANDBOX_MODE=true`)
+the key never enters the VM or the project's `.env`: the sandbox stores it in the
+proxy's egress catalog, and the proxy attaches it to the hub routes the catalog
+allows. Without sandbox mode (a plain privos-sandbox install with no proxy) the
+key stays in the project's `.env`. The "Push bot key to PrivOS Sandbox" CTA in
+the AI chat input performs that handover.
 
 Each `(room, bot, sandbox)` triple has its own push record. Switching agents in
 the AI chat selector targets a different bot, so the overlay must
@@ -26,7 +29,7 @@ re-evaluate per-bot — not per-room.
 | `apps/meteor/server/models/BotPrivOSSandboxKey.ts` | Mongo collection — stores `sha256(token)` per `(botId, roomId, privosSandboxId)` |
 | `apps/meteor/client/hooks/aiChat/useBotPrivOSSandboxKeyStatus.ts` | React Query hook — status polling + push mutation |
 | `apps/meteor/client/components/AIChatBox/ChatBoxInput.tsx` | Renders the overlay CTA, dismissal state, agent selector wiring |
-| `privos-sandbox/src/app/api/bot-key/route.ts` | Sandbox receiver — writes `.env` and triggers MinIO sync |
+| `privos-sandbox/src/app/api/bot-key/route.ts` | Sandbox receiver — writes the project `.env` (ids only in sandbox mode), mirrors it to the proxy, writes the egress catalog rows and triggers MinIO sync |
 
 ## Push Flow
 
@@ -34,7 +37,8 @@ re-evaluate per-bot — not per-room.
 2. Route validates: caller has room access + `edit-room` + (bot owner or `edit-bot` permission).
 3. `resolveTargetBotId(roomId, botId)` — if `botId` provided, validates the bot exists, is `type: 'bot'`, and has a subscription to the room. Otherwise falls back to the room's default bot.
 4. `pushBotKeyToSandbox` reads the bot's active token (no minting — uses the existing one from `BotTokens`), computes `projectId` (agent-room bots use `roomId`; generic rooms use legacy `Agent-{roomId}-{botId}`), and POSTs to `${sandboxUrl}/api/bot-key` with `x-api-key` header.
-5. Sandbox writes `.env` to `data/projects/{projectId}/` with `PRIVOS_URL`, `PRIVOS_BOT_KEY`, `PRIVOS_BOT_ID`, `PRIVOS_ROOM_ID`, `PRIVOS_PROJECT_ID`.
+5. Sandbox writes `.env` to `data/projects/{projectId}/` with `PRIVOS_HUB_HOST`, `PRIVOS_BOT_ID`, `PRIVOS_ROOM_ID` and `PRIVOS_PROJECT_ID` (public ids, no secret), mirrors it to the proxy's per-project env, and writes the bot key into the proxy's egress catalog as `platform` rows: hub-host route patterns, project scope, an allowlist (`src/lib/bot-key-egress-catalog.ts` in the sandbox). Only outside sandbox mode does the `.env` also carry `PRIVOS_URL` and `PRIVOS_BOT_KEY`. Every push reconciles the project's platform rows, deleting ones the current build no longer produces; credential-vault rows are never touched.
+5a. For a [super agent](./super-agent.md) pushing its own `agent-room-<botId>` project, the payload carries `superAgent: true` while the flag is set and the kill switch is released, and the catalog gains exact routes for room reads and room management. A flag or kill-switch change makes the hub push that project again, so the extra rows follow the state.
 6. Chat stores `sha256(botToken)` in `BotPrivOSSandboxKeys` so the next status check can detect token rotation without leaking the token.
 
 ## Automatic Repair — Server Is the Sole Initiator
