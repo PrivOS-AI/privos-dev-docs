@@ -1,6 +1,6 @@
 # Super Agent
 
-A **super agent** is an agent bot that a workspace admin has marked as a trusted extension of its owner. The PrivOS Hub
+A **super agent** is an agent bot that a holder of `manage-super-agents` (a workspace admin or an **Agent Team Manager** by default) has marked as a trusted extension of its owner. The PrivOS Hub
 keeps the bot in every channel and private group its owner is in (with the owner's room role), lets it write items of
 MCP-app-owned lists, evaluates subscription filters on its event triggers, and lets it answer the owner's DMs in the
 owner's name after the owner approves. From its VM the agent reaches rooms, lists and items with the `privos` CLI through
@@ -27,7 +27,7 @@ Routes (source: `apps/meteor/app/api/server/v1/bots-super-agent.ts`):
 
 | Route | Who | Purpose |
 |---|---|---|
-| `POST /v1/bots.superAgent.set` `{ botId, enabled, resetDeclined? }` | holders of permission `manage-super-agents` (role `admin` by default) | Set or clear the flag. `resetDeclined` is `'all'` or a list of room ids the mirror may join again |
+| `POST /v1/bots.superAgent.set` `{ botId, enabled, resetDeclined? }` | holders of permission `manage-super-agents` (roles `admin` and `agent-team-manager` by default; grantable to any role) | Set or clear the flag. `resetDeclined` is `'all'` or a list of room ids the mirror may join again |
 | `GET /v1/bots.superAgent.get?botId=` | the owner, or a `manage-super-agents` holder; never the bot itself | The state document (flag, owner, room records) |
 | `POST /v1/bots.superAgent.dmReply.set` `{ botId, mode }` | the owner, or a `manage-super-agents` holder; never the bot | Switch DM replies between `approve` and `auto` |
 
