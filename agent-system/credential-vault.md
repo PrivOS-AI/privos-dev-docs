@@ -3,8 +3,11 @@
 How PrivOS agents call external APIs without ever holding the API key. The sandbox proxy stores the secret encrypted,
 injects it at egress for a matching binding, and the model only ever sees the response.
 
-> **Status:** behind switches that default to off. The proxy needs `VAULT_V2_ENABLED`, and the hub needs the setting
-> `PrivOSSandbox_Credential_Vault_Enabled`. The hub shows vault features only when the proxy advertises them.
+> **Status:** on by default. `VAULT_V2_ENABLED=0` (or `false`) on the proxy or the board is the operator kill switch,
+> and the hub setting `PrivOSSandbox_Credential_Vault_Enabled` defaults to on for new installs (an upgraded hub keeps
+> its stored value until an admin flips it). Without a valid `CATALOG_SECRET_KEY` (64 hex characters) the vault fails
+> closed: it is not advertised, writes answer `vault-not-configured`, and agents are told that secure entry is not
+> available instead of pausing. The hub shows vault features only when the proxy or board advertises them.
 
 ## Concepts
 
@@ -77,8 +80,14 @@ Exactly one binding or none is used; secrets are never merged.
 - **Revoke** deletes the binding. The next request is denied without a proxy restart.
 - **Audit**: create, rotate, revoke and request events with actor, scope, pattern, version and fingerprint. Per-use
   metadata (time, scope, host, method, outcome) is kept separately and drives "last used".
+- **Room services** that name a binding follow it: on a room-own sandbox a rotation restarts them and a revocation
+  stops them; in a room VM the relay simply uses the new value or refuses the next call. See
+  [Room Services](./room-services.md#credentials).
 
 ## Using it from a skill
+
+A process that must outlive the agent's turn (a listener, a long job, a poller) names its bindings in a
+[room service](./room-services.md) declaration (`vault: ["NAME"]`) instead of reading a key from a file.
 
 Skills reach external services through the proxy's `/egress` route with the skill SDK's external client. The skill
 never sees the key:
@@ -115,6 +124,87 @@ Universal Bot DM with a link to the vault form; they choose the scope and method
 agent retries later; `vault.requestStatus(requestId)` reports `pending`, `resolved` or `declined`. Requests are rate
 limited per project and deduplicated while pending.
 
+## Asking the user through askUser
+
+An agent that needs a key asks for it with its `askUser` tool and **one** `credential` question: the host, an
+optional path prefix, a one-line purpose, and suggested env names. It must be the only question and has no options.
+
+1. The runtime files a request with the vault (`origin: ask-user`) and pauses the agent. If a vault binding already
+   covers the host, nothing is filed and the agent is told to use it (`already-bound`). Hidden runs, collocated rooms,
+   a disabled vault and rate limits each get a clear immediate answer, with no pause.
+2. The hub posts a card in the thread built only from the vault request (registrable domain, full host, path prefix,
+   purpose, who can complete it) with an **Open the secure form** button. The model's own question text is never
+   shown, and the card says not to paste the key in the thread.
+3. The person opens the form, picks the scope (agent-private by default; the room option warns that every bot in the
+   room, including bots added later, can use the key), the methods and the env names, and enters the value once. The
+   save settles **that** request by id; a binding that does not cover the requested host and path is refused.
+4. The hub resumes the agent exactly once. The agent gets the host, path prefix and env names, never the value or
+   its fingerprint.
+
+Every other answer path refuses a typed answer for a credential question before anything is stored: a thread reply,
+the AI Chat question form, an AI Chat reference answer, `agents.sandbox.answer`, voice and uploads. Separately, an
+always-on guard refuses a human message in a bot thread or a bot DM that looks like a key (known key prefixes, JWTs,
+PEM private keys, `token=`/`secret:` pairs with a long value). Commit SHAs, UUIDs and URLs pass.
+
+If the attempt ends before the key is saved, the thread gets a notice; a key saved later is still stored. If no
+thread claims a request within a minute (for example a board-direct attempt), the bot creator or room owner gets the
+card in their Universal Bot DM.
+
+**Rotation from the agent.** When a stored key is rejected (401 or 403), the agent asks again with `rotate: true`.
+The card opens the form in rotate mode: value only, with scope, pattern, methods and env names read-only. The version
+increments and the agent is told to retry. The Vault tab in the sandbox settings keeps its own create, rotate and
+revoke actions.
+
+The platform skill `privos-vault` teaches agents this flow, how to use the variables below, and never to echo them.
+
+## Env variables, vault.env and the base-URL relay
+
+A vault binding can carry two env names: one for the key (`^[A-Z][A-Z0-9_]{1,63}$` ending in `_API_KEY`, `_KEY`,
+`_TOKEN` or `_SECRET`) and one for the base URL (ending in `_BASE_URL` or `_API_BASE`). Names starting with
+`PROXY_`, `PRIVOS_`, `ROXANE_`, `CLAUDE_`, `AGENT_`, `PROJECT_`, `LD_`, `DYLD_`, `NODE_`, `PYTHON`, `GIT_`,
+`BASH_`, `NPM_CONFIG_` or `PIP_`, and exactly `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`, are refused.
+
+The agent never gets the key. The key variable holds a **relay token** (`pvr_…`, one per project, accepted only by
+the relay) and the base-URL variable holds `<relay>/vault-relay/<host><prefix>`. The relay authenticates the token
+from a header (`Authorization`, `x-api-key` or `api-key`, never the query), matches a vault binding exactly like
+`/egress`, swaps in the real key, and forwards over pinned HTTPS with no redirects and with echo masking. Responses
+stream, so SSE works. Only bindings with an exact host get a base-URL variable.
+
+- **Which tools work:** any SDK or CLI that honours a base-URL variable, for example the `openai` SDKs with
+  `OPENAI_BASE_URL`. A tool that ignores base-URL variables cannot use the vault this way; in sandbox mode use
+  `external.fetch` or `egress_request` instead.
+- **Sandbox mode:** the proxy writes `/run/privos-room/vault.env` next to `skills.env` and rewrites it when a
+  binding changes. Every shell command sources `skills.env` and then `vault.env`, so a vault name replaces a
+  plaintext room variable of the same name. Stdio MCP servers get the file's variables at attempt start, so a key
+  saved mid-attempt reaches MCP servers from the next attempt.
+- **Collocated rooms** have no `vault.env` and cannot ask; they use `external.fetch` with shared bindings.
+- **Precedence** when two visible bindings use the same name: platform, room, agent-private, shared. An equal-rank
+  tie drops the name. Writes refuse a name that is already used in the same scope or in the shared scope.
+
+## Board mode
+
+A board without a sandbox proxy (`PRIVOS_SANDBOX_MODE` unset) runs the same vault module in-process on loopback,
+with its own sqlite file and the same REST contract, so the hub's card, form and Vault tab work unchanged against the
+board URL. The board uses `CATALOG_SECRET_KEY` from its env when set, and otherwise generates a key once into its data
+directory (mode `0600`) and keeps it in memory only. A check value stored next to it makes the vault refuse to start
+if a later start resolves to a different key, so stored keys are never silently orphaned. Claude CLI agents get the
+vault variables in their process env (and their stdio MCP servers inherit them). A vault name replaces an inherited
+or room `.env` variable of the same name, except reserved names and anything starting with `ANTHROPIC_`, which the
+agent itself needs; a binding's key and base-URL names are applied or skipped together. The relay listens on the
+vault's loopback port only, so a relay token is useless off the host, and it is revoked when the board project is
+deleted. The vault admin routes accept the board API key the hub uses, never agent keys. The board's built-in agent runtime (the `privos-agent-sdk` provider) answers a credential
+question with a clear refusal in board mode, because its shell and MCP servers do not receive vault variables there;
+use the Claude CLI provider or sandbox mode.
+
+**Intended use:** board mode is for private agents used by one person. Keys entered for them are not meant to be
+shared with other people's agents. A room that points at its own sandbox never gets the secure form: its sandbox address
+is editable by moderators, so the Hub sends keys only to the workspace sandbox. To use the vault with a board through a
+Hub, pair the board as the workspace sandbox.
+
+**Ceiling, accepted:** the CLI runs as the board's OS user, so a hostile agent on the same host can read the board's
+key and database and decrypt stored keys. Chat, logs, transcripts and model context stay clean. Use sandbox mode when
+agents must not be able to reach the keys at all.
+
 ## Coexistence with the bot key
 
 | | Bot-key egress catalog | Credential vault |
@@ -131,9 +221,13 @@ never touches vault rows, and the vault UI never lists platform rows. See
 ### Common mistakes
 
 1. **An API key in a room MCP server header or a skill env variable** ends up in plain text inside the agent VM, where
-   the agent can read it and send it anywhere it can reach. Anything that must stay out of the VM belongs in the vault.
+   the agent can read it and send it anywhere it can reach. Anything that must stay out of the VM belongs in the vault;
+   give the binding env names and the MCP server or SDK gets a relay token instead.
 2. **Binding the hub host in the vault** is refused; the hub is reached with the bot key.
 3. **A skill calling the hub through `external.fetch`** works: the platform binding applies and nothing leaks.
+4. **A key in a `.env` next to a `nohup` or pm2 process** is a key in plain text outside the vault, and the process
+   dies or lingers unseen. Declare a [room service](./room-services.md) that names the binding in `vault`; hub events
+   need no process at all (filtered triggers).
 
 ## Threat model in brief
 
@@ -153,5 +247,6 @@ traffic then goes through the proxy's forward listener, and only to hosts an adm
 
 ## Related docs
 
+- [Room Services](./room-services.md)
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md)
 - [Architecture](./architecture.md)

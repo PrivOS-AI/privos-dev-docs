@@ -25,6 +25,13 @@ All endpoints require:
 > [Room Custom Permissions](../ROOM_CUSTOM_PERMISSIONS.md). Per-item write enforcement is behind
 > `Isolated_Item_Write_ACL_Enforce` (log-only by default).
 
+> **App-owned lists and super agents:** item writes on a list owned by an MCP app are normally refused for everyone but
+> the app. A [super agent](../agent-system/super-agent.md) bot is the one exception: on every write route below (create,
+> update, delete, move, custom-field and fields writes, and the four `batch-*` routes) it passes when the admin-set flag is on
+> **and** the room's owner currently holds `owner`, `admin` or `leader` there and the bot holds the role the room mirror
+> aligned. Each such write leaves one `super-agent.item-write` audit row first. Fields, stages and list deletion stay
+> app-only, and ordinary lists leave no row. Any other caller still gets the app-owned error.
+
 ---
 
 ## Endpoints

@@ -20,6 +20,11 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 
 All authenticated endpoints verify **bot ownership**: the requesting user must be the bot's `_createdBy` user OR have `admin` permission.
 
+A [super agent](./super-agent.md) adds a stricter rule for `list`, `add`, `update`, `remove`, `run` and the prompt-history
+restore: only its owner, an administrator (`view-user-administration`) or the agent itself from a session in its own agent
+room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`. Every
+`add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row.
+
 ---
 
 ## GET /v1/agents.triggers.list
@@ -71,7 +76,7 @@ List all triggers for an agent. The `webhookSecret` field is stripped from respo
 
 ## POST /v1/agents.triggers.add
 
-Add a new trigger. Maximum 5 triggers per agent.
+Add a new trigger. Maximum 20 triggers per agent.
 
 **Body Parameters (common):**
 
@@ -99,8 +104,9 @@ Add a new trigger. Maximum 5 triggers per agent.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `event` | string | Yes | Event type (see supported events) |
+| `event` | string | Yes, unless `filter` is set | Event type (see supported events) |
 | `sourceRoomId` | string | No | Filter to specific room (empty = all rooms) |
+| `filter` | object | No | Subscription filter, see [Subscription filter](#subscription-filter). Replaces `event` and `sourceRoomId(s)` |
 | `promptTemplate` | string | Yes | What the agent should do (max 500 chars) |
 
 **Valid Schedules:**
@@ -109,7 +115,37 @@ Add a new trigger. Maximum 5 triggers per agent.
 
 **Valid Events:**
 
-`message.new`, `message.edited`, `message.deleted`, `message.mention`, `message.bot_mention`, `room.joined`, `room.left`, `user.joined`, `user.left`, `list.item.created`, `list.item.deleted`, `list.item.stage_changed`, `list.item.attributes_changed`, `file.created`, `file.updated`, `file.deleted`, `folder.created`, `folder.deleted`, `folder.renamed`
+`message.new`, `message.edited`, `message.deleted`, `message.mention`, `message.bot_mention`, `room.joined`, `room.left`, `user.joined`, `user.left`, `list.item.created`, `list.item.deleted`, `list.item.stage_changed`, `list.item.attributes_changed`, `file.created`, `file.updated`, `file.deleted`, `folder.created`, `folder.deleted`, `folder.renamed`, `notification.created`
+
+`notification.created` (an in-app notification stored for a user) is accepted only inside a `filter`: a plain trigger on it
+would receive every user's notifications, so `add` and `update` refuse it and the dispatcher ignores any stored one.
+Source of truth: `VALID_EVENTS` in `apps/meteor/app/api/server/v1/agent-trigger-endpoints.ts`.
+
+### Subscription filter
+
+`filter` (event triggers only) makes the hub decide, before it injects a turn, whether an event matters. It is data, not
+code; the hub never runs anything the filter contains. Semantics, the owner-only DM rule, coalescing and two worked examples
+(T1: messages about the owner; T2: assignments to the owner) are in [Super Agent](./super-agent.md#subscription-filters).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `events` | string[] | Required, non-empty. `message.new` and/or `notification.created`. This replaces the trigger-level `event` |
+| `subject` | string | `bot` (default) or `principal` (the agent's owner; super agents only) |
+| `rooms` | string[] or `"mirrored"` | Room ids you can access, or the rooms a super agent mirrors. For `principal` the default is `mirrored` and explicit ids must be mirrored rooms |
+| `includeDms` | boolean | `principal` only, default `true`: also evaluate the owner's one-to-one DMs |
+| `match` | object | Any-of predicates: `mention`, `reply`, `dm`, `notification` (booleans), `hotRoom` (`{ windowMinutes }`), `keywords` (strings), `senders` (user ids). Empty matches every event in scope. Unknown keys are rejected |
+| `coalesce` | object | `{ windowSeconds, maxEvents }`: deliver a burst as one turn |
+| `cooldownSeconds` | number | Minimum seconds between turns, default 30, `0` allowed |
+
+Rules enforced by `add` and `update`:
+
+- `subject: principal` and `rooms: "mirrored"` need a super agent; a trigger about the owner must be created by the owner
+  or by the agent.
+- `filter` cannot be combined with `event` (or, on `add`, with `sourceRoomId` / `sourceRoomIds`). A filtered trigger
+  stores a rollback marker in `sourceRoomIds` so a hub without filter support never fires it; the current hub ignores it,
+  and `update` ignores room-scope fields on a filtered trigger instead of applying them.
+- Only types are validated. Counts and windows must be positive, and no value has an upper bound.
+- A stored filtered trigger returns `filter` (normalised: defaults filled, keywords lower-cased) instead of `event`.
 
 **Response (cron/event):**
 
@@ -150,12 +186,21 @@ Add a new trigger. Maximum 5 triggers per agent.
 | `botId and type are required` | Missing required fields |
 | `type must be cron, webhook, or event` | Invalid type |
 | `Bot not found or not authorized` | Bot doesn't exist or user doesn't own it |
-| `Maximum 5 triggers per agent` | Limit reached |
+| `Maximum 20 triggers per agent` | Limit reached |
 | `Invalid schedule` | Schedule key not in INTERVALS map |
 | `prompt is required for cron triggers` | Empty prompt |
 | `prompt must be under 500 characters` | Prompt too long |
 | `Invalid event` | Event not in valid events list |
 | `promptTemplate is required for event triggers` | Empty prompt template |
+| `notification.created needs a filter` | `notification.created` used without a `filter` |
+| `filter.<field> ...` | A filter field has the wrong type or is not a known key |
+| `Listening about the owner or in 'mirrored' rooms needs a super agent` | `subject: principal` or `rooms: "mirrored"` on an ordinary agent |
+| `A filtered trigger lists its events and rooms in the filter, not in event or sourceRoomIds` | `filter` sent together with `event`, `sourceRoomId` or `sourceRoomIds` |
+| `A trigger about the owner must be created by the owner or by the agent` | `subject: principal` created by someone else |
+
+From an agent, the `agent-scheduler` skill builds this body: `trigger.js add --type event --filter '<json>'` (or
+`--filter-file <path>`) with `--prompt` or `--prompt-file`. It refuses `--event` and `--room` next to a filter locally with
+the hub's message above.
 
 ---
 
@@ -173,10 +218,16 @@ Update fields on an existing trigger.
 | `prompt` | string | No | New prompt (max 500 chars) |
 | `promptTemplate` | string | No | New prompt template (max 500 chars) |
 | `enabled` | boolean | No | Enable/disable toggle |
-| `event` | string | No | New event type (event only) |
+| `event` | string | No | New event type (event only; refused on a filtered trigger) |
 | `sourceRoomId` | string | No | New source room filter |
+| `filter` | object | No | Replace the subscription filter (event only), same shape as on `add` |
 
-Only provided fields are updated. At least one updatable field is required.
+Only provided fields are updated. At least one updatable field is required. The trigger records `updatedBy` (the caller's
+user id) and `updatedAt`.
+
+A filter cannot be cleared through `update`; remove the trigger and add a plain one instead. On a filtered trigger
+`event` is refused with `A filtered trigger lists its events in the filter, not in event`. The skill form is
+`trigger.js update <id> --filter '<json>'` (or `--filter-file <path>`).
 
 **Response:**
 
