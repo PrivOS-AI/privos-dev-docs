@@ -195,6 +195,12 @@ Rules enforced by `add` and `update`:
 | `notification.created needs a filter` | `notification.created` used without a `filter` |
 | `filter.<field> ...` | A filter field has the wrong type or is not a known key |
 | `Listening about the owner or in 'mirrored' rooms needs a super agent` | `subject: principal` or `rooms: "mirrored"` on an ordinary agent |
+| `A filtered trigger lists its events and rooms in the filter, not in event or sourceRoomIds` | `filter` sent together with `event`, `sourceRoomId` or `sourceRoomIds` |
+| `A trigger about the owner must be created by the owner or by the agent` | `subject: principal` created by someone else |
+
+From an agent, the `agent-scheduler` skill builds this body: `trigger.js add --type event --filter '<json>'` (or
+`--filter-file <path>`) with `--prompt` or `--prompt-file`. It refuses `--event` and `--room` next to a filter locally with
+the hub's message above.
 
 ---
 
@@ -218,6 +224,10 @@ Update fields on an existing trigger.
 
 Only provided fields are updated. At least one updatable field is required. The trigger records `updatedBy` (the caller's
 user id) and `updatedAt`.
+
+A filter cannot be cleared through `update`; remove the trigger and add a plain one instead. On a filtered trigger
+`event` is refused with `A filtered trigger lists its events in the filter, not in event`. The skill form is
+`trigger.js update <id> --filter '<json>'` (or `--filter-file <path>`).
 
 **Response:**
 

@@ -80,8 +80,14 @@ Exactly one binding or none is used; secrets are never merged.
 - **Revoke** deletes the binding. The next request is denied without a proxy restart.
 - **Audit**: create, rotate, revoke and request events with actor, scope, pattern, version and fingerprint. Per-use
   metadata (time, scope, host, method, outcome) is kept separately and drives "last used".
+- **Room services** that name a binding follow it: on a room-own sandbox a rotation restarts them and a revocation
+  stops them; in a room VM the relay simply uses the new value or refuses the next call. See
+  [Room Services](./room-services.md#credentials).
 
 ## Using it from a skill
+
+A process that must outlive the agent's turn (a listener, a long job, a poller) names its bindings in a
+[room service](./room-services.md) declaration (`vault: ["NAME"]`) instead of reading a key from a file.
 
 Skills reach external services through the proxy's `/egress` route with the skill SDK's external client. The skill
 never sees the key:
@@ -219,6 +225,9 @@ never touches vault rows, and the vault UI never lists platform rows. See
    give the binding env names and the MCP server or SDK gets a relay token instead.
 2. **Binding the hub host in the vault** is refused; the hub is reached with the bot key.
 3. **A skill calling the hub through `external.fetch`** works: the platform binding applies and nothing leaks.
+4. **A key in a `.env` next to a `nohup` or pm2 process** is a key in plain text outside the vault, and the process
+   dies or lingers unseen. Declare a [room service](./room-services.md) that names the binding in `vault`; hub events
+   need no process at all (filtered triggers).
 
 ## Threat model in brief
 
@@ -238,5 +247,6 @@ traffic then goes through the proxy's forward listener, and only to hosts an adm
 
 ## Related docs
 
+- [Room Services](./room-services.md)
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md)
 - [Architecture](./architecture.md)
