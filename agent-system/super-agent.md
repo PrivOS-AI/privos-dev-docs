@@ -121,7 +121,8 @@ Source: `bot-bearer-route-policy.ts` and `super-agent-room-binding.ts` under `ap
 
 An **event trigger** (`agents.triggers.add` with `type: 'event'`) may carry a `filter` instead of a single `event`. The hub
 evaluates the filter before it injects a turn into the agent room, so the agent wakes only for events that matter.
-Endpoint fields: [Trigger API Reference](./trigger-api-reference.md).
+Endpoint fields: [Trigger API Reference](./trigger-api-reference.md). A filtered trigger is the `when` stage of a routine and can
+run a handler script before any model turn: [Agent Routines](./agent-routines.md).
 
 | Field | Meaning |
 |---|---|
