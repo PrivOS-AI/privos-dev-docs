@@ -138,6 +138,62 @@ Manually fire a trigger immediately.
 node trigger-run.js TRIGGER_ID
 ```
 
+## Skills that ship with the sandbox
+
+Two skills come from the PrivOS Sandbox image (`src/hooks/template/skills/` in the sandbox repository) and are what an agent
+uses for routines. Their `SKILL.md` is the agent-facing contract; this section records the flags and where they meet the hub.
+
+### `agent-scheduler` (`trigger.js`)
+
+`node ${SKAWLD_SKILL_DIR}/trigger.js <list|add|update|remove|run|regenerate-secret|explain> [flags]`; `--json` on any
+subcommand. It manages only the calling agent's own triggers and always asks the user before a write.
+
+**Schedule flags (cron triggers).** Exactly one family per call, otherwise
+`Pass only one of --schedule, --once, --in, or --time/--weekly.` Every flag produces a schedule the hub accepts
+([Schedules](./trigger-api-reference.md#schedules)); the CLI computes every instant from its own clock, so the model never
+does time arithmetic.
+
+| Flag | Result |
+|---|---|
+| `--schedule every_1h` / `--schedule "0 */3 * * *"` | the preset or the cron expression; add `--tz <IANA>` to a wall-clock expression and the zone is sent as `timezone` |
+| `--time HH:MM [--tz IANA]` | daily: `M H * * *` plus `timezone` (`--tz` defaults to `UTC`) |
+| `--weekly mon,wed --time HH:MM [--tz IANA]` | `M H * * 1,3` plus `timezone`; days are `sun`…`sat` or `weekday(s)`, `weekend(s)`, `daily` |
+| `--once <ISO>` | `at:` plus the UTC instant. An ISO date-time with an offset or `Z`; a bare local time is read in `--tz`. An unreadable value, an impossible date or a past instant is refused by the CLI before any call (`--once "<value>" is in the past (now is <ISO>).`) |
+| `--in 30m` / `2h` / `1d` | `at:` plus now plus the offset (`<N>m`, `<N>h` or `<N>d`) |
+| `--tz <IANA>` | the user's timezone; an unknown name is refused (`Invalid --tz "<name>". Use an IANA name (e.g. Asia/Bangkok).`) |
+
+On `update`, giving a cron expression, `--time` or `--weekly` without `--tz` sends `timezone: null`, so a leftover zone never
+shifts the new expression; an enum or an `at:` form sends none. `trigger.js explain "<phrase>" [--tz IANA]` prints the
+`schedule` (and `timezone` for wall-clock times) it would send, with no API call; it handles phrases such as "every 3
+hours", "in 30 minutes", "tomorrow at 8am", "every weekday at 9" and "daily at 9am". `list` shows the stored timezone as a
+`(<IANA>)` suffix and a one-time schedule as `once @ <ISO>`.
+
+**Handler flags.** `--next-action run_handler --handler <name>` on `add` or `update`, for every trigger type (the hub
+validates; the CLI also refuses a name that fails `^[a-z0-9][a-z0-9-]{0,39}$`). On `add` the two flags must come together
+(`--next-action run_handler requires --handler <name>`, `--handler requires --next-action run_handler`); on `update`,
+`--handler <other>` alone changes the handler and `--next-action agentic_response` puts the agent back in charge. A handler
+cron stays global: the CLI does not default it to the room of the current session. `list` prints, per trigger, the
+description, `then: handler <name>` / `agent` / `emit event`, the filter summary and
+`last outcome: <lastOutcome> (<lastError>)`.
+
+**Prompt field.** `update --prompt` first lists the triggers and writes `promptTemplate` for an event trigger and `prompt` for
+cron and webhook triggers, so the text the dispatcher reads is the one that changes.
+
+### `privos-services` (`service.js`)
+
+`node $SKAWLD_SKILL_DIR/service.js <list|status|logs|add|remove|stop|apply|run>`; see [Room Services](./room-services.md).
+
+| Command | Purpose |
+|---|---|
+| `add --name screen --kind handler --timeout-seconds 20 --cmd '["sh","AgentFiles/routines/screen.sh"]'` | Declare a handler (`--timeout-seconds` is for handlers only) |
+| `run screen --payload-file payload.json` | One dry run with the agent's own payload: exit code, duration, `timedOut`, stdout tail |
+
+Declare and dry-run a handler from a turn in the agent room: the hub looks for it in the agent room's project, and a room
+session cannot reach that runtime. The SKILL.md text of both skills tells agents the exit-code protocol (`0` handled, `10`
+wake with stdout, anything else a failure), to end every handler with an explicit `exit 0` or `exit 10` and never to `eval`
+payload fields; `agent-scheduler` also states the trust boundary ([Agent Routines](./agent-routines.md#trust-boundary)) and
+the `NO_REPORT` quiet turn.
+
 ## CLAUDE.md Integration
 
 The agent's `CLAUDE.md` includes a Skills section that points to the skill folder:
