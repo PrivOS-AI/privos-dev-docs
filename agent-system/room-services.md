@@ -67,7 +67,8 @@ The runtime stores it in its own database (`service_definitions`), never in a fi
 | `stopGraceSeconds` | integer 1–5 | 5 |
 | `enabled` | boolean | `true` |
 
-Any error refuses the whole apply and nothing is stored. The response lists the errors, for example
+Any error refuses the whole apply and nothing is stored. A valid apply answers one result per service with the state
+after the runtime tried to start it, so a refused start shows as `crashed_until_apply` with its reason. The response lists the errors, for example
 `service odd: lane is not a known field` or `limit ROOM_SERVICES_MAX_PER_PROJECT=5 exceeded by service sixth`.
 
 Listings show every env value as `"<set>"`. Sending `"<set>"` back in an apply keeps the stored value, so a client can
@@ -83,7 +84,7 @@ edit one service from a listing without knowing another service's secrets.
 - **oneshot**: runs once. On exit the state becomes `finished` with `exit <code>` as the reason; only a changed
   definition (or the owner's start) runs it again.
 
-Every run is a `shells` row with `kind = 'service'`, `service_name`, `pgid`, `started_at` (the `/proc` start time) and
+The newest 20 finished instance rows of each service are kept. Every run is a `shells` row with `kind = 'service'`, `service_name`, `pgid`, `started_at` (the `/proc` start time) and
 `attempt_id = NULL`, so the attempt reaper and the shell restore loops never touch it. The process runs in its own
 process group with stdout and stderr appended to `<data root>/services/<projectId>/<name>.log` (kept to
 `ROOM_SERVICES_LOG_MAX_MB`, one previous file `.log.1`).
@@ -125,7 +126,10 @@ Memory is checked every 15 s over the whole process group; above `maxMemoryMb` t
 - **VM (relay):** the service gets the core env minus board-only names, then `skills.env`, then `vault.env`, then its
   declared env; vault names are applied last, so a declaration cannot replace a relay name. Call APIs through the
   binding's base-URL variable.
-- A named binding the project does not export refuses the start: `vault-binding-missing: <NAME>`.
+- A named binding the project does not export refuses the start: `vault-binding-missing: <NAME>`. Refusals a retry
+  cannot fix (a missing binding, a refused binding, a missing `cwd`, a command that cannot be executed) park the service
+  in `crashed_until_apply`; others (a closed vault, a busy workspace lease, a database error) are retried with the
+  crash backoff.
 - **Rotate and revoke:** on the board, rotating a binding restarts the services that use it (a new materialisation,
   new audit rows) and revoking it stops them (`crashed_until_apply`, `vault-binding-revoked: <NAME>`). In a VM the relay
   resolves every request, so a rotation needs nothing and a revocation is felt as a refusal at the service's next call.
@@ -159,11 +163,13 @@ The board reads its own env; a core gets them from the proxy env. Fleet tenants 
 | `DELETE /api/projects/:id/services/:name` | a person's stop is final; an agent's ends the current run |
 | `POST /api/projects/:id/services/:name/enable` | a person only |
 | `GET /api/projects/:id/services/:name/logs?lines=200` | log tail |
-| `POST /api/projects/:id/services/stop-all` | a person or the platform; the proxy uses it to move a core to a new runtime contract |
+| `POST /api/projects/:id/services/stop-all` | a person or the platform; `?ifIdle=1` refuses (409) while an attempt, a plain shell or a terminal runs; the proxy uses it to move a core to a new runtime contract |
+| `POST /api/projects/:id/services/reconcile` | a person or the platform: start what should run (the proxy calls it when a recreate could not follow a stop) |
 
 On the board, a person is the shared key or a person's ring key; an agent ring key is not, and any caller sending
 `x-privos-service-caller: agent` is treated as the agent. In a VM core, a loopback caller is the in-VM agent and a
-caller forwarded by the proxy is the platform. Deleting a project stops its services and drops their definitions
+caller forwarded by the proxy is the platform; a call from the container's own addresses (loopback or its network
+address) is the agent. Deleting a project stops its services and drops their definitions
 first.
 
 ## The `privos-services` skill
