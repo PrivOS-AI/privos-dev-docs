@@ -16,6 +16,9 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
 | POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
 
+What a trigger does after it fires (a handler script, the quiet `NO_REPORT` turn, the outcome fields) is described in
+[Agent Routines](./agent-routines.md); this page is the request and response reference.
+
 ## Authorization
 
 All authenticated endpoints verify **bot ownership**: the requesting user must be the bot's `_createdBy` user OR have `admin` permission.
@@ -84,19 +87,24 @@ Add a new trigger. Maximum 20 triggers per agent.
 |-----------|------|----------|-------------|
 | `botId` | string | Yes | Agent bot user ID |
 | `type` | string | Yes | `cron`, `webhook`, or `event` |
+| `name` | string | No | Title shown on the settings card, under 100 characters |
+| `description` | string | No | One line shown under the title |
+| `nextAction` | string | No | What a fire does: `agentic_response` (default), `run_handler`, or `emit_event` (webhook only). See [Running a handler](#running-a-handler-nextaction-and-handler) |
+| `handler` | object | With `run_handler` | `{ "name": "<service>" }`, the room service to run first |
 
 **Body Parameters (type=cron):**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `schedule` | string | Yes | Interval key (see below) |
+| `schedule` | string | Yes | A preset key, a 5-field cron expression or a one-time instant `at:<ISO-8601>`; see [Schedules](#schedules) |
+| `timezone` | string | No | IANA name for a recurring cron (for example `Asia/Bangkok`); absent means UTC. Dropped when the schedule is one-time |
 | `prompt` | string | Yes | What the agent should do (max 500 chars) |
 
 **Body Parameters (type=webhook):**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `prompt` | string | Yes | What the agent should do with incoming data (max 500 chars) |
+| `prompt` | string | Yes, except `emit_event` | What the agent should do with incoming data (max 500 chars) |
 
 `webhookToken` and `webhookSecret` are auto-generated on creation.
 
@@ -109,9 +117,7 @@ Add a new trigger. Maximum 20 triggers per agent.
 | `filter` | object | No | Subscription filter, see [Subscription filter](#subscription-filter). Replaces `event` and `sourceRoomId(s)` |
 | `promptTemplate` | string | Yes | What the agent should do (max 500 chars) |
 
-**Valid Schedules:**
-
-`every_5m`, `every_15m`, `every_30m`, `every_1h`, `every_6h`, `every_12h`, `every_24h`
+**Valid Schedules:** see [Schedules](#schedules).
 
 **Valid Events:**
 
@@ -126,6 +132,8 @@ Source of truth: `VALID_EVENTS` in `apps/meteor/app/api/server/v1/agent-trigger-
 `filter` (event triggers only) makes the hub decide, before it injects a turn, whether an event matters. It is data, not
 code; the hub never runs anything the filter contains. Semantics, the owner-only DM rule, coalescing and two worked examples
 (T1: messages about the owner; T2: assignments to the owner) are in [Super Agent](./super-agent.md#subscription-filters).
+A filtered trigger can also run a handler script that screens each batch before any model turn; see
+[Agent Routines](./agent-routines.md).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -187,7 +195,9 @@ Rules enforced by `add` and `update`:
 | `type must be cron, webhook, or event` | Invalid type |
 | `Bot not found or not authorized` | Bot doesn't exist or user doesn't own it |
 | `Maximum 20 triggers per agent` | Limit reached |
-| `Invalid schedule` | Schedule key not in INTERVALS map |
+| `Invalid schedule. Use a preset (every_5m, every_1h, ...), a 5-field cron expression (e.g. 0 */3 * * *) or a one-time instant (at:<ISO-8601>)` | `schedule` is none of the three forms, or is missing |
+| `One-time schedule must be in the future (at:<ISO-8601>, e.g. at:2026-10-11T11:00:00.000Z)` | An `at:` instant that is not after now |
+| `Invalid timezone. Use an IANA name (e.g. Asia/Bangkok)` | `timezone` is not a name the runtime knows |
 | `prompt is required for cron triggers` | Empty prompt |
 | `prompt must be under 500 characters` | Prompt too long |
 | `Invalid event` | Event not in valid events list |
@@ -197,10 +207,120 @@ Rules enforced by `add` and `update`:
 | `Listening about the owner or in 'mirrored' rooms needs a super agent` | `subject: principal` or `rooms: "mirrored"` on an ordinary agent |
 | `A filtered trigger lists its events and rooms in the filter, not in event or sourceRoomIds` | `filter` sent together with `event`, `sourceRoomId` or `sourceRoomIds` |
 | `A trigger about the owner must be created by the owner or by the agent` | `subject: principal` created by someone else |
+| `name must be under 100 characters` | `name` is too long |
+| `name is required for emit_event webhooks` | `emit_event` webhook without a `name` |
+| `prompt is required for <action> webhooks` | A webhook whose action runs the agent has no `prompt` (for example `prompt is required for run_handler webhooks`) |
+| `nextAction must be agentic_response, emit_event or run_handler` | Unknown `nextAction` |
+| `nextAction is only valid for webhook triggers` | `emit_event` on a cron or event trigger |
+| `handler.name must match ^[a-z0-9][a-z0-9-]{0,39}$` | A `handler` was sent with a bad name, whatever `nextAction` is |
+| `run_handler needs a handler: { name }` | `run_handler` without `handler` |
+| `handlers run in the PrivOS Sandbox; this agent runs on a harness` | `run_handler` on a harness agent |
+| `a room-scoped cron runs threads; a handler needs the global cron` | `run_handler` on a cron with `sourceRoomId(s)` |
+| `run_handler webhooks require the secret` | `run_handler` webhook without a stored secret |
+| `only the owner, an admin or the agent in its room may attach a handler` | Caller is none of the three (`error-not-authorized`) |
+| `handler-not-found: no service "<name>" is declared in the agent room` | No such service in the agent room's project (`errorType` `handler-not-found`) |
+| `handler-not-found: service "<name>" is not a handler (kind <kind>)` | The service exists with another kind (`errorType` `handler-not-found`) |
+| `handler-check-unavailable: the agent's runtime could not be asked for its services (<why>); try again` | The runtime could not be asked; `<why>` is `no-sandbox`, `harness`, `no-bot-key`, `collocated`, `http-<status>`, `aborted`, `network` or `invalid-response` (`errorType` `handler-check-unavailable`) |
 
 From an agent, the `agent-scheduler` skill builds this body: `trigger.js add --type event --filter '<json>'` (or
 `--filter-file <path>`) with `--prompt` or `--prompt-file`. It refuses `--event` and `--room` next to a filter locally with
 the hub's message above.
+
+---
+
+## Schedules
+
+The `schedule` of a cron trigger is one string, in one of three forms. Grammar and messages:
+`apps/meteor/server/lib/cron-schedule-utils.ts`.
+
+| Form | Example | Notes |
+|---|---|---|
+| Preset key | `every_1m`, `every_2m`, `every_3m`, `every_4m`, `every_5m`, `every_15m`, `every_30m`, `every_1h`, `every_6h`, `every_12h`, `every_24h` | Kept as written |
+| 5-field cron expression | `0 */3 * * *` (every 3 hours), `*/10 * * * *`, `30 9 * * 1-5` | Any step `cron-parser` accepts; kept as written |
+| One-time instant | `at:2026-10-11T18:00:00+07:00` | `at:` plus an ISO-8601 date-time with `Z` or an offset; a date-time without an offset is read as UTC. Stored normalised to UTC (`at:2026-10-11T11:00:00.000Z`) |
+
+**`timezone`** (cron only, optional). An IANA name such as `Asia/Bangkok`. A recurring cron is evaluated in that zone; with no
+`timezone` it is evaluated in UTC, so `0 9 * * *` fires at 09:00 UTC (16:00 in Bangkok). A stored trigger never moves: the
+zone applies only when it is written. `timezone` is not meaningful for a pure interval (`0 */3 * * *`). A one-time schedule
+has no timezone: it is dropped on `add`, removed on `update`, and not validated. `update` with `timezone: null` removes a
+stored zone. `agents.triggers.list` returns `timezone` when one is stored.
+
+**One-time semantics.**
+
+- The heartbeat runs every minute. A one-time trigger fires once, on the first tick at or after its instant, so it can fire up
+  to a minute late. An instant missed while the hub was down fires late on the next tick.
+- The same write that stamps `lastRunAt` also sets `enabled: false`. The trigger stays in the list as history: disabled, with
+  `lastRunAt`. Enabling it again does **not** fire it again.
+- `update` with a new `at:` value clears `lastRunAt` and sets `enabled: true` (unless the same call sends `enabled: false`),
+  which re-arms it. Editing a recurring schedule keeps `lastRunAt`.
+- A past instant is refused on `add` and `update` with
+  `One-time schedule must be in the future (at:<ISO-8601>, e.g. at:2026-10-11T11:00:00.000Z)`. Agent export and restore keep
+  `at:` and `timezone`; a restored past `at:` is skipped with `Trigger "<label>": one-time schedule already passed, skipped`.
+
+The same grammar is offered by the trigger form and the inline editor ([Agent Settings UI](./agent-settings-ui.md)), by the
+agent builder chat ([Agent Builder](./agent-builder.md)) and by `trigger.js`
+([Self-Management Skills](./self-management-skills.md)). The hub never parses natural language: clients compute the instant.
+
+---
+
+## Running a handler (`nextAction` and `handler`)
+
+Every trigger type can run a room service before, or instead of, the model turn. Behaviour, exit codes and fallback:
+[Agent Routines](./agent-routines.md#the-check-stage-handlers).
+
+| Field | Rule |
+|---|---|
+| `nextAction` | **cron** and **event**: `agentic_response` (the default; not stored) or `run_handler`. **webhook**: `agentic_response` (default, stored), `run_handler` or `emit_event`. `emit_event` stays webhook-only and unchanged |
+| `handler` | `{ "name": "<service>" }`; only the name is stored. The name must match `^[a-z0-9][a-z0-9-]{0,39}$` on **every** write that carries a `handler`, whatever `nextAction` is. A flip to `run_handler` needs a valid `handler`, new or already stored |
+| prompt field | Still required with `run_handler`: `prompt` (cron, webhook) or `promptTemplate` (event). It is what the model turn runs on a wake or a fallback |
+
+`update` accepts `nextAction` and `handler` for every type. `nextAction: agentic_response` puts the agent back in charge and
+leaves the stored `handler` unused. The `emit_event` flip keeps its rule that `name` must exist
+(`name is required when switching to emit_event`); the other flips need the type's prompt field
+(`<prompt|promptTemplate> is required when switching to <action>`).
+
+**Refused when `run_handler` is set**, in this order (messages in the errors table above): a missing handler, a bad name,
+a harness agent, a room-scoped cron (in either direction: adding a room scope to a handler cron is refused too, a scope
+cleared in the same write is accepted), a webhook without a secret.
+
+**Who may wire one.** Only the bot's owner, a holder of `view-user-administration`, or the agent from a session in its own
+agent room. This check and the lookup of the handler in the agent room's project run only when the write sets `nextAction`
+or `handler`, so an edit of a description or the `enabled` toggle on a handler trigger is neither refused nor needs the
+runtime awake.
+
+**Webhook receiver.** A `run_handler` webhook is refused with 401 when the trigger has no stored secret or the presented
+secret is wrong, and counts against the same 60 per minute limit. The handler receives `[{ headers, body, senderIp }]`.
+
+**Manual run.** `agents.triggers.run` goes the same way a scheduled fire goes, so "Fire now" exercises the handler.
+
+### Fields the hub writes on the trigger
+
+Returned by `agents.triggers.list`; never accepted on `add` or `update`.
+
+| Field | Meaning |
+|---|---|
+| `lastRunAt` | When the trigger last fired (cron and event: before the dispatch; webhook and manual run: after it) |
+| `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet` or `posted`; see [outcome codes](./agent-routines.md#outcome-codes) |
+| `lastError` | The failure code behind a `fallback` or `paused` (`exit-1`, `timed-out`, `owner-disabled`, …). Cleared by a `handled` or `woke` run; never holds output or payload |
+| `consecutiveFallbacks` | Fallbacks in a row; at 3 the next failing fire is `paused`. Reset by a successful run or any `update` |
+| `updatedBy`, `updatedAt` | The last editor |
+
+```json
+{
+  "id": "abc123",
+  "type": "cron",
+  "enabled": true,
+  "schedule": "0 9 * * *",
+  "timezone": "Asia/Bangkok",
+  "prompt": "Follow AgentFiles/routines/morning-digest.md",
+  "nextAction": "run_handler",
+  "handler": { "name": "screen-feed" },
+  "lastRunAt": "2026-10-11T02:00:00.000Z",
+  "lastOutcome": "fallback",
+  "lastError": "timed-out",
+  "consecutiveFallbacks": 1
+}
+```
 
 ---
 
@@ -214,16 +334,22 @@ Update fields on an existing trigger.
 |-----------|------|----------|-------------|
 | `botId` | string | Yes | Agent bot user ID |
 | `triggerId` | string | Yes | Trigger ID |
-| `schedule` | string | No | New schedule (cron only) |
-| `prompt` | string | No | New prompt (max 500 chars) |
-| `promptTemplate` | string | No | New prompt template (max 500 chars) |
+| `schedule` | string | No | New schedule (cron only): preset, cron expression or `at:` instant; see [Schedules](#schedules) |
+| `timezone` | string or null | No | IANA name for a recurring cron; `null` removes it. Ignored for a one-time schedule |
+| `prompt` | string | No | New prompt (max 500 chars). Cron and webhook triggers |
+| `promptTemplate` | string | No | New prompt template (max 500 chars). Event triggers |
 | `enabled` | boolean | No | Enable/disable toggle |
 | `event` | string | No | New event type (event only; refused on a filtered trigger) |
-| `sourceRoomId` | string | No | New source room filter |
+| `sourceRoomId`, `sourceRoomIds` | string, string[] | No | New source room scope |
 | `filter` | object | No | Replace the subscription filter (event only), same shape as on `add` |
+| `name`, `description` | string | No | Card title and subtitle |
+| `nextAction` | string | No | `agentic_response`, `run_handler` or `emit_event` (webhook only); see [Running a handler](#running-a-handler-nextaction-and-handler) |
+| `handler` | object | No | `{ "name": "<service>" }` |
 
 Only provided fields are updated. At least one updatable field is required. The trigger records `updatedBy` (the caller's
-user id) and `updatedAt`.
+user id) and `updatedAt`. Writing the prompt field of the trigger's type removes a stray copy in the other field (a
+`prompt` on an event trigger, a `promptTemplate` on a cron or webhook trigger). Any update also resets
+`consecutiveFallbacks` and clears a `paused` outcome with its `lastError`.
 
 A filter cannot be cleared through `update`; remove the trigger and add a plain one instead. On a filtered trigger
 `event` is refused with `A filtered trigger lists its events in the filter, not in event`. The skill form is
@@ -262,7 +388,8 @@ Remove a trigger from an agent.
 
 ## POST /v1/agents.triggers.run
 
-Manually fire a trigger immediately. Updates `lastRunAt`.
+Manually fire a trigger immediately. Updates `lastRunAt` when the fire started, was handled, or was paused. A trigger with
+`nextAction: run_handler` runs its handler first, exactly as a scheduled fire would.
 
 **Body Parameters:**
 
@@ -287,7 +414,7 @@ The trigger's prompt (or promptTemplate) is injected into the agent room with co
 |-------|-------|
 | `Trigger not found` | Trigger ID doesn't exist on this bot |
 | `Trigger has no prompt` | Trigger has neither prompt nor promptTemplate |
-| `Failed to inject trigger message` | Agent room or bot user not found |
+| `Failed to inject trigger message` | Agent room or bot user not found, nothing started, or the same trigger is already running (`skipped-active`) |
 
 ---
 
@@ -311,7 +438,10 @@ Public endpoint for receiving external webhooks. No authentication — the uniqu
 **Secret rules:**
 
 - `emit_event` triggers — secret **mandatory**.
-- `agentic_response` triggers — secret **optional** (only enforced when sent).
+- `agentic_response` triggers — the secret is enforced whenever the trigger has one, which every trigger created through
+  `add` does; a request without it answers 401.
+- `run_handler` triggers — secret **mandatory**: a trigger without a stored secret answers 401, and a handler runs code on
+  the posted body.
 
 **Body:** Any JSON payload. The entire body is serialized and passed as context to the agent.
 
