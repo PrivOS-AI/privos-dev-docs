@@ -32,7 +32,7 @@ room may call them. Any other caller, and any session bound to another room, get
 
 ## GET /v1/agents.triggers.list
 
-List all triggers for an agent. The `webhookSecret` field is stripped from responses for security.
+List all triggers for an agent. Known gap: the response currently includes each webhook trigger's `webhookSecret`; treat the list output as secret.
 
 **Query Parameters:**
 
@@ -199,7 +199,6 @@ Rules enforced by `add` and `update`:
 | `One-time schedule must be in the future (at:<ISO-8601>, e.g. at:2026-10-11T11:00:00.000Z)` | An `at:` instant that is not after now |
 | `Invalid timezone. Use an IANA name (e.g. Asia/Bangkok)` | `timezone` is not a name the runtime knows |
 | `prompt is required for cron triggers` | Empty prompt |
-| `prompt must be under 500 characters` | Prompt too long |
 | `Invalid event` | Event not in valid events list |
 | `promptTemplate is required for event triggers` | Empty prompt template |
 | `notification.created needs a filter` | `notification.created` used without a `filter` |
