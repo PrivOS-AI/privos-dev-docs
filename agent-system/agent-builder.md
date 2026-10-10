@@ -21,14 +21,14 @@ AgentBuilderChat component
         │
         ▼
 User types message → POST /v1/agents.builderChat
-        │  { message, sessionId, history }
+        │  { message, sessionId, history, timezone }
         │
         ▼
 Server builds full prompt (history + current message)
         │
         ▼
 syncResponse() → PrivOS Sandbox /api/attempts
-        │  systemContext = AGENT_BUILDER_SYSTEM_PROMPT
+        │  systemContext = AGENT_BUILDER_SYSTEM_PROMPT + current-time line
         │  projectId = sessionId (UUID)
         │
         ▼
@@ -47,8 +47,9 @@ The builder assistant asks about (one at a time):
 3. **Personality** and tone
 4. **Knowledge areas** / expertise
 5. Specific **instructions** or rules
+6. Whether the agent should run on a **schedule** (reports, periodic checks, reminders)
 
-When enough info is gathered, it outputs a JSON block:
+When enough info is gathered, it outputs a JSON block (`triggers` is optional, see [Schedules](#schedules)):
 
 ```json
 {
@@ -59,10 +60,44 @@ When enough info is gathered, it outputs a JSON block:
     "purpose": "Handle customer support inquiries",
     "personality": "Friendly and professional",
     "knowledge": ["product FAQ", "billing", "troubleshooting"],
-    "instructions": "Always greet users by name"
+    "instructions": "Always greet users by name",
+    "triggers": [
+      { "type": "cron", "schedule": "0 9 * * *", "timezone": "Asia/Bangkok", "prompt": "Post the morning digest" }
+    ]
   }
 }
 ```
+
+### Schedules
+
+The schedule rules are one constant, `AGENT_BUILDER_SCHEDULE_RULES` in `apps/meteor/app/api/server/v1/agents.ts`, used by
+both builder prompts. A trigger's `schedule` is exactly one of:
+
+- a preset key: `every_1m`, `every_2m`, `every_3m`, `every_4m`, `every_5m`, `every_15m`, `every_30m`, `every_1h`,
+  `every_6h`, `every_12h`, `every_24h`;
+- a 5-field cron expression, for example `0 */3 * * *` (every 3 hours), `*/10 * * * *` or `30 9 * * 1-5` (weekdays at
+  09:30). Whenever the schedule names a wall-clock time the trigger also carries `"timezone"` with the user's IANA name;
+  a plain interval never does;
+- a one-time run `at:<ISO-8601 with offset or Z>`, for "once", "tomorrow at 6pm" or "in 30 minutes", written in the user's
+  offset (for example `at:2026-10-11T18:00:00+07:00`). A one-time run has no `timezone`.
+
+The model is told what time it is for the user: `agents.builderChat` appends one line to the system context, built by
+`builderTimeContext` (`server/lib/agent-builder-time-context.ts`):
+
+```
+Current time: 2026-10-11T11:30:00+07:00 (Asia/Bangkok). Write one-time instants in this offset.
+```
+
+The zone is the `timezone` the client sent (the browser's IANA name, from `use-agent-builder-chat.ts`) when it is valid;
+otherwise the user's stored `utcOffset` rendered as `UTC±HH:MM`; otherwise UTC. The model copies the offset instead of
+converting. The hub never parses natural language, so the review step shows the resolved label ("Once at <local date
+time>", "Daily at 09:00 (Asia/Bangkok)") before the user confirms.
+
+On `agents.create`, builder triggers pass through `checkSchedule` (`cron-schedule-utils.ts`): only cron triggers with a
+prompt are kept (prompt cut to 500 characters, at most 5 triggers), a schedule the hub would refuse or a one-time instant
+already past is dropped silently, and `timezone` is kept only on a recurring cron when it is a valid IANA name. Grammar and
+messages: [Trigger API Reference](./trigger-api-reference.md#schedules). A zip import restores triggers through the
+dedicated restorer instead, which keeps `nextAction`, `handler` and `timezone` and warns about what it skips.
 
 ## Agent Creation
 
@@ -100,6 +135,7 @@ Conversational builder — send message, get AI response.
 | `message` | string | Yes | User message (max 10,000 chars) |
 | `sessionId` | string | Yes | UUID v4 session identifier |
 | `history` | array | No | Previous messages `[{role, content}]` (max 100) |
+| `timezone` | string | No | The user's IANA timezone (the browser's); an invalid value falls back to the account's UTC offset |
 
 **Response:** `{ response: string }`
 
