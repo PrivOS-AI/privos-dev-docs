@@ -235,8 +235,13 @@ When a DM wakes the agent, it may ask the hub to answer inside the owner's own o
 agent badge ("sent by <agent>"). The bot never joins the DM.
 
 - The agent calls `agents.superAgent.dmReply` (CLI: `privos hub dm reply --room <dm> --text ...`). The hub accepts it only
-  from the agent room session, for a one-to-one DM of the owner with an active person, text only (attachments are
-  rejected).
+  from the agent room session, for a one-to-one DM of the owner with an active person, the owner's DM with the Universal
+  Assistant, or the owner's own Inbox; text only (attachments are rejected). Any other bot counterpart is refused
+  (`error-not-owner-dm`).
+- **Asking the Universal Assistant.** A post in the Inbox or the Universal Assistant DM is authored by the owner, so the
+  Universal Assistant starts a turn with the owner's access. Its answer is bot-authored and never wakes the agent; the agent
+  reads it with `agents.superAgent.ownerMessages`. The hub logs `[assistant-audit] outcome=agent-started-turn` with the
+  message id, agent id and session room.
 - **Approve (default).** The hub stores a draft and posts a card in the agent room with **Send** and **Discard**. Only the
   owner's click counts; another agent-room member or the bot is refused. Send posts the message through the normal send
   path (size, access and read-receipt rules apply). A newer draft for the same DM replaces the pending one. Drafts expire
@@ -250,6 +255,28 @@ agent badge ("sent by <agent>"). The bot never joins the DM.
 
 Every send, discard, supersede and mode switch writes a `super-agent.dm-reply` row (ids, outcome, mode; never the text).
 Source: `server/services/super-agent/dm-reply-drafts.ts` and `app/api/server/v1/agents-super-agent-dm-reply.ts`.
+
+## Owner reads
+
+A super agent reads its owner's conversations that it is never a member of, from its agent-room session only (same gate as
+DM reply: a bot with a live super-agent state whose session binding is its own agent room).
+
+| Route | Returns |
+|---|---|
+| `GET /v1/agents.superAgent.ownerRooms` `{ count?, offset? }` | `{ rooms: [{ _id, kind: 'dm' \| 'inbox', counterpart?: { _id, username, name, type }, lm? }], count, offset, total }`: every one-to-one DM of the owner (the Universal Assistant DM is a `dm` with a `bot` counterpart) and the owner's authentic Inbox, newest activity first |
+| `GET /v1/agents.superAgent.ownerMessages` `{ roomId, count?, offset?, oldest?, latest? }` | `{ messages, count, offset, total }`, shaped like `im.messages`, newest first, threads included; `oldest`/`latest` are exclusive ISO bounds |
+
+- Group DMs, another user's Inbox and every other room are refused (`error-not-owner-room`); bad dates are
+  `error-invalid-params`.
+- Nothing is marked read for the owner.
+- Each call writes a `super-agent.owner-read` row (room id, item count). A read whose row cannot be written is withheld
+  (`error-audit-failed`).
+- Both routes skip the bot-bearer room-binding decision (they check the agent-room binding themselves) and are on the
+  Universal Assistant's never-list, so `assistant.rest-get` cannot reach them.
+- Agent side: `privos-chat` actions `owner-rooms`, `owner-messages`, `owner-send`; CLI `privos hub owner rooms|messages`
+  (0.8.0, egress only).
+
+Source: `app/api/server/v1/agents-super-agent-owner-read.ts`, `server/services/super-agent/super-agent-owner-read.ts`.
 
 ## Kill switch
 
@@ -277,6 +304,7 @@ Durable rows in the server events collection (ids and counts only, never message
 | `super-agent.room-write` | a flagged bot's room-management write | the bot |
 | `super-agent.trigger-change` | a trigger of a super agent is added, updated (a prompt restore counts) or removed | the caller |
 | `super-agent.dm-reply` | a DM reply is sent, discarded or superseded, or the mode is switched | owner, bot or system |
+| `super-agent.owner-read` | each owner-rooms or owner-messages call | the bot |
 
 Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hub). Query recipe: the ops runbook.
 
@@ -292,6 +320,7 @@ Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hu
 | Filters and dispatch | `server/services/agent-trigger-filter.ts`, `agent-event-trigger-handler.ts` |
 | Trigger routes and authorship | `app/api/server/v1/agent-trigger-endpoints.ts` |
 | DM reply | `server/services/super-agent/dm-reply-drafts.ts` |
+| Owner reads | `server/services/super-agent/super-agent-owner-read.ts`, `app/api/server/v1/agents-super-agent-owner-read.ts` |
 
 ## Related
 
