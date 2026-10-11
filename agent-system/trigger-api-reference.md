@@ -244,6 +244,11 @@ zone applies only when it is written. `timezone` is not meaningful for a pure in
 has no timezone: it is dropped on `add`, removed on `update`, and not validated. `update` with `timezone: null` removes a
 stored zone. `agents.triggers.list` returns `timezone` when one is stored.
 
+**First run of a recurring cron.** `add`, an import or restore, and an `update` that changes the schedule or the timezone
+store `scheduledFrom` (the time of that write). The heartbeat fires only a slot later than both `lastRunAt` and
+`scheduledFrom`, so a new `0 9 * * *` created at 14:00 first runs at 09:00 the next day instead of on the next tick. Triggers
+stored before this field existed keep their old behaviour.
+
 **One-time semantics.**
 
 - The heartbeat runs every minute. A one-time trigger fires once, on the first tick at or after its instant, so it can fire up
