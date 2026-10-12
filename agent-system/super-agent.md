@@ -147,7 +147,8 @@ run a handler script before any model turn: [Agent Routines](./agent-routines.md
 
 `match` predicates, true if **any** holds: `mention` (the subject is mentioned), `reply` (a reply in a thread the subject
 posted in, or a quote of the subject), `hotRoom: { windowMinutes }` (the room was engaged with the subject within the
-window: a mention of or reply to the subject, or the owner posting), `keywords` (case-insensitive substrings), `senders`
+window: a mention of or reply to the subject, the owner posting, or the agent itself posting there; the agent's own
+message never matches), `keywords` (case-insensitive substrings), `senders`
 (user ids), `dm` (the message is in a DM of the subject), `notification` (for `notification.created`). Only types are
 validated: window and event counts must be positive (`maxEvents` an integer), `cooldownSeconds` 0 or more, and no value has
 an upper bound. An unknown key is rejected because a misspelled predicate would otherwise leave `match` empty, which
