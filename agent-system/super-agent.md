@@ -89,6 +89,14 @@ active person. The qualifying rule is `roomQualifiesForDefaultBot` plus the arch
 inviter, so the A2A roster hook does not fire and the mirror never enrols the bot in a roster. Joining an agent team stays a
 separate, explicit act.
 
+**Bot-to-bot work.** A super agent takes a task, a result or an FYI from another bot only when both bots are on the roster
+of one agent team that is turned on (team members give each other work). Any other bot-to-bot row is closed
+`failed-undeliverable` with reason `recipient-super-agent`, and the chain's thread line says the super agent takes work only
+from bots on its agent team. Rows the platform inserts (a stop, an answer or an approval decision from a person) always reach
+it. Because the mirror never enrols the bot, put it on the roster with **Add to Agent Team** in the team room's member list.
+The check is `shareAgentTeam` in `apps/meteor/server/services/a2a/a2a-authorization.ts`, used by the dispatcher and by the
+FYI and redelivery recheck.
+
 **When it runs.** A pass runs immediately when the flag changes and within seconds of the owner joining, leaving, being
 removed, creating a room, having a room role changed through the role methods, or being deactivated or reactivated. A cron
 (`SuperAgent_Reconcile_Interval_Minutes`, default 5, read at startup) catches everything else, such as a role change made
