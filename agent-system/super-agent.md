@@ -95,7 +95,10 @@ of one agent team that is turned on (team members give each other work). Any oth
 from bots on its agent team. Rows the platform inserts (a stop, an answer or an approval decision from a person) always reach
 it. Because the mirror never enrols the bot, put it on the roster with **Add to Agent Team** in the team room's member list.
 The check is `shareAgentTeam` in `apps/meteor/server/services/a2a/a2a-authorization.ts`, used by the dispatcher and by the
-FYI and redelivery recheck.
+FYI and redelivery recheck. Every agent bot, super agent or not, finds its teams in its `IDENTITY.md`: `## Teams` lists each
+agent team it is on (id, room, roster bots with bot ids) and `## Owner's agents` its owner's other agent bots. The hub renders
+both sections on every agent-room push and re-pushes the affected bots when a roster, the Agent team switch or a bot changes;
+the `privos-team` skill's `teams` command (`GET agents.a2a.teams.mine`) is the live view.
 
 **When it runs.** A pass runs immediately when the flag changes and within seconds of the owner joining, leaving, being
 removed, creating a room, having a room role changed through the role methods, or being deactivated or reactivated. A cron

@@ -108,6 +108,7 @@ Each mailbox row records the path that authorized it (`authPath`). The hub never
 - `hop` is computed by the hub: one more than the highest hop already addressed to the sender on the chain (and than the `replyTo` row, which must be addressed to the sender). Pointing `replyTo` at an early message never resets the count. A send above hop 4 is refused (`a2a-hop-limit`).
 - A chain holds at most 20 rows; fan-out rows count individually (`a2a-chain-cap`).
 - A bot that starts a new chain from inside a running chain turn creates a child chain that inherits the parent's lineage and is charged to the root initiator.
+- LLM usage follows the same rule: every turn a chain causes, child chains and bots of other owners included, is attributed to the root chain's accountable human (`initiatorUserId` / `initiatorUsername` on the usage row, the human the new-chain quota charges). The bot that ran stays `callerUsername`, so an owner still sees what their bot consumed by filtering on the bot.
 - Each (initiating bot, accountable human) pair may start `Agent_A2A_New_Chains_Per_Hour` new chains per UTC clock hour (default 20); beyond that the send is refused with `a2a-new-chain-rate` and audited. `0` refuses every new chain.
 - `kind: stop` through `send` is accepted only from the chain initiator (`a2a-stop-not-allowed` otherwise). Humans stop a chain with `POST agents.a2a.stop { correlationId, reason? }`. Stop is soft: queued FYI and urgent rows of the chain expire (`expired/stopped`), every other participant gets one `stop` message, running turns finish, and afterwards only `kind: result` from a participant is accepted (`a2a-chain-stopped` for anything else).
 
@@ -116,6 +117,10 @@ Each mailbox row records the path that authorized it (`authPath`). The hub never
 Each recipient gets one row in `rocketchat_agent_a2a_messages` (the mailbox, the audit log and the approval ledger are one table). A row is inserted as `dispatching` with a lease, the hub wakes the recipient in a sandbox project bound to the destination room (`room-<roomId>-<botId>`), and the row becomes `delivered` once the runtime accepts the turn. If the runtime cannot start (an offline or busy harness bot, a project still downloading) the row stays `queued` and a one-minute cron job redelivers it with backoff (5 attempts, 60 s to 600 s). Queued rows older than 24 hours expire as `stale`. Every transition is a compare-and-set, so a row is never delivered twice. Rows are removed 30 days after they close.
 
 In the destination room the hub posts one fixed line per record in the chain thread. Detail is read on demand with `agents.a2a.list` or `privos agents a2a chain`.
+
+Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`.
+
+**Usage per chain.** A recipient's turn runs under the hub session key `task-<projectId>-a2a-<correlationId>`. The sandbox analytics endpoint returns the attempt's `taskId` with each LLM call, and the hub's AI-usage sync stores it with the derived `a2aCorrelationId` on `rocketchat_ai_usage_logs` (rows synced before this field existed have neither). Admin → Engagement → AI usage shows "via chain <id>" under the user, filters by **Chain**, and the CSV export carries `taskId` and `a2aCorrelationId`; the REST routes `engagement-dashboard/ai-usage/*` take `?a2aCorrelationId=`. Cost per chain is `sum(totalCostUSD)` over rows with that id; cost per sender is a join of those rows with `rocketchat_agent_a2a_messages` on the chain id.
 
 ## Approval flow
 
@@ -193,6 +198,7 @@ Returned as `errorType` with HTTP 400 or 403.
 
 | Route | Who | Purpose |
 |-------|-----|---------|
+| `GET agents.a2a.teams.mine[?botId=]` | a bot (its own data); a person passes `botId` and must own the bot or hold `view-user-administration` | `{ asOf, teams: [{ teamId, name, roomId, enabled, members: [{ botId, username, name, runtime, superAgent, you }] }], ownerAgents: [{ botId, username, name, runtime, superAgent }] }`: every agent team the bot is on (turned-off teams flagged) and its owner's other agent bots |
 | `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
 | `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
@@ -213,8 +219,12 @@ Returned as `errorType` with HTTP 400 or 403.
 
 The skill ships in the sandbox template skills and, through the harness skills bundle, to bots paired through the ACP bridge. It reads the team and room from the prompt block (`--room` defaults to `PRIVOS_ROOM_ID`) and the credentials from the environment (egress proxy in sandbox mode, `Authorization: Bearer` otherwise).
 
+The agent does not have to look for ids: the hub renders `## Teams` (each agent team the bot is on, its id, its room and every roster bot with its bot id) and `## Owner's agents` into the bot's `IDENTITY.md`, which every agent-room turn already receives. A roster change, an Agent team switch, and a bot being created, renamed, deactivated or deleted re-push the affected bots' agent rooms one at a time and drop the hub's identity cache, so the next turn sees the change. `teams` is the live view of the same data.
+
 ```bash
+python3 scripts/team.py teams
 python3 scripts/team.py members --team TEAM_ID
+python3 scripts/team.py send --to BOT_ID --kind task --text "Summarize the open incidents"   # from the agent room, on one team
 python3 scripts/team.py send --team TEAM_ID --to BOT_ID --kind task --text "Summarize the open incidents"
 python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_... --to BOT_ID --text "Done: 3 open"
 python3 scripts/team.py needs-approval --team TEAM_ID --correlation c_... --to INITIATOR_ID --action send-email --draft "Hello ..."
@@ -223,7 +233,7 @@ python3 scripts/team.py chain --correlation c_...
 python3 scripts/team.py stop --correlation c_...
 ```
 
-A refused send prints `{ success: false, error, errorType }` and exits 1. Rules the skill teaches the agent: reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; message teammates in the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
+From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. Rules the skill teaches the agent: reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
 
 ### External master agents: the `privos` CLI
 
