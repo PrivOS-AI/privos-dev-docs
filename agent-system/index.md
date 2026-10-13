@@ -8,15 +8,16 @@ AI agents in PrivOS Hub — conversational bots powered by PrivOS Sandbox (Claud
 - [Agent Builder](./agent-builder.md) — Conversational agent creation flow
 - [Agent Rooms](./agent-rooms.md) — Room structure, auto-reply handler, context files
 - [Trigger Registry](./trigger-registry.md) — Cron, webhook, and event triggers
-- [Agent Routines](./agent-routines.md) — Triggers that run a handler script before or instead of a model turn: the four stages (when, check, think, act), playbooks, exit codes, fallback and breaker, the quiet `NO_REPORT` turn, schedules and who may wire a handler
+- [Agent Routines](./agent-routines.md) — Triggers that run a handler script before or instead of a model turn: the four stages (when, check, think, act), playbooks, exit codes, fallback and breaker, the quiet `NO_REPORT` turn, schedules, who may wire a handler and where the plain-language reasons for undelivered tasks come from
 - [Trigger API Reference](./trigger-api-reference.md) — REST endpoints for trigger CRUD + webhook receiver
-- [Agent Settings UI](./agent-settings-ui.md) — Room tab for managing triggers
+- [Agent Settings UI](./agent-settings-ui.md) — Room tab for managing triggers and routines: trigger form, handler picker (Load handlers), Run now, last run
 - [Self-Management Skills](./self-management-skills.md) — Skill files agents use to manage their own triggers
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md) — Bot-key push to PrivOS Sandbox, agent selector re-validation, mid-session context handover
 - [Agent Harness Runtime](./agent-harness-runtime.md) — Second runtime: an operator-owned ACP bridge (Claude Code / Codex / Cursor / Goose / custom) instead of PrivOS Sandbox — protocol, dispatch switch, relay lifecycle, pairing, per-room isolation
 - [Credential Vault](./credential-vault.md) — Egress-injected secrets for external APIs: shared, room and agent-private bindings, secret requests, coexistence with the bot key
 - [Room Services](./room-services.md) — Supervised processes that outlive an agent's turn (listeners, long jobs, pollers) and on-demand handlers a trigger runs first: declaration, states, owner stop, raw (board) and relay (VM) credentials, limits, the `privos-services` skill
-- [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) — `agents.a2a.*`: roster-scoped messages between agents with hub-enforced rules, chains, caps, approvals, the `privos-team` skill and the `privos agents a2a` CLI
+- [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) — `agents.a2a.*`: roster-scoped messages between agents with hub-enforced rules, chains, caps, approvals, the `privos-team` skill and the `privos agents a2a` CLI, and what an owner sees when a task fails or waits for approval
+- [Agents Page](./agents-page.md) — The owner's page for their agents: entry from the sidebar Agents tab, the four tabs (My agents, Teams, Routines, Activity), the routes behind them, who may add a bot to an agent team and who may decide an approval
 - [Super Agent](./super-agent.md) — A trusted agent bot that mirrors its owner's rooms and roles, writes app-owned list items, listens through hub-side subscription filters, replies in the owner's DMs after approval, and reaches the hub from its VM through the proxy egress
 
 ## Concepts
