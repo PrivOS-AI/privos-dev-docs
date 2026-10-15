@@ -8,7 +8,7 @@ How one PrivOS agent bot hands work to another bot and gets the result back. One
 
 | Term | Meaning |
 |------|---------|
-| **Agent team / roster** | A PrivOS Hub team that a holder of the **Create agent teams** permission (`manage-agent-teams`: role `admin` and the **Agent Team Manager** role by default) turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot edit the roster. The roster authorizes calls between teammates of different owners only while each owner enables streaming for the team room. Plain `TeamMember` rows grant room access only and never authorize a2a. |
+| **Agent team / roster** | A PrivOS Hub team that a holder of the **Create agent teams** permission (`manage-agent-teams`: role `admin` and the **Agent Team Manager** role by default) turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot edit the roster. The roster authorizes calls between teammates of different owners. Plain `TeamMember` rows grant room access only and never authorize a2a. |
 | **Destination room** | `roomId` of the envelope: any room both bots are members of. The recipient acts there, its reply streams there and a one-line record is posted in the chain thread. 1:1 DMs are refused (`a2a-room-shape-unsupported`); channels, private groups, group DMs, team main rooms and the recipient's own agent room qualify; the sender's own agent room never does for another bot (an agent room hosts only its own bot, whoever is a member), so a bot acting in its agent room sends to a shared room such as the team room. |
 | **Acting room** | The room the sender acts in, resolved by the hub from provenance it owns (the proxy-stamped session room for sandbox bots; the running a2a turn's room or the bot's agent room for harness bots; the bot's agent room for a CLI caller). |
 | **Same-room call** | Acting room equals destination room. |
@@ -79,10 +79,10 @@ Rules decided on 2026-10-06 (they replace the earlier "same team in any room" an
 Then each recipient is reached through the first path that holds:
 
 1. **Same owner.** Sender and recipient share one accountable human. Allowed in any room both bots are in; a cross-room call also needs that human to be a member of the destination room (`a2a-owner-not-in-room`). No team is needed.
-2. **Same agent team.** Both bots are on the team's roster (and still `TeamMember`s), and each bot's owner enabled streaming for the team room (the room appears in the bot's owner-only `streamingRoomIds`; the Universal Bot as sender is exempt). Cross-room calls are allowed. A teammate whose owner did not enable the team is refused with `a2a-team-streaming-off`. The envelope (or the chain) names the team in `teamId`.
-3. **Same room, different owners outside a streaming team.** Only when the sender acts in the destination room (same-room call), and only when the recipient's owner enabled streaming (`a2a-room-streaming-off`) and "Allow everyone using this Agent" (`publicRoomIds`, `a2a-recipient-not-public-in-room`) for that room. Attachments must come from that room.
+2. **Same agent team.** Both bots are on the team's roster (and still `TeamMember`s). Cross-room calls are allowed. The envelope (or the chain) names the team in `teamId`.
+3. **Same room, different owners outside an agent team.** Only when the sender acts in the destination room (same-room call), and only when the recipient's owner turned on "Allow everyone using this Agent" (`publicRoomIds`, `a2a-recipient-not-public-in-room`) for that room. Attachments must come from that room.
 
-Everything else is refused. A cross-room call between bots of different owners outside a streaming team is `a2a-owner-mismatch`.
+Everything else is refused. A cross-room call between bots of different owners outside an agent team is `a2a-owner-mismatch`.
 
 The Universal Bot takes part only as the main bot: it accepts `result`, `needs-approval`, `question` and `stop` on chains it initiated for the same human, never `task`, and only from a sender whose accountable human is the chain's human.
 
@@ -90,14 +90,13 @@ The Universal Bot takes part only as the main bot: it accepts `result`, `needs-a
 |------|---------|
 | Same owner, any room both bots are in, owner a member of the destination room for a cross-room call | Allowed (`same-owner`) |
 | Same owner, cross-room, owner not a member of the destination room | Refused `a2a-owner-not-in-room` |
-| Same team, different owners, both owners enabled streaming for the team room | Allowed, also cross-room (`team`) |
-| Same team, an owner did not enable streaming for the team room | Refused `a2a-team-streaming-off` |
-| Different owners outside a streaming team, same room, recipient streams and allows everyone there | Allowed (`room-public`) |
-| Same as above without streaming, or without "Allow everyone" | Refused `a2a-room-streaming-off` / `a2a-recipient-not-public-in-room` |
-| Different owners outside a streaming team, cross-room | Refused `a2a-owner-mismatch` |
-| Someone adds another owner's bot to their own room or team and calls it | Refused: the bot's owner never enabled that room or team |
+| Same team, different owners, both bots on the roster | Allowed, also cross-room (`team`) |
+| Different owners outside an agent team, same room, recipient allows everyone there | Allowed (`room-public`) |
+| Same as above without "Allow everyone" | Refused `a2a-recipient-not-public-in-room` |
+| Different owners outside an agent team, cross-room | Refused `a2a-owner-mismatch` |
+| Someone adds another owner's bot to their own room and calls it | Refused: the bot's owner never allowed everyone in that room. Only the bot's owner or a workspace admin can put it on a team roster |
 | Recipient woken in R later sends to room S | Judged on its own send: acting room R, destination S |
-| Roster entry, streaming, "Allow everyone" or room membership removed after a send | Later sends refused; queued rows expire `member-removed` on redelivery |
+| Roster entry, "Allow everyone" or room membership removed after a send | Later sends refused; queued rows expire `member-removed` on redelivery |
 | Harness or CLI sender (no proxy header) | Acting room is the bot's agent room (or the room of its running a2a turn), so a send to another room is cross-room |
 
 Each mailbox row records the path that authorized it (`authPath`). The hub never auto-invites a bot into a room and the room's default bot is never triggered by a record.
@@ -174,11 +173,9 @@ Returned as `errorType` with HTTP 400 or 403.
 | `a2a-sender-not-in-room` / `a2a-recipient-not-in-room` | A party is not a member of the destination room |
 | `a2a-room-not-postable` | The destination room is read-only for the sender |
 | `a2a-recipient-cannot-post` | A recipient is muted or blocked in the destination room |
-| `a2a-team-streaming-off` | Same team, but an owner did not enable streaming for the team room |
-| `a2a-room-streaming-off` | Different owners outside a streaming team: the recipient has no streaming in the room |
-| `a2a-recipient-not-public-in-room` | Different owners outside a streaming team: the recipient does not allow everyone in the room |
+| `a2a-recipient-not-public-in-room` | Different owners outside an agent team: the recipient does not allow everyone in the room |
 | `a2a-room-shape-unsupported` | The room cannot host a2a (for example a 1:1 DM) |
-| `a2a-owner-mismatch` | Cross-room call between bots of different owners outside a streaming team |
+| `a2a-owner-mismatch` | Cross-room call between bots of different owners outside an agent team |
 | `a2a-owner-not-in-room` | Cross-room call and the shared owner is not in the destination room |
 | `a2a-not-participant` | Sender is not a participant of the chain |
 | `a2a-chain-team-mismatch` / `a2a-chain-room-mismatch` | The chain is pinned to another team or room |
@@ -203,7 +200,7 @@ Returned as `errorType` with HTTP 400 or 403.
 | `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
 | `GET agents.a2a.teams.status?teamId=` | `manage-agent-teams` holder | `{ teamId, enabled }` |
-| `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot) and get streaming for the team room. Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
+| `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot). Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
 | `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
 
 ## Using it
@@ -211,7 +208,7 @@ Returned as `errorType` with HTTP 400 or 403.
 ### Turning a team into an agent team
 
 1. Someone with the **Create agent teams** permission switches on **Agent team** when creating the team, or later in the team's **Edit** panel (Team Info). The switch is shown only to holders of that permission and applies at once. Workspace admins hold it; give it to anyone else with the **Agent Team Manager** role, or grant `manage-agent-teams` to any role in Administration → Permissions.
-2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot); its owner's streaming for the team room is turned on at the same time, which is the consent the team path needs. A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
+2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
 3. A bot that leaves or is removed from the team leaves the roster.
 4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
 
