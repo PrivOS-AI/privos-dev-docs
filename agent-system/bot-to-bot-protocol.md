@@ -62,7 +62,7 @@ Success response:
 | `result` | Final answer to a task | `urgent` |
 | `message` | Acknowledgement or milestone update | `fyi` |
 | `needs-approval` | Ask for approval of one consequential action; carries `data.approval = { "action": "<label>", "draft": "<text>" }` (no tier: the hub computes it) | `urgent` |
-| `question` | Ask the initiator; carries `data.options = ["a", "b"]` | `urgent` |
+| `question` | Ask for a decision. With `data.options = ["a", "b"]` it is a card for the chain's accountable human (the `to` bot is not woken; the pick returns to the sender as an `answer` row). Without options it is an ordinary urgent message to its recipient, the way to ask the initiator bot. | `urgent` |
 | `stop` | Soft-stop the chain; accepted only from the chain initiator | `urgent` |
 
 ### Priorities
