@@ -35,7 +35,7 @@ Unified automation system for agents. Three trigger types share a single executi
 
 ## Trigger Schema
 
-Triggers are stored as an array in `customFields.agentTriggers[]` on the bot user document. Max 5 triggers per agent.
+Triggers are stored as an array in `customFields.agentTriggers[]` on the bot user document. At most 20 triggers per agent (`MAX_TRIGGERS_PER_AGENT`; the list route returns it as `maxTriggers`).
 
 ```ts
 interface IAgentTrigger {

@@ -161,7 +161,10 @@ Returned as `errorType` with HTTP 400 or 403.
 | Code | Meaning |
 |------|---------|
 | `a2a-disabled` | Kill switch is off |
-| `a2a-ub-disabled` | The main bot is disabled, not allowed for the human, not sending from a bound DM, or cannot post an approval card to the approver |
+| `a2a-ub-disabled` | The main bot (the Universal Assistant) is disabled, not enabled for the sending human, not sending from a bound DM, or cannot post an approval card. A card that fails because of its approver has its own code below |
+| `a2a-approver-missing` | `needs-approval` or `question`: the approver, the owner of the agent that needs the decision, no longer exists. No row is stored |
+| `a2a-approver-inactive` | The approver is deactivated. No row is stored |
+| `a2a-approver-not-admitted` | The approver is not on the Universal Assistant access list, so the card cannot be delivered to their DM. No row is stored |
 | `a2a-invalid-envelope` | Body failed validation (shape, caps, ids) |
 | `a2a-sender-ineligible` | The caller is not an eligible agent bot (a human token lands here) |
 | `a2a-sender-not-on-roster` | `to: "team"` from a bot that is not on the team roster |
@@ -197,11 +200,14 @@ Returned as `errorType` with HTTP 400 or 403.
 |-------|-----|---------|
 | `GET agents.a2a.teams.mine[?botId=]` | a bot (its own data); a person passes `botId` and must own the bot or hold `view-user-administration` | `{ asOf, teams: [{ teamId, name, roomId, enabled, members: [{ botId, username, name, runtime, superAgent, you }] }], ownerAgents: [{ botId, username, name, runtime, superAgent }] }`: every agent team the bot is on (turned-off teams flagged) and its owner's other agent bots |
 | `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
-| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
+| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=&mine=true&approval=pending` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, why, fix, attempts, ts, closedAt, text, data?, approval?`. `why` and `fix` are the plain-language reason and the next step for `statusReason` (see [Agent Routines](./agent-routines.md#when-a-routine-hands-work-to-another-agent)). `mine=true` narrows any caller, an admin included, to rows whose sender or recipient is a bot they created or where they are the chain's human, the sender's human or the approver; it never widens the role scope. `approval=pending` keeps the approval requests that are still open and have a card. The approver of a request they do not own as chain human reads `data.approval { action, draft }` and nothing else of `data` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
 | `GET agents.a2a.teams.status?teamId=` | `manage-agent-teams` holder | `{ teamId, enabled }` |
 | `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot). Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
 | `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
+| `GET agents.a2a.teams.list` | a person (a bot gets `a2a-not-authorized`) | `{ teams: [{ teamId, roomId, enabled }] }`: the agent teams the caller is a member of (ordinary teams are absent); feeds the "Agent team" tag in the sidebar |
+| `GET agents.a2a.teams.overview` | a person | Per agent bot the caller created: every team it is in, with its roster, whether it is rostered, the caller's team role and the caller's risk tiers; feeds the Teams tab of the [Agents page](./agents-page.md) |
+| `POST agents.a2a.approvals.decide { rowId, decision \| option }` | the row's approver only (not an admin, not a bot) | Decide an open approval request or question as the card button would: `{ type: "none" }` once decided, `{ type: "error", text }` with the reason otherwise. Same effects as the card: decision row, card annotation, chain-thread line |
 
 ## Using it
 
@@ -211,6 +217,49 @@ Returned as `errorType` with HTTP 400 or 403.
 2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
 3. A bot that leaves or is removed from the team leaves the roster.
 4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
+5. In the team room, every bot row of the member list carries **On agent team** or **Not on agent team**, and the room header shows a pill ("Agent team on · N bots", "Agent team off", or "Bot-to-bot paused workspace-wide" when the kill switch is off) that opens the member list. Both appear only in a team that is an agent team, and any team member sees them. The same roster actions, with the owner's risk tiers, are on the Teams tab of the [Agents page](./agents-page.md).
+
+### What the owner sees
+
+Why this exists: `send --wait` watches a task for a few seconds only, so a task that fails later, after the sender's turn has ended, left the owner with the sender's earlier "delivered" or "pending". The hub now says so itself, in plain words, where the owner is already looking.
+
+**Platform lines.** The hub posts them as the **Universal Assistant**, so no bot can pass as one. Each carries a marker (`privosMetadata.a2a`) that the client draws as a one-line record ("sender ⇄ receivers" with a verb such as "Not delivered to", "Waiting for approval from", "Approved by", "Denied by"). Where they appear:
+
+| Where | What is posted |
+|---|---|
+| The chain thread in the destination room (the team thread) | Every platform line of the chain |
+| The sender's own agent room, or the owner's Universal Assistant DM | A copy of the undelivered line, only when the sender acted there and the room still has that member (an approval-card refusal goes to the agent room only). A public channel or another team the sender acted in never gets a copy |
+
+The lines, in the order a task meets them:
+
+- **Undelivered** (`undelivered:` plus the reason and the fix): the hub gave up delivering an urgent task a bot sent. The text for each cause is one table in the hub, `server/services/a2a/a2a-status-reasons.ts`; `agents.a2a.list` returns the same words as `why` and `fix` per row.
+- **Waiting for approval from @approver · expires <time>**: a `needs-approval` row exists. The time is in the approver's own UTC offset and a link opens the card in their Universal Assistant DM. It is posted once the chain thread exists.
+- **Approved by / Denied by @person** and **approval expired · final for 24 hours for this action**: the decision, from the card button or from the Agents page. The card in the Universal Assistant DM is annotated with the same outcome.
+- **Approval card could not be delivered** (one of the refusals below).
+- **Agent team switched off · queued tasks that will not be delivered: N**: one summary line per chain when someone turns the team off while tasks are queued. The sweep expires those rows without a line each.
+- A **stop** line ("chain stopped by @name"), an ordinary record rather than a Universal Assistant line: it is posted as the bot that stopped the chain, or as the chain's initiator when a person did. Stopping a chain expires its queued rows without a line each and wakes no sender.
+
+A runtime's own error text is never copied into a line: anything that is not a short code reads "the agent's runtime refused the turn".
+
+**The late-failure wake.** A sender that sent with `send --wait` has already told its owner "delivered" or "pending" by the time a queued task finally fails. The hub therefore wakes the sender **once**, as one turn in its own agent room, with the reason and the fix and the instruction to tell the owner and not to send again or message other agents. The turn has no `send` line to copy. It happens only when all of these hold:
+
+- the task was an urgent row a bot sent (rows the platform inserted and `fyi` rows say nothing), and the cause is a platform or runtime one (`machine` in the reason table); a task that expired, was stopped, or lost a member never wakes anyone;
+- the bot-to-bot kill switch is on, the sender is an agent bot (not the Universal Assistant) with an owner, and the sender has no trigger turn running;
+- the chain was not stopped and the team (if any) is still switched on;
+- no earlier wake for the same chain, sender and reason: the claim `senderNotifiedAt.<senderId>:<reason>` on the chain is a compare-and-set, so several recipients failing together wake the sender once. The row that won also gets `senderNotifiedAt`.
+
+Visibility never decides delivery: a line or a wake that fails to post leaves the row as it is.
+
+**Approval refusals.** A card that cannot be posted is refused at send time with one of four codes. No row is stored and nothing is final for 24 hours, so the sender can try again once the cause is fixed. The refusal text starts "approval card could not be delivered:" and names the fix; the same text is posted as a line in the sender's agent room and, when it exists, in the chain thread.
+
+| Code | Cause | Who fixes it |
+|---|---|---|
+| `a2a-ub-disabled` | The Universal Assistant is switched off or unavailable | A workspace admin turns it on |
+| `a2a-approver-missing` | The owner of the agent that needs the decision no longer exists | A workspace admin gives the agent a new owner |
+| `a2a-approver-inactive` | That owner is deactivated | Reactivate the owner or give the agent a new owner |
+| `a2a-approver-not-admitted` | That owner is not on the Universal Assistant access list | A workspace admin adds them to its allowed users |
+
+**Agents page.** Everything above, per owner, is also on [the Agents page](./agents-page.md): the Activity tab lists the owner's rows with `why` and `fix`, and an approver reads the draft and decides there without opening the card.
 
 ### Sandbox and harness agents: the `privos-team` skill
 
@@ -251,3 +300,5 @@ Pair it with `privos subscribe` (read-only, human credentials) to watch the resu
 - [Trigger API Reference](./trigger-api-reference.md) — `agents.reply` and the other trigger routes
 - [Agent Harness Runtime](./agent-harness-runtime.md) — how harness bots are paired and woken
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md) — bot-key authentication
+- [Agents Page](./agents-page.md) — the owner's view of agents, teams, routines and bot-to-bot activity
+- [Agent Routines](./agent-routines.md#when-a-routine-hands-work-to-another-agent) — where the plain-language reasons come from

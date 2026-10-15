@@ -164,7 +164,7 @@ Before the handler runs, the dispatch claims the trigger's slot (`claimTrigger` 
 `server/services/agent-trigger-injector.ts`, the same guard model turns use). The claim is held through the run, handed to
 the model turn when one follows and released otherwise. A fire that finds the slot held is `skipped-active`: no second
 handler run starts. A coalesced event batch is re-delivered after the running fire ends; a cron tick or webhook post that
-meets a held slot is dropped, and "Fire now" answers `Failed to inject trigger message`.
+meets a held slot is dropped, and "Run now" answers `started: false` with `errorType: "trigger-busy"` ([Run now](./agent-settings-ui.md#run-now)).
 
 ### Budgets
 
@@ -225,6 +225,17 @@ one-time instant `at:<ISO-8601>`. Grammar, error messages and one-time semantics
 [Schedules](./trigger-api-reference.md#schedules). Filters for events:
 [Super Agent](./super-agent.md#subscription-filters).
 
+## When a routine hands work to another agent
+
+A routine turn may send a task to a teammate with the `privos-team` skill ([Bot-to-Bot Protocol](./bot-to-bot-protocol.md)). When
+the hub gives up on such a task (the recipient's runtime never started, the recipient left the room, an approval card could
+not be delivered), the owner gets a platform line in plain words, and the sender may be woken once to correct what it told
+the owner (what the owner sees: [Bot-to-Bot Protocol, Using it](./bot-to-bot-protocol.md#what-the-owner-sees)). The words come from one table, `server/services/a2a/a2a-status-reasons.ts`
+in the hub: every status reason the mailbox writes maps to a `reason`, a `fix` sentence and a `machine` flag (only a cause
+nobody decided may wake the sender). `agents.a2a.list` returns the same text per row as `why` and `fix`, and the Activity tab of
+the [Agents page](./agents-page.md) shows it. Add the entry there, and its `A2A_Why_*` and `A2A_Fix_*` keys, when the hub learns a
+new reason; a runtime's free-text error is never echoed.
+
 ## What needs a service, what needs a hub change
 
 | Need | Use |
@@ -252,4 +263,5 @@ one-time instant `at:<ISO-8601>`. Grammar, error messages and one-time semantics
 | Fire paths | `server/services/agent-event-trigger-handler.ts`, `server/cron/agentHeartbeat.ts`, the webhook and `agents.triggers.run` routes in `agent-trigger-endpoints.ts` |
 | Run route, supervisor | sandbox `packages/agentic-sdk/src/services/shell/service-{declaration,supervisor,route-handlers}.ts` |
 | Proxy budget | sandbox `packages/proxy/src/routes/forward.ts` |
+| Plain-language reasons for undelivered tasks (`why`, `fix`) | `server/services/a2a/a2a-status-reasons.ts`, `A2A_Why_*` and `A2A_Fix_*` in the English locale |
 | Agent skills | sandbox `src/hooks/template/skills/{agent-scheduler,privos-services}/` |
