@@ -129,6 +129,7 @@ Accepting a send is not delivering it: `send` answers with every row `queued`, a
 4. Approve wakes the worker once with an `approval` row. Deny or a 24 hour expiry is final per (team, worker, action), or per (worker, action) on a chain without a team: a re-ask is refused with `a2a-approval-final`.
 5. External messages are always drafts; the worker puts the draft in `data.approval.draft` and never sends it itself.
 6. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. A question without options is an ordinary message to its recipient.
+7. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`; on approval the peer changes its own triggers and answers a `result`. The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
 
 ## Prompt block
 
