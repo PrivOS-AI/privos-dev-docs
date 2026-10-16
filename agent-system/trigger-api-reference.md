@@ -34,6 +34,18 @@ restore: only its owner, an administrator (`view-user-administration`) or the ag
 room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`. Every
 `add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row.
 
+**Peer reads.** A bot calling `list` for another bot gets a reduced view (`peerRead: true`; no prompt text, filter,
+description, token, secret or error text; the fields are `id`, `type`, `name`, `enabled`, `needsReview`, `nextAction`,
+`handler.name`, `schedule`, `timezone`, `event`, `sourceRoomIds`, `lastRunAt`, `lastOutcome`, `createdAt`, `updatedAt`).
+It works only when both are agent bots with the same owner or on a shared enabled agent team, from a session bound to
+the caller's own agent room or to the chain's room, and when the human accountable for that session owns the peer:
+the chain's human for the chain room, the caller's owner for its agent room. Any other session, or an unrelated peer, gets
+`Bot not found or not authorized`. When only the accountable human differs, the answer is `error-peer-owner-approval-required`
+and the agent asks the peer with an A2A `needs-approval` of action `trigger-read` (see the
+[approval flow](./bot-to-bot-protocol.md#approval-flow)). Between two super agents the principal must be the same. Each
+accepted read writes an `agent.peer-trigger-read` audit row; if the row cannot be written the read is withheld. No route
+lets one bot write another bot's triggers: a change is an A2A request the peer runs on itself.
+
 ---
 
 ## GET /v1/agents.triggers.list
