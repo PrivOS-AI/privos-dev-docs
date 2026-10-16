@@ -232,7 +232,7 @@ shape of each:
   by task id, and keeps one persistent webhook trigger whose handler forwards a matching board event with the secret. The
   board events come from a `privos subscribe` daemon on an operator host. The handler drops the entry on 401 or 404.
 - *Release stage.* The release tooling takes `--callback-file PATH`, a mode-0600 file with `url=` and `secret=` lines, and
-  posts the stage exit code when the stage ends. The bot sees it in `data.body.exit`. The post is best effort and never
+  posts the stage exit code when the stage ends. The body carries `exit` and `source: "release"` (a stage also adds `release` and `stage`, a routine run adds `run`), so the bot reads `data.body.exit` and `data.body.source`. The post is best effort and never
   changes the stage's own exit marker.
 - *File in a room.* `match` on `file.created` wakes the bot on the first matching file only, so a job that syncs many files
   should post to the callback URL after the last one.
