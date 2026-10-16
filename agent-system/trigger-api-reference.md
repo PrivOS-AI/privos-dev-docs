@@ -9,6 +9,7 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/v1/agents.triggers.list` | Yes | List triggers for an agent |
+| GET | `/v1/agents.triggers.list-all` | Admin | List the triggers of every agent |
 | POST | `/v1/agents.triggers.add` | Yes | Add a new trigger |
 | POST | `/v1/agents.triggers.update` | Yes | Update an existing trigger |
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
@@ -32,7 +33,7 @@ room may call them. Any other caller, and any session bound to another room, get
 
 ## GET /v1/agents.triggers.list
 
-List all triggers for an agent. Known gap: the response currently includes each webhook trigger's `webhookSecret`; treat the list output as secret.
+List all triggers for an agent. The list never returns `webhookSecret`; it returns `webhookToken`, which alone fires a legacy `agentic_response` webhook that has no stored secret, so treat the list output as sensitive. The privos CLI wraps these reads (`privos hub triggers list|get`) and prints only a fingerprint of the token.
 
 **Query Parameters:**
 
