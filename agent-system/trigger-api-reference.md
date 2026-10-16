@@ -150,13 +150,15 @@ File events fire for an upload through the Files API and for a file written by a
   30-second cooldown. A burst of files within the cooldown is one turn carrying the first file; the prompt should say "list
   the room's files" rather than trust the single event.
 - Outbound bot webhooks for the room also receive `file.*` for files written by a sync.
+- Known gap: a file pushed through the legacy `internal/files.sync` route or written by the publisher carries no actor and
+  fires no file event. The sandbox and the butler push through `internal/rooms/:rid/files`, which does.
 
 ### `needsReview`
 
 File event triggers saved before file events started firing were inert. When the hub is upgraded it disables every enabled
 `file.created|updated|deleted` event trigger and stamps it `needsReview: { reason: "file-events-start-firing", at }`
 (migration `v403`), so no agent starts waking on an old prompt unreviewed. The label is returned by `list` and shown as
-**Needs review** on the trigger card and in the Agents page routine list; `privos agents triggers list` prints
+**Needs review** on the trigger card and in the Agents page routine list; `privos hub triggers list` prints
 `false (needs review)`. Review the prompt, then enable the trigger: any write that sets `enabled: true` through `update`
 removes `needsReview`. Nothing re-enables a trigger by itself.
 
