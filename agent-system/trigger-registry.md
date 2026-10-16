@@ -210,7 +210,10 @@ File: `server/services/agent-event-trigger-handler.ts`
 
 ### How It Works
 
-RC events (currently `message.new` via `afterSaveMessage`) are dispatched to agents with matching event triggers.
+PrivOS Hub events are dispatched to agents with matching event triggers: `message.new` (via `afterSaveMessage`),
+`notification.created` and the file events `file.created|updated|deleted`. At the entry, before any trigger is looked up, the
+dispatcher also resolves bot-to-bot awaits that wait for the event (see
+[Await and callback](./bot-to-bot-protocol.md#await-and-callback)).
 
 ```
 afterSaveMessage callback
@@ -232,18 +235,23 @@ dispatchAgentEventTriggers({ event: 'message.new', roomId, data })
 
 ### Supported Events
 
-All `BotWebhookEvent` types are valid for event triggers:
+All `BotWebhookEvent` types are valid for event triggers, but only the events marked "fires" below reach the agent trigger
+dispatcher. The others are stored and sent to outbound bot webhooks only:
 
 | Category | Events |
 |----------|--------|
-| Message | `message.new`, `message.edited`, `message.deleted`, `message.mention`, `message.bot_mention` |
+| Message | `message.new` (fires), `message.edited`, `message.deleted`, `message.mention`, `message.bot_mention` |
 | Room | `room.joined`, `room.left` |
 | User | `user.joined`, `user.left` |
 | List Item | `list.item.created`, `list.item.deleted`, `list.item.stage_changed`, `list.item.attributes_changed` |
-| File | `file.created`, `file.updated`, `file.deleted` |
+| File | `file.created`, `file.updated`, `file.deleted` (fire; see below) |
 | Folder | `folder.created`, `folder.deleted`, `folder.renamed` |
 
-Currently only `message.new` is dispatched via `afterSaveMessage`. Additional events can be wired by adding dispatch calls to their respective callbacks.
+Dispatched today: `message.new`, `notification.created` (filtered triggers only) and the three file events. Room, user, list
+item and folder events do not fire and are a hub change to add. File events come from uploads and from RoomFiles syncs; an
+event caused by a bot resolves awaits but never fires a trigger. Triggers saved for file events before they fired were
+disabled at upgrade and carry `needsReview` until re-enabled; rules and migration note:
+[Events that fire](./trigger-api-reference.md#events-that-fire).
 
 ### Self-Loop Prevention
 
