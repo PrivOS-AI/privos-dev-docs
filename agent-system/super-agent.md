@@ -100,6 +100,8 @@ agent team it is on (id, room, roster bots with bot ids) and `## Owner's agents`
 both sections on every agent-room push and re-pushes the affected bots when a roster, the Agent team switch or a bot changes;
 the `privos-team` skill's `teams` command (`GET agents.a2a.teams.mine`) is the live view.
 
+**Decision requests.** A teammate's `question` with options (or `needs-approval`) addressed to a super agent is woken to it like any urgent task, while the decision card stays the teammate owner's. An active super agent whose principal is that owner (the kill switch is consulted) may answer a `question` through `POST agents.a2a.approvals.decide { rowId, option }` (CLI skill: `team.py answer --row ROW --option N`); the answer is audited as made by a super agent, the first of the owner's click and the bot's answer wins, and a `needs-approval` can only be decided by the owner. See [Bot-to-bot protocol](bot-to-bot-protocol.md#approval-flow).
+
 **When it runs.** A pass runs immediately when the flag changes and within seconds of the owner joining, leaving, being
 removed, creating a room, having a room role changed through the role methods, or being deactivated or reactivated. A cron
 (`SuperAgent_Reconcile_Interval_Minutes`, default 5, read at startup) catches everything else, such as a role change made

@@ -61,8 +61,8 @@ Success response:
 | `task` | Hand work to a teammate | `urgent` |
 | `result` | Final answer to a task | `urgent` |
 | `message` | Acknowledgement or milestone update | `fyi` |
-| `needs-approval` | Ask for approval of one consequential action; carries `data.approval = { "action": "<label>", "draft": "<text>" }` (no tier: the hub computes it) | `urgent` |
-| `question` | Ask for a decision. With `data.options = ["a", "b"]` it is a card for the chain's accountable human (the `to` bot is not woken; the pick returns to the sender as an `answer` row). Without options it is an ordinary urgent message to its recipient, the way to ask the initiator bot. | `urgent` |
+| `needs-approval` | Ask for approval of one consequential action; carries `data.approval = { "action": "<label>", "draft": "<text>" }` (no tier: the hub computes it). The `to` bot is woken and may advise; only the sender's owner decides | `urgent` |
+| `question` | Ask for a decision. With `data.options = ["a", "b"]` it is a decision card for the sender's owner (the `to` bot is woken with the request and may answer it when it is that owner's active super agent; the pick returns to the sender as an `answer` row). Without options it is an ordinary urgent message to its recipient, the way to ask the initiator bot. | `urgent` |
 | `stop` | Soft-stop the chain; accepted only from the chain initiator | `urgent` |
 | `callback` | Never sent through `send`. A bot registers an await (`agents.a2a.await`); when it resolves, the hub inserts one `callback` row that wakes that bot. See [Await and callback](#await-and-callback) | `urgent` |
 
@@ -85,7 +85,7 @@ Then each recipient is reached through the first path that holds:
 
 Everything else is refused. A cross-room call between bots of different owners outside an agent team is `a2a-owner-mismatch`.
 
-The Universal Bot takes part only as the main bot: it accepts `result`, `needs-approval`, `question` and `stop` on chains it initiated for the same human, never `task`, and only from a sender whose accountable human is the chain's human.
+The Universal Bot takes part only as the main bot: it accepts `result`, `needs-approval`, `question` and `stop` on chains it initiated for the same human, never `task`, and only from a sender whose accountable human is the chain's human. A decision request addressed to it is card-only: the Universal Bot is not woken, and nothing on the card path needs it to be enabled.
 
 | Case | Outcome |
 |------|---------|
@@ -118,18 +118,21 @@ Each recipient gets one row in `rocketchat_agent_a2a_messages` (the mailbox, the
 
 In the destination room the hub posts one fixed line per record in the chain thread. Detail is read on demand with `agents.a2a.list` or `privos agents a2a chain`.
 
-Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`.
+Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `awaiting-decision` only on rows written before decision requests woke their addressee (current rows keep the decision under `approval.status`), `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`.
 
 **Usage per chain.** A recipient's turn runs under the hub session key `task-<projectId>-a2a-<correlationId>`. The sandbox analytics endpoint returns the attempt's `taskId` with each LLM call, and the hub's AI-usage sync stores it with the derived `a2aCorrelationId` on `rocketchat_ai_usage_logs` (rows synced before this field existed have neither). Admin → Engagement → AI usage shows "via chain <id>" under the user, filters by **Chain**, and the CSV export carries `taskId` and `a2aCorrelationId`; the REST routes `engagement-dashboard/ai-usage/*` take `?a2aCorrelationId=`. Cost per chain is `sum(totalCostUSD)` over rows with that id; cost per sender is a join of those rows with `rocketchat_agent_a2a_messages` on the chain id.
 
 ## Approval flow
 
-1. A worker needing a consequential action (external message, delete, spend, production change, or whatever its owner's risk tiers list) sends `kind: needs-approval` to exactly one bot, normally the chain initiator, with `data.approval = { action, draft? }`. The request is a card for a human, never a wake of the recipient.
-2. The hub computes the tier from the worker owner's entry in the team's `riskTiers` (one owner's tiers never apply to another owner's bots; without a team the defaults apply); unknown actions require approval; a tier declared by the worker is ignored. When the owner set the action's tier to auto, the hub decides on its own and the send response carries `decision: "auto"`.
-3. For an action that needs a human, the hub renders approve and deny buttons as the main bot in the worker owner's Universal Bot DM. The button handler resolves the stored button exactly once.
-4. Approve wakes the worker once with an `approval` row. Deny or a 24 hour expiry is final per (team, worker, action), or per (worker, action) on a chain without a team: a re-ask is refused with `a2a-approval-final`.
-5. External messages are always drafts; the worker puts the draft in `data.approval.draft` and never sends it itself.
-6. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. A question without options is an ordinary message to its recipient.
+1. A worker needing a consequential action (external message, delete, spend, production change, or whatever its owner's risk tiers list) sends `kind: needs-approval` to exactly one bot, with `data.approval = { action, draft? }`. The best address is its owner's super agent when the team has one (a roster member with `superAgent: true` that the owner also owns), otherwise the chain initiator. The request becomes a decision card for the worker's owner and is also delivered to the addressed bot as an urgent row.
+2. The hub computes the tier from the worker owner's entry in the team's `riskTiers` (one owner's tiers never apply to another owner's bots; without a team the defaults apply); unknown actions require approval; a tier declared by the worker is ignored. When the owner set the action's tier to auto, the hub decides on its own and the send response carries `decision: "auto"`; no card is posted and no one is woken.
+3. **Where the card goes (the decision room).** The card is posted by the worker bot itself, marked `role: card`, and locked: no member, room owner or bot can edit or delete it, only the platform annotates it. It goes (a) to the worker's agent room when the approver, the worker's owner, is a member there; else (b) to the chain thread as a redacted card (the action label or the question, who decides, expiry and the buttons; no summary or draft; "Details are on the Activity page"), and the approver follows that thread so the card raises an unread mark and a push; else (c) the send is refused with `a2a-approver-unreachable`, no row is stored and nothing becomes final. When the card is in the agent room and the chain lives in a team room, the chain thread gets a "waiting for @approver" line with a link to the card.
+4. The addressed bot's turn starts with the request as data: a decision-request line names the approver, the card's room and link, the expiry and the row id. Its answer path is `message` only. The draft is part of the prompt only when the addressed bot's owner is the approver; another owner's bot receives the request without it. Delivery failures of that wake never lose the request: the line says the addressed bot could not be woken and that the card stays open until it expires.
+5. The button handler resolves the stored button exactly once. Approve wakes the worker with an `approval` row. Deny or a 24 hour expiry is final per (team, worker, action), or per (worker, action) on a chain without a team: a re-ask is refused with `a2a-approval-final`. Stopping the chain or switching the team off closes its pending cards the way an expiry does (the approval becomes `expired`, the card loses its buttons and says why, a late click inserts no row), but nothing becomes final and the worker is not woken.
+6. External messages are always drafts; the worker puts the draft in `data.approval.draft` and never sends it itself.
+7. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. It may be answered by the owner on the card, or through `POST agents.a2a.approvals.decide { rowId, option }` by the addressed bot when that bot is an active super agent whose principal is the approver (the super agent kill switch is consulted); the first decision wins, through the same one-time resolution as the click. A `needs-approval` is never decided by a bot. A question without options is an ordinary message to its recipient.
+8. **Loop guard.** A decision request from B to A is refused with `a2a-decision-ping-pong` while A has a pending decision request addressed to B on the same chain, whether or not it carries `replyTo`. No new cap exists; hop, chain and quota limits are unchanged.
+9. **Refusals on the card path.** `a2a-approver-missing` (the owner no longer exists), `a2a-approver-inactive` (deactivated), `a2a-approver-unreachable` (in neither room). The Universal Assistant is not consulted: `a2a-ub-disabled` and `a2a-approver-not-admitted` no longer occur here. The sender's agent room (and the chain thread when it exists) says why a card was not delivered.
 
 ## Prompt block
 
@@ -140,6 +143,8 @@ The hub prepends this block to the recipient's turn. Everything below the rule l
 - kind: task · from: @ops-bot · origin: bot · chain: c_… · row: … · hop: 2/4 · priority: urgent
 - team: Growth team · room: <roomId> · thread: <tmid>
 - tiers: approval required for external-message, delete, spend, production-change; external messages are drafts
+- accountable human: your owner | someone else (@username)
+- a decision card for @owner is pending in <room link> until <expiry>; row <id>   (rows that carry a decision request)
 - reply with the privos-team skill: send --correlation c_… --reply-to m_… --to <from> --kind result|question|needs-approval
 - a denial or expiry of an approval is final for 24 h; do not retry or reword
 ---
@@ -256,7 +261,10 @@ Returned as `errorType` with HTTP 400 or 403.
 | Code | Meaning |
 |------|---------|
 | `a2a-disabled` | Kill switch is off |
-| `a2a-ub-disabled` | The main bot is disabled, not allowed for the human, not sending from a bound DM, or cannot post an approval card to the approver |
+| `a2a-ub-disabled` | The main bot is disabled, not allowed for the human, or not sending from a bound DM (never on the card path) |
+| `a2a-approver-missing`, `a2a-approver-inactive` | The sender's owner no longer exists or is deactivated, so no card can be posted |
+| `a2a-approver-unreachable` | The sender's owner is in neither the sender's agent room nor the chain's room |
+| `a2a-decision-ping-pong` | The addressed bot has a pending decision request to the sender on this chain |
 | `a2a-invalid-envelope` | Body failed validation (shape, caps, ids) |
 | `a2a-sender-ineligible` | The caller is not an eligible agent bot (a human token lands here) |
 | `a2a-sender-not-on-roster` | `to: "team"` from a bot that is not on the team roster |
