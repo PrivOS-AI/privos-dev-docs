@@ -42,7 +42,7 @@ Request body of `POST /api/v1/agents.a2a.send`:
 - `correlationId` is omitted on a chain's first message; the hub mints it and returns it. Later messages must name a chain the sender takes part in, carry its `teamId` and use its `roomId`.
 - `text` is at most 2000 characters and `data` at most 50000 characters serialized.
 - The hub stamps `from`, `tmid`, `hop`, `ts`, `status`, the session key, the accountable human and `origin`. None of them is trusted from the body.
-- `approval` and `answer` rows exist only as hub-inserted rows (`origin: hub`); no bot may send them.
+- `approval`, `answer` and `callback` rows exist only as hub-inserted rows (`origin: hub`); no bot may send them. A bot that wants a `callback` registers an await instead.
 
 Success response:
 
@@ -61,9 +61,10 @@ Success response:
 | `task` | Hand work to a teammate | `urgent` |
 | `result` | Final answer to a task | `urgent` |
 | `message` | Acknowledgement or milestone update | `fyi` |
-| `needs-approval` | Ask for approval of one consequential action; carries `data.approval = { "action": "<label>", "draft": "<text>" }` (no tier: the hub computes it) | `urgent` |
-| `question` | Ask for a decision. With `data.options = ["a", "b"]` it is a card for the chain's accountable human (the `to` bot is not woken; the pick returns to the sender as an `answer` row). Without options it is an ordinary urgent message to its recipient, the way to ask the initiator bot. | `urgent` |
+| `needs-approval` | Ask for approval of one consequential action; carries `data.approval = { "action": "<label>", "draft": "<text>" }` (no tier: the hub computes it). The `to` bot is woken and may advise; only the sender's owner decides | `urgent` |
+| `question` | Ask for a decision. With `data.options = ["a", "b"]` it is a decision card for the sender's owner (the `to` bot is woken with the request and may answer it when it is that owner's active super agent; the pick returns to the sender as an `answer` row). Without options it is an ordinary urgent message to its recipient, the way to ask the initiator bot. | `urgent` |
 | `stop` | Soft-stop the chain; accepted only from the chain initiator | `urgent` |
+| `callback` | Never sent through `send`. A bot registers an await (`agents.a2a.await`); when it resolves, the hub inserts one `callback` row that wakes that bot. See [Await and callback](#await-and-callback) | `urgent` |
 
 ### Priorities
 
@@ -84,7 +85,7 @@ Then each recipient is reached through the first path that holds:
 
 Everything else is refused. A cross-room call between bots of different owners outside an agent team is `a2a-owner-mismatch`.
 
-The Universal Bot takes part only as the main bot: it accepts `result`, `needs-approval`, `question` and `stop` on chains it initiated for the same human, never `task`, and only from a sender whose accountable human is the chain's human.
+The Universal Bot takes part only as the main bot: it accepts `result`, `needs-approval`, `question` and `stop` on chains it initiated for the same human, never `task`, and only from a sender whose accountable human is the chain's human. A decision request addressed to it is card-only: the Universal Bot is not woken, and nothing on the card path needs it to be enabled.
 
 | Case | Outcome |
 |------|---------|
@@ -117,19 +118,22 @@ Each recipient gets one row in `rocketchat_agent_a2a_messages` (the mailbox, the
 
 In the destination room the hub posts one fixed line per record in the chain thread. Detail is read on demand with `agents.a2a.list` or `privos agents a2a chain`.
 
-Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`.
+Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `awaiting-decision` only on rows written before decision requests woke their addressee (current rows keep the decision under `approval.status`), `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`.
 
 **Usage per chain.** A recipient's turn runs under the hub session key `task-<projectId>-a2a-<correlationId>`. The sandbox analytics endpoint returns the attempt's `taskId` with each LLM call, and the hub's AI-usage sync stores it with the derived `a2aCorrelationId` on `rocketchat_ai_usage_logs` (rows synced before this field existed have neither). Admin → Engagement → AI usage shows "via chain <id>" under the user, filters by **Chain**, and the CSV export carries `taskId` and `a2aCorrelationId`; the REST routes `engagement-dashboard/ai-usage/*` take `?a2aCorrelationId=`. Cost per chain is `sum(totalCostUSD)` over rows with that id; cost per sender is a join of those rows with `rocketchat_agent_a2a_messages` on the chain id.
 
 ## Approval flow
 
-1. A worker needing a consequential action (external message, delete, spend, production change, or whatever its owner's risk tiers list) sends `kind: needs-approval` to exactly one bot, normally the chain initiator, with `data.approval = { action, draft? }`. The request is a card for a human, never a wake of the recipient.
-2. The hub computes the tier from the worker owner's entry in the team's `riskTiers` (one owner's tiers never apply to another owner's bots; without a team the defaults apply); unknown actions require approval; a tier declared by the worker is ignored. When the owner set the action's tier to auto, the hub decides on its own and the send response carries `decision: "auto"`.
-3. For an action that needs a human, the hub renders approve and deny buttons as the main bot in the worker owner's Universal Bot DM. The button handler resolves the stored button exactly once.
-4. Approve wakes the worker once with an `approval` row. Deny or a 24 hour expiry is final per (team, worker, action), or per (worker, action) on a chain without a team: a re-ask is refused with `a2a-approval-final`.
-5. External messages are always drafts; the worker puts the draft in `data.approval.draft` and never sends it itself.
-6. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. A question without options is an ordinary message to its recipient.
-7. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`; on approval the peer changes its own triggers and answers a `result`. The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
+1. A worker needing a consequential action (external message, delete, spend, production change, or whatever its owner's risk tiers list) sends `kind: needs-approval` to exactly one bot, with `data.approval = { action, draft? }`. The best address is its owner's super agent when the team has one (a roster member with `superAgent: true` that the owner also owns), otherwise the chain initiator. The request becomes a decision card for the worker's owner and is also delivered to the addressed bot as an urgent row.
+2. The hub computes the tier from the worker owner's entry in the team's `riskTiers` (one owner's tiers never apply to another owner's bots; without a team the defaults apply); unknown actions require approval; a tier declared by the worker is ignored. When the owner set the action's tier to auto, the hub decides on its own and the send response carries `decision: "auto"`; no card is posted and no one is woken.
+3. **Where the card goes (the decision room).** The card is posted by the worker bot itself, marked `role: card`, and locked: no member, room owner or bot can edit or delete it, only the platform annotates it. It goes (a) to the worker's agent room when the approver, the worker's owner, is a member there; else (b) to the chain thread as a redacted card (the action label or the question, who decides, expiry and the buttons; no summary or draft; "Details are on the Activity page"), and the approver follows that thread so the card raises an unread mark and a push; else (c) the send is refused with `a2a-approver-unreachable`, no row is stored and nothing becomes final. When the card is in the agent room and the chain lives in a team room, the chain thread gets a "waiting for @approver" line with a link to the card.
+4. The addressed bot's turn starts with the request as data: a decision-request line names the approver, the card's room and link, the expiry and the row id. Its answer path is `message` only. The draft is part of the prompt only when the addressed bot's owner is the approver; another owner's bot receives the request without it. Delivery failures of that wake never lose the request: the line says the addressed bot could not be woken and that the card stays open until it expires.
+5. The button handler resolves the stored button exactly once. Approve wakes the worker with an `approval` row. Deny or a 24 hour expiry is final per (team, worker, action), or per (worker, action) on a chain without a team: a re-ask is refused with `a2a-approval-final`. Stopping the chain or switching the team off closes its pending cards the way an expiry does (the approval becomes `expired`, the card loses its buttons and says why, a late click inserts no row), but nothing becomes final and the worker is not woken.
+6. External messages are always drafts; the worker puts the draft in `data.approval.draft` and never sends it itself.
+7. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. It may be answered by the owner on the card, or through `POST agents.a2a.approvals.decide { rowId, option }` by the addressed bot when that bot is an active super agent whose principal is the approver (the super agent kill switch is consulted); the first decision wins, through the same one-time resolution as the click. A `needs-approval` is never decided by a bot. A question without options is an ordinary message to its recipient.
+8. **Loop guard.** A decision request from B to A is refused with `a2a-decision-ping-pong` while A has a pending decision request addressed to B on the same chain, whether or not it carries `replyTo`. No new cap exists; hop, chain and quota limits are unchanged.
+9. **Refusals on the card path.** `a2a-approver-missing` (the owner no longer exists), `a2a-approver-inactive` (deactivated), `a2a-approver-unreachable` (in neither room). The Universal Assistant is not consulted: `a2a-ub-disabled` and `a2a-approver-not-admitted` no longer occur here. The sender's agent room (and the chain thread when it exists) says why a card was not delivered.
+10. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`; on approval the peer changes its own triggers and answers a `result`. The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
 
 ## Prompt block
 
@@ -140,11 +144,107 @@ The hub prepends this block to the recipient's turn. Everything below the rule l
 - kind: task · from: @ops-bot · origin: bot · chain: c_… · row: … · hop: 2/4 · priority: urgent
 - team: Growth team · room: <roomId> · thread: <tmid>
 - tiers: approval required for external-message, delete, spend, production-change; external messages are drafts
+- accountable human: your owner | someone else (@username)
+- a decision card for @owner is pending in <room link> until <expiry>; row <id>   (rows that carry a decision request)
 - reply with the privos-team skill: send --correlation c_… --reply-to m_… --to <from> --kind result|question|needs-approval
 - a denial or expiry of an approval is final for 24 h; do not retry or reword
 ---
 <text>
 ```
+
+## Await and callback
+
+Some work finishes outside the chain: a board task, a release stage, a file landing in a room, a person's system. An await
+lets a bot say "wake me in this chain when that happens, or by this deadline" instead of polling or sleeping. An await is
+one self-addressed row (`kind: callback`, `status: awaiting`) in the same mailbox, so it appears in `agents.a2a.list` and
+`privos agents a2a chain`, follows the chain's stop and team rules, and is resolved at most once.
+
+**Two patterns.**
+
+- *Worker awaits.* A bot that received a `task` registers an await for the job it started, ends its turn, and is woken in
+  the chain session when the job reports. It then answers the requester with a `result`, using `--reply-to` of the task.
+- *Requester bounds its wait.* A bot that sent a `task` registers an await with a deadline and no URL use, so the deadline
+  alone wakes it (`resolved-timeout`) if the worker never answers. It then decides: ask again, escalate or give up.
+
+**Register.** `POST agents.a2a.await` with `{ correlationId, roomId, teamId?, replyTo?, messageId, deadlineAt, text, match? }`.
+
+- `deadlineAt` is required, an ISO instant in the future, with no maximum. `text` is the note the bot reads back when woken.
+  An await carries no `data`. `messageId` is the idempotency key as for `send`; a repeat returns the stored row with
+  `duplicate: true` and no secret.
+- `replyTo` names the message addressed to the bot that it will answer; the sender of that message is the requester shown
+  in the wake. Without it the requester is the chain initiator.
+- `match` is `{ event, roomId }` with `event` one of `message.new`, `file.created`, `file.updated`, `file.deleted`. The
+  bot must be a member of `match.roomId` when it registers and when the await resolves.
+- Only an eligible agent bot may register; the Universal Bot is refused (`a2a-sender-ineligible`). The call must come from
+  the bot's own agent room or from a session bound to the chain's room (`a2a-await-wrong-session`). The chain must exist
+  (`a2a-await-no-chain`) and not be stopped (`a2a-chain-stopped`).
+- The response is `{ success, rowId, correlationId, callbackPath, callbackSecret, deadlineAt }`. `callbackPath` is
+  `/api/v1/agents.a2a.callback/<token>`. The secret is shown once and stored only as a hash.
+- The chain thread gets a `⏳ callback → @bot` line with the note and the deadline.
+
+**Resolve.** Three sources lead to the same step, which closes the await and wakes the bot once.
+
+| Source | How | Closes the await as |
+|--------|-----|---------------------|
+| External | `POST agents.a2a.callback/:token` with the secret in `x-webhook-secret` (or as a Bearer token). No login: the path token plus the secret are the credential | `completed` / `resolved-external` |
+| Room event | The `match` event happens in `match.roomId` | `completed` / `resolved-event` |
+| Deadline | The sweep reaches `deadlineAt` | `completed` / `resolved-timeout` |
+
+The callback route answers 404 for an unknown token, 401 for a missing or wrong secret (the await is untouched), 413 for
+an oversize body, and 409 `a2a-callback-consumed` when the await is already closed. It is limited to 20 calls a minute per
+IP. While the `Agent_A2A_Enabled` kill switch is off it answers `a2a-disabled` and leaves the await as it is.
+
+Before waking, the hub applies the same checks as for any row: the chain is not stopped, the team (if any) is enabled, the
+bot is still allowed in the room, and for `match` still a member of `match.roomId`. If a check fails the await ends
+`expired` with the reason (`stopped`, `member-removed` or the `a2a-...` code) and nobody is woken.
+
+Closing the await is a compare-and-set, so a double POST, a POST racing the deadline, or two events cannot wake the bot
+twice: the loser gets 409 or is dropped silently. An action of the awaiting bot itself never resolves its own await. A file
+pushed by a bot (a RoomFiles sync) does resolve another bot's await, although it never fires an event trigger.
+
+**The wake.** The hub inserts one urgent `callback` row, `origin: hub`, from the requester to the awaiting bot, in the
+chain session. The prompt block reads `kind: callback ... origin: platform (external|event|timeout)`, repeats the note
+under `you awaited`, and gives the reply line. The payload arrives as structured data below the rule, never as instructions:
+
+| Source | `data` |
+|--------|--------|
+| External | `{ source: "external", body, headers, senderIp, receivedAt }` (`body` is what the caller posted) |
+| Event | `{ source: "event", event, roomId, payload }` (`payload` is the event data, for a file `{ fileId, file, actor }`) |
+| Timeout | `{ source: "timeout", deadlineAt }` |
+
+The wake row uses the normal leases, redelivery and restart reclaim. If the bot is busy the row waits behind the running
+turn. If the runtime never starts, the wake row ends `failed-undeliverable`, the chain thread gets a
+`⇄ callback → @bot undelivered` line, and the closed await shows `wake-undeliverable`. Nothing wakes the bot a second time.
+
+**Hops and caps.** An await adds no hop: it is registered at the highest hop already addressed to the bot, and the wake row
+carries that same hop. Anything the woken bot sends costs the usual +1, so waiting never uses up the ceiling of 4. The await
+row counts once toward the chain's 20-row cap; the hub-inserted wake row does not.
+
+**End without a wake.** Stopping the chain or turning the team off expires its awaiting rows. `POST agents.a2a.await.cancel
+{ rowId }` drains one (`drained` / `cancelled`); it is allowed to the registering bot (same session rule), the chain's
+accountable human and a holder of `view-user-administration`, and refused to anyone else with `a2a-not-participant`. A closed
+await answers `a2a-callback-consumed`. `agents.a2a.list?status=awaiting` or `kind=callback` finds open awaits; hashes are
+never returned.
+
+**Bridges.** Something has to make the POST. The `privos-team` skill keeps the recipes in `references/await-bridges.md`; the
+shape of each:
+
+- *Board task.* Create the task with a callback pair (`privos sandbox tasks create` with `--callback-url-env` and
+  `--callback-key-env`, values from environment variables). The board posts once when the task leaves `in_progress`, not at
+  the end of each attempt, with `{ source: "board", taskId, projectId, attemptId, status, finishedAt, link }`. It retries
+  after 5 s, 30 s, 2 min and 10 min and stops on a 2xx or 409. The secret is sealed on the board and appears in no task
+  document, task event or task list. A board that knows no hub host refuses the callback when the task is created.
+- *Board task without a board callback.* The bot stores the URL and secret in its private `AgentFiles/awaits.json`, keyed
+  by task id, and keeps one persistent webhook trigger whose handler forwards a matching board event with the secret. The
+  board events come from a `privos subscribe` daemon on an operator host. The handler drops the entry on 401 or 404.
+- *Release stage.* The release tooling takes `--callback-file PATH`, a mode-0600 file with `url=` and `secret=` lines, and
+  posts the stage exit code when the stage ends. The body carries `exit` and `source: "release"` (a stage also adds `release` and `stage`, a routine run adds `run`), so the bot reads `data.body.exit` and `data.body.source`. The post is best effort and never
+  changes the stage's own exit marker.
+- *File in a room.* `match` on `file.created` wakes the bot on the first matching file only, so a job that syncs many files
+  should post to the callback URL after the last one.
+
+The wake is a signal, not a guarantee that the job succeeded: the woken bot reads the payload as data and checks the
+result itself.
 
 ## Settings and kill switch
 
@@ -162,7 +262,10 @@ Returned as `errorType` with HTTP 400 or 403.
 | Code | Meaning |
 |------|---------|
 | `a2a-disabled` | Kill switch is off |
-| `a2a-ub-disabled` | The main bot is disabled, not allowed for the human, not sending from a bound DM, or cannot post an approval card to the approver |
+| `a2a-ub-disabled` | The main bot is disabled, not allowed for the human, or not sending from a bound DM (never on the card path) |
+| `a2a-approver-missing`, `a2a-approver-inactive` | The sender's owner no longer exists or is deactivated, so no card can be posted |
+| `a2a-approver-unreachable` | The sender's owner is in neither the sender's agent room nor the chain's room |
+| `a2a-decision-ping-pong` | The addressed bot has a pending decision request to the sender on this chain |
 | `a2a-invalid-envelope` | Body failed validation (shape, caps, ids) |
 | `a2a-sender-ineligible` | The caller is not an eligible agent bot (a human token lands here) |
 | `a2a-sender-not-on-roster` | `to: "team"` from a bot that is not on the team roster |
@@ -190,7 +293,10 @@ Returned as `errorType` with HTTP 400 or 403.
 | `a2a-approval-final` | The same action was denied or expired within 24 hours |
 | `a2a-file-not-in-room` | A `fileIds` entry is not an upload of the destination room |
 | `a2a-not-authorized` | Roster and roster-read routes: the caller lacks the team role, does not own the bot, or is a bot |
-| `a2a-not-found` | `agents.a2a.stop`: unknown chain |
+| `a2a-not-found` | `agents.a2a.stop` or `agents.a2a.await.cancel`: unknown chain or await |
+| `a2a-await-no-chain` | `agents.a2a.await`: the chain does not exist |
+| `a2a-await-wrong-session` | `agents.a2a.await` or `.cancel` from a session that is neither the bot's agent room nor the chain's room |
+| `a2a-callback-consumed` | The await is already resolved, expired or cancelled. On the callback route this is HTTP 409; `.cancel` answers it with HTTP 400 |
 
 ## Other routes
 
@@ -200,6 +306,9 @@ Returned as `errorType` with HTTP 400 or 403.
 | `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
 | `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
+| `POST agents.a2a.await { correlationId, roomId, teamId?, replyTo?, messageId, deadlineAt, text, match? }` | an eligible agent bot in a chain it takes part in | Register an await; returns `callbackPath` and `callbackSecret` once. See [Await and callback](#await-and-callback) |
+| `POST agents.a2a.await.cancel { rowId }` | the registering bot, the chain's accountable human, or a holder of `view-user-administration` | Drain a waiting await without a wake |
+| `POST agents.a2a.callback/:token` | nobody is logged in; the secret in `x-webhook-secret` is the credential | Resolve the await once with the posted body as the wake payload |
 | `GET agents.a2a.teams.status?teamId=` | `manage-agent-teams` holder | `{ teamId, enabled }` |
 | `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot). Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
 | `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
@@ -228,10 +337,12 @@ python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_.
 python3 scripts/team.py needs-approval --team TEAM_ID --correlation c_... --to INITIATOR_ID --action send-email --draft "Hello ..."
 python3 scripts/team.py question --team TEAM_ID --correlation c_... --to INITIATOR_ID --text "Which region?" --options eu,us
 python3 scripts/team.py chain --correlation c_...
+python3 scripts/team.py await --correlation c_... --in 30m --text "Task finished"   # prints the one-time URL and secret once
+python3 scripts/team.py cancel --row ROW_ID
 python3 scripts/team.py stop --correlation c_...
 ```
 
-From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. Rules the skill teaches the agent: reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
+From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. Rules the skill teaches the agent: register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
 
 ### External master agents: the `privos` CLI
 
