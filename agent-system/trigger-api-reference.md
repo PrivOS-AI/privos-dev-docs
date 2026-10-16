@@ -14,7 +14,12 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
 | POST | `/v1/agents.triggers.run` | Yes | Manually fire a trigger |
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
-| POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
+| POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`, `await`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
+| POST | `/v1/agents.a2a.callback/:token` | No | One-time callback that wakes an agent waiting in a bot-to-bot chain; not a trigger, see [Await and callback](./bot-to-bot-protocol.md#await-and-callback) |
+
+A trigger is the standing rule ("every morning", "whenever a file arrives"). To wait once for one thing inside a
+bot-to-bot chain (a job, a deadline, the next file), the agent registers an await instead; it is chain-bound, fires once and
+needs no trigger. See [Agent Routines](./agent-routines.md#trigger-or-await).
 
 What a trigger does after it fires (a handler script, the quiet `NO_REPORT` turn, the outcome fields) is described in
 [Agent Routines](./agent-routines.md); this page is the request and response reference.
@@ -121,11 +126,47 @@ Add a new trigger. Maximum 20 triggers per agent.
 
 **Valid Events:**
 
+An event name is accepted on `add` when it is in this list, but only some events reach agent triggers; see
+[Events that fire](#events-that-fire) below.
+
 `message.new`, `message.edited`, `message.deleted`, `message.mention`, `message.bot_mention`, `room.joined`, `room.left`, `user.joined`, `user.left`, `list.item.created`, `list.item.deleted`, `list.item.stage_changed`, `list.item.attributes_changed`, `file.created`, `file.updated`, `file.deleted`, `folder.created`, `folder.deleted`, `folder.renamed`, `notification.created`
 
 `notification.created` (an in-app notification stored for a user) is accepted only inside a `filter`: a plain trigger on it
 would receive every user's notifications, so `add` and `update` refuse it and the dispatcher ignores any stored one.
 Source of truth: `VALID_EVENTS` in `apps/meteor/app/api/server/v1/agent-trigger-endpoints.ts`.
+
+### Events that fire
+
+An event trigger fires only for events the hub passes to the agent trigger dispatcher: `message.new`,
+`notification.created` (filtered triggers only) and `file.created`, `file.updated`, `file.deleted`. Room, user, list item
+and folder events are accepted by `add` but do not fire. The message events other than `message.new`, and `message.mention`,
+`message.bot_mention` as trigger events, are not dispatched either; use a filter with `match.mention` to react to mentions.
+
+File events fire for an upload through the Files API and for a file written by a RoomFiles sync. The rules:
+
+- A file event caused by a bot (a RoomFiles push) never fires a trigger, so an agent cannot wake another agent's file
+  trigger by uploading. A human upload does. The same bot-caused event can still resolve an agent's await.
+- The usual event gates apply: the agent must be a member of the room, the creator gate, the own-agent-room skip and the
+  30-second cooldown. A burst of files within the cooldown is one turn carrying the first file; the prompt should say "list
+  the room's files" rather than trust the single event.
+- Outbound bot webhooks for the room also receive `file.*` for files written by a sync.
+
+### `needsReview`
+
+File event triggers saved before file events started firing were inert. When the hub is upgraded it disables every enabled
+`file.created|updated|deleted` event trigger and stamps it `needsReview: { reason: "file-events-start-firing", at }`
+(migration `v403`), so no agent starts waking on an old prompt unreviewed. The label is returned by `list` and shown as
+**Needs review** on the trigger card and in the Agents page routine list; `privos agents triggers list` prints
+`false (needs review)`. Review the prompt, then enable the trigger: any write that sets `enabled: true` through `update`
+removes `needsReview`. Nothing re-enables a trigger by itself.
+
+An agent export written before this behaviour carries no `fileEventsFire` stamp. On import, an enabled `file.*` event
+trigger from such an export is created disabled with `needsReview: { reason: "imported-before-file-events", at }`; an
+export written by a hub with file events keeps `enabled` as exported.
+
+The migration is the reason this release cannot be rolled back by reshipping the previous hub image: an older hub refuses
+to start against the newer migration version. Roll forward, or reset the control migration version before an emergency image
+rollback; the `needsReview` labels and disabled triggers are inert on the older hub.
 
 ### Subscription filter
 
@@ -342,7 +383,7 @@ Update fields on an existing trigger.
 | `timezone` | string or null | No | IANA name for a recurring cron; `null` removes it. Ignored for a one-time schedule |
 | `prompt` | string | No | New prompt (max 500 chars). Cron and webhook triggers |
 | `promptTemplate` | string | No | New prompt template (max 500 chars). Event triggers |
-| `enabled` | boolean | No | Enable/disable toggle |
+| `enabled` | boolean | No | Enable/disable toggle. Setting `true` also clears `needsReview` ([details](#needsreview)) |
 | `event` | string | No | New event type (event only; refused on a filtered trigger) |
 | `sourceRoomId`, `sourceRoomIds` | string, string[] | No | New source room scope |
 | `filter` | object | No | Replace the subscription filter (event only), same shape as on `add` |

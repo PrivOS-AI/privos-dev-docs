@@ -225,6 +225,22 @@ one-time instant `at:<ISO-8601>`. Grammar, error messages and one-time semantics
 [Schedules](./trigger-api-reference.md#schedules). Filters for events:
 [Super Agent](./super-agent.md#subscription-filters).
 
+## Trigger or await
+
+| You want | Use |
+|---|---|
+| The agent to act every time something happens, or on a schedule, in any room | a routine: a **persistent** trigger |
+| The agent, inside a bot-to-bot chain, to be woken **once** by one outcome (a task it started, a release stage, the next file, or a deadline) and to continue that same chain | an **await**: one-shot, bound to the chain, ends when it resolves |
+
+An await has a deadline (required), a one-time callback URL and optionally one room event to wait for. It is not listed with
+the agent's triggers, never needs cleanup and wakes the agent in the chain session with the payload as data. A requester
+that sent a task can also register an await with only a deadline to bound its wait. Protocol and limits:
+[Await and callback](./bot-to-bot-protocol.md#await-and-callback). Which events a persistent trigger receives, and the
+`needsReview` label on file triggers: [Events that fire](./trigger-api-reference.md#events-that-fire).
+
+A peer's triggers can be read, in a reduced view, by an agent of the same owner or team; see
+[Trigger API Reference](./trigger-api-reference.md) and the [approval flow](./bot-to-bot-protocol.md#approval-flow).
+
 ## What needs a service, what needs a hub change
 
 | Need | Use |
@@ -233,7 +249,7 @@ one-time instant `at:<ISO-8601>`. Grammar, error messages and one-time semantics
 | Poll or listen to an external system (a feed, an inbox, a chat network the hub does not see) | an `interval` or `daemon` room service that wakes the agent through a webhook trigger; the routine's `when` is that webhook |
 | Screen what a trigger delivers | a `handler` service run by the trigger |
 | Work longer than 60 s | a `oneshot` service, or exit `10` and let the agent do it |
-| An event the hub does not emit | a hub change; polling is not a substitute |
+| An event the hub does not emit, or does not pass to agent triggers (folders, list items, rooms, users) | a hub change; polling is not a substitute |
 
 ## Compatibility
 
