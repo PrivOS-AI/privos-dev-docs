@@ -165,6 +165,10 @@ one self-addressed row (`kind: callback`, `status: awaiting`) in the same mailbo
   the chain session when the job reports. It then answers the requester with a `result`, using `--reply-to` of the task.
 - *Requester bounds its wait.* A bot that sent a `task` registers an await with a deadline and no URL use, so the deadline
   alone wakes it (`resolved-timeout`) if the worker never answers. It then decides: ask again, escalate or give up.
+- *Agent-room work.* A bot answering a person in its own agent room starts work that ends later (a board task, a job) and
+  says it will report back. It registers an await **without** `correlationId`; the hub mints a one-bot chain pinned to that
+  turn's thread and sandbox session, and the wake resumes the same conversation, so the bot answers the person in the
+  thread.
 
 **Register.** `POST agents.a2a.await` with `{ correlationId, roomId, teamId?, replyTo?, messageId, deadlineAt, text, match? }`.
 
@@ -178,6 +182,10 @@ one self-addressed row (`kind: callback`, `status: awaiting`) in the same mailbo
 - Only an eligible agent bot may register; the Universal Bot is refused (`a2a-sender-ineligible`). The call must come from
   the bot's own agent room or from a session bound to the chain's room (`a2a-await-wrong-session`). The chain must exist
   (`a2a-await-no-chain`) and not be stopped (`a2a-chain-stopped`).
+- Without `correlationId` the body takes no `roomId`, `teamId` or `replyTo` (`a2a-invalid-envelope`). The call must come
+  from the bot's own agent room (`a2a-await-wrong-session`) while one of its replies there is running (`a2a-await-no-turn`);
+  when replies run in two threads at once it is refused (`a2a-await-ambiguous-turn`). The minted chain has the bot as its
+  only participant, the bot's owner as its accountable human, and the person whose turn asked for the wait as the payer.
 - The response is `{ success, rowId, correlationId, callbackPath, callbackSecret, deadlineAt }`. `callbackPath` is
   `/api/v1/agents.a2a.callback/<token>`. The secret is shown once and stored only as a hash.
 - The chain thread gets a `⏳ callback → @bot` line with the note and the deadline.
