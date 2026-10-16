@@ -190,6 +190,17 @@ one self-addressed row (`kind: callback`, `status: awaiting`) in the same mailbo
   (`a2a-new-chain-rate`). The person is the chain's accountable human: they see the await, may cancel it and pay for the
   wake. The chain carries no messages, and stopping it wakes nobody. The wake waits while a turn runs in the thread or a
   question is pending there.
+- **Chains opened from the agent room.** A `send` without `correlationId` may also carry `attemptId`. The hub checks it
+  exactly as above; when it binds, the new chain records its origin: the agent room, the thread, the thread's session and
+  the person. A body whose attempt does not bind (a routine, trigger, bot-to-bot or cross-room turn, or a malformed id) is
+  accepted as before and records nothing. From then on only the rows that answer the **initiator** (a `result`, an
+  `answer`, an `approval`, and a `callback` from an await or its timeout) are delivered as an AI-chat turn in that
+  agent-room thread, the way the await wake is, with the usual chain prompt (`correlationId`, `from`, `kind`, data as
+  data) so the bot can continue the chain with `--correlation`. Every other kind (`task`, `message`, `question`, `stop`)
+  and every row after a Stop keep the chain-room delivery, so another participant cannot open turns in the person's
+  thread. The wake waits while a turn runs in the thread or a question is pending. If the thread or the person is gone,
+  or the wake keeps failing, the row is delivered in the chain room instead (audit `origin-fallback`). Other
+  participants and the record lines (`⇄ task → ...`) stay in the chain room.
 - The response is `{ success, rowId, correlationId, callbackPath, callbackSecret, deadlineAt }`. `callbackPath` is
   `/api/v1/agents.a2a.callback/<token>`. The secret is shown once and stored only as a hash.
 - The chain thread gets a `⏳ callback → @bot` line with the note and the deadline.
