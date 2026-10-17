@@ -258,7 +258,7 @@ first.
 
 ## The `privos-services` skill
 
-Agents use `node $SKAWLD_SKILL_DIR/service.js` (`list`, `status`, `logs`, `add`, `remove`, `stop`, `apply --file`, `run`).
+Agents use `node ${PRIVOS_SKILL_DIR}/service.js` (`list`, `status`, `logs`, `add`, `remove`, `stop`, `apply --file`, `run`).
 `add` edits the listed declaration and applies it; env values are never printed. `add --kind handler --timeout-seconds N`
 declares a handler; `run <name> --payload-file payload.json` dry-runs it once and prints the exit code, duration,
 `timedOut` and the stdout tail (`stopped by the platform (<reason>)` when the platform ended it). On the board the skill calls

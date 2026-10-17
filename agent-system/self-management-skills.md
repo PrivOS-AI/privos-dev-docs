@@ -53,6 +53,11 @@ PRIVOS_HUB_URL={ROOT_URL}
 
 Documents all scripts with usage examples. The agent reads this to understand what commands are available.
 
+Script paths in SKILL.md are written as `${PRIVOS_SKILL_DIR}/<script>`; the PrivOS Agent SDK replaces the variable
+with the skill's absolute directory when the skill loads (the Claude CLI copy uses `${CLAUDE_SKILL_DIR}`). Since SDK
+0.5.0 the variable inherited from the upstream SDK is no longer substituted, so a SKILL.md that still uses it hands
+the agent a literal, unusable path. Only the braced form is substituted.
+
 ### Script Pattern
 
 All scripts share the same env-loading pattern:
@@ -145,7 +150,7 @@ uses for routines. Their `SKILL.md` is the agent-facing contract; this section r
 
 ### `agent-scheduler` (`trigger.js`)
 
-`node ${SKAWLD_SKILL_DIR}/trigger.js <list|add|update|remove|run|regenerate-secret|explain> [flags]`; `--json` on any
+`node ${PRIVOS_SKILL_DIR}/trigger.js <list|add|update|remove|run|regenerate-secret|explain> [flags]`; `--json` on any
 subcommand. It manages only the calling agent's own triggers and always asks the user before a write.
 
 **Schedule flags (cron triggers).** Exactly one family per call, otherwise
@@ -181,7 +186,7 @@ cron and webhook triggers, so the text the dispatcher reads is the one that chan
 
 ### `privos-services` (`service.js`)
 
-`node $SKAWLD_SKILL_DIR/service.js <list|status|logs|add|remove|stop|apply|run>`; see [Room Services](./room-services.md).
+`node ${PRIVOS_SKILL_DIR}/service.js <list|status|logs|add|remove|stop|apply|run>`; see [Room Services](./room-services.md).
 
 | Command | Purpose |
 |---|---|
