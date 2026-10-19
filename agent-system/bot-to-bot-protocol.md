@@ -335,6 +335,9 @@ Returned as `errorType` with HTTP 400 or 403.
 | `GET agents.a2a.teams.status?teamId=` | `manage-agent-teams` holder | `{ teamId, enabled }` |
 | `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot). Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
 | `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
+| `GET agents.a2a.teams.handover.preview?teamId=` | a person who owns a bot on the roster, the initiator or recipient of the open or last handover, or a holder of `view-user-administration` | `{ canStart, refusal?, move, skip, open?, last? }`: the caller's own bots that would move (runtime, super agent, sandbox host of the agent room, triggers, other rooms), the other roster bots with a skip reason, and the open and last handover. Full `open`/`last` details (stages, errors, vault key names) go only to that handover's initiator, recipient and admins; anyone else gets `{ status, expiresAt }` |
+| `POST agents.a2a.teams.handover.start { teamId, recipientUsername }` | a person who built bots on the roster and holds `owner` in the team room | Starts one invite per team; see [Handing over an agent team](#handing-over-an-agent-team) |
+| `POST agents.a2a.teams.handover.cancel { handoverId }` | the initiator while pending; a holder of `view-user-administration` while pending or running | Cancels the invite, or stops a running handover (bots already moved stay moved) |
 
 ## Using it
 
@@ -344,6 +347,44 @@ Returned as `errorType` with HTTP 400 or 403.
 2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
 3. A bot that leaves or is removed from the team leaves the roster.
 4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
+
+### Handing over an agent team
+
+A person who built agent bots on an agent team and owns its team room (for example a forward-deployed engineer) can hand
+those bots to one active person of the same workspace. It starts from **Hand over team** on the team's card in the Agents
+page (Teams tab).
+
+- **Who may start:** anyone who holds `owner` in the team room, for the roster bots they built themselves. Nobody can hand
+  over another person's bots. A workspace admin (`view-user-administration`) can only cancel, from the team room's
+  **Edit** panel or with `agents.a2a.teams.handover.cancel`.
+- **Recipient:** an active person of the workspace, not the initiator and not a guest. One open handover per team.
+- **Consent:** the recipient gets a card in the direct message with the initiator, posted by the platform. It lists every
+  bot, every trigger that will run as the recipient, and these warnings: a super agent will mirror the recipient's rooms
+  and draft replies to their direct messages; harness bots go offline; sandbox bot keys stay valid; a custom sandbox host
+  set in an agent room is named; and the initiator keeps membership of the agent rooms and the team room. **Accept** or
+  **Decline**; only the recipient can answer. Decline, cancel and expiry after 7 days change nothing.
+- **What moves, per bot:** the owner; a super agent's principal (the flag stays on, DM replies reset to approve, the mirror
+  converges by itself); the initiator's risk tiers on every team the bot is on; owner of the agent room (the bot keeps
+  `owner`, the initiator stays a member without `owner`); every trigger the initiator created on the bot; open A2A work
+  (chains the initiator owns are stopped, queued requests the bot sent for the initiator expire, pending approvals the
+  initiator would have decided close as `owner-changed` and the requesting bot is told); the bot's `IDENTITY.md`. After the
+  first bot moves, the recipient becomes an owner of the team room and the initiator loses that role.
+- **What stays:** the initiator's room memberships, so until the recipient removes them they can still give the bots work,
+  upload room files and read what the bots post there; vault keys (their names are listed in the result so the recipient
+  can replace them); sandbox bot keys; a webhook trigger's URL and secret (it now runs as the recipient, so the card tells them to press
+  **Regenerate Secret** on it); a custom agent-room sandbox host; rooms the initiator added a bot to by hand.
+- **Harness bots:** the key is cancelled and the bridge closed before the owner changes, so the bot goes offline. To
+  reconnect it, the recipient first removes the initiator from the agent room, then presses **Rotate harness pairing**
+  in the bot's settings (the pairing guide is posted in the agent room).
+- **Result:** both people get one reply in the invite thread: moved and skipped bots, vault key names per bot, triggers
+  that now run as the recipient (marking any added after the invite), harness reconnect steps and what the initiator can
+  still do. A run that fails on one bot keeps the error on that bot and retries every few minutes until it succeeds or an
+  admin stops it; a crash or restart resumes where it stopped.
+- **Skip reasons:** `platform-bot`, `other-owner`, `not-eligible`, `bot-missing`, `owner-changed`, `no-longer-on-roster`,
+  `super-agent-changed`.
+- **Refusals:** `handover-nothing-to-move`, `handover-not-team-owner`, `handover-recipient-invalid`,
+  `handover-recipient-self`, `handover-recipient-guest`, `handover-already-open`, `handover-card-failed`,
+  `handover-not-found`, `handover-closed`, `handover-running-admin-only`.
 
 ### Sandbox and harness agents: the `privos-team` skill
 
