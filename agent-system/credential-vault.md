@@ -146,9 +146,14 @@ the AI Chat question form, an AI Chat reference answer, `agents.sandbox.answer`,
 always-on guard refuses a human message in a bot thread or a bot DM that looks like a key (known key prefixes, JWTs,
 PEM private keys, `token=`/`secret:` pairs with a long value). Commit SHAs, UUIDs and URLs pass.
 
-If the attempt ends before the key is saved, the thread gets a notice; a key saved later is still stored. If no
-thread claims a request within a minute (for example a board-direct attempt), the bot creator or room owner gets the
-card in their Universal Bot DM.
+If the attempt ends before the key is saved, the thread gets a notice; a key saved later is still stored.
+
+An askUser key card nobody completes within 10 minutes ends exactly as the modal's Cancel does: the paused attempt is
+cancelled, the reply closes as "Request cancelled.", and the thread gets one timeout notice. The vault request stays
+pending, so a form submitted later still saves the binding. No askUser card is ever copied to the Universal Bot DM. If no
+thread claims an askUser request within a minute (the card failed to post), the hub cancels its attempt the same way and
+marks the request notified. Only requests filed through the SDK (`vault.requestKey`) still reach the bot creator's
+Universal Bot DM.
 
 **Rotation from the agent.** When a stored key is rejected (401 or 403), the agent asks again with `rotate: true`.
 The card opens the form in rotate mode: value only, with scope, pattern, methods and env names read-only. The version
@@ -192,18 +197,47 @@ vault variables in their process env (and their stdio MCP servers inherit them).
 or room `.env` variable of the same name, except reserved names and anything starting with `ANTHROPIC_`, which the
 agent itself needs; a binding's key and base-URL names are applied or skipped together. The relay listens on the
 vault's loopback port only, so a relay token is useless off the host, and it is revoked when the board project is
-deleted. The vault admin routes accept the board API key the hub uses, never agent keys. The board's built-in agent runtime (the `privos-agent-sdk` provider) answers a credential
-question with a clear refusal in board mode, because its shell and MCP servers do not receive vault variables there;
-use the Claude CLI provider or sandbox mode.
+deleted. The vault admin routes accept the board API key the hub uses, never agent keys.
+
+The board's built-in agent runtime (the `privos-agent-sdk` provider) asks for keys the same way. Its shell runs
+inside the board process, so every Bash command first unsets the board-only secrets (`CATALOG_SECRET_KEY`,
+`MONGODB_URL` and the like) and then sources the project's vault variables from
+`<data root>/vault/env/<projectId>.env` (relay values only, mode `0600` in a `0700` directory, removed when the
+project has no variables and deleted with the project). Its stdio MCP servers get the same names when they connect.
+
+**The board's own secure form.** On the board itself, a pending credential question shows a secure form in the task
+instead of a "use the Hub" notice: the host and path prefix, the purpose, a password field that password managers
+are told to ignore (a value the browser fills in is cleared), the methods (default `GET`), how the key is sent
+(`Authorization: Bearer`, `x-api-key` or a custom header) and the env names suggested by the agent. The value goes
+from the browser to `POST /api/attempts/<attemptId>/credential` and on to the vault only; it is never logged,
+echoed or kept in the page. The board decides the scope, always private to the asking agent:
+
+- a room agent: its agent-private scope `bot-scope:<botId>`;
+- the Universal Bot: a scope for that room only, `bot-scope:universal-bot--<roomId>`, so a key saved in one room is
+  never visible to the assistant in another (keys added through the Hub's shared Universal Bot scope stay readable);
+- a project created on the board with no Hub room: `bot-scope:board-project--<projectId>`.
+
+The save settles the request by id and resumes the agent once with the same value-free answer as the Hub form. Two
+saves for one request (two tabs, or the board form racing a Hub form) store one binding: the other gets "completed
+elsewhere" and its value is not stored. A rotate request opens the form with the value field only; a key that is not
+private to the agent is rotated in the Hub Vault tab. The form needs a board API key: on a board without one the
+agent is told at once that secure entry is unavailable, and the form explains how to set a key. A board with no Hub
+room cannot name a hub host from its rooms, so its vault refuses every save (`invalid-scope-entry`) until the
+operator sets `PRIVOS_HUB_HOST` (or `PRIVOS_URL`) on the board. Room and shared scopes stay a Hub-form feature.
 
 **Intended use:** board mode is for private agents used by one person. Keys entered for them are not meant to be
 shared with other people's agents. A room that points at its own sandbox never gets the secure form: its sandbox address
 is editable by moderators, so the Hub sends keys only to the workspace sandbox. To use the vault with a board through a
 Hub, pair the board as the workspace sandbox.
 
-**Ceiling, accepted:** the CLI runs as the board's OS user, so a hostile agent on the same host can read the board's
-key and database and decrypt stored keys. Chat, logs, transcripts and model context stay clean. Use sandbox mode when
-agents must not be able to reach the keys at all.
+**Ceilings, accepted:**
+
+- The CLI runs as the board's OS user, so a hostile agent on the same host can read the board's key and database and
+  decrypt stored keys. Chat, logs, transcripts and model context stay clean. Use sandbox mode when agents must not be
+  able to reach the keys at all.
+- Board agents inherit the shared board API key, so an agent could fill its own credential request with a value it
+  chooses. That cannot read the owner's keys; it only lets the agent skip the human.
+- On a board with no API key, any local caller can set the first API key and so gain vault admin.
 
 ## Coexistence with the bot key
 

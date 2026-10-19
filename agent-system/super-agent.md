@@ -89,6 +89,19 @@ active person. The qualifying rule is `roomQualifiesForDefaultBot` plus the arch
 inviter, so the A2A roster hook does not fire and the mirror never enrols the bot in a roster. Joining an agent team stays a
 separate, explicit act.
 
+**Bot-to-bot work.** A super agent takes a task, a result or an FYI from another bot only when both bots are on the roster
+of one agent team that is turned on (team members give each other work). Any other bot-to-bot row is closed
+`failed-undeliverable` with reason `recipient-super-agent`, and the chain's thread line says the super agent takes work only
+from bots on its agent team. Rows the platform inserts (a stop, an answer or an approval decision from a person) always reach
+it. Because the mirror never enrols the bot, put it on the roster with **Add to Agent Team** in the team room's member list.
+The check is `shareAgentTeam` in `apps/meteor/server/services/a2a/a2a-authorization.ts`, used by the dispatcher and by the
+FYI and redelivery recheck. Every agent bot, super agent or not, finds its teams in its `IDENTITY.md`: `## Teams` lists each
+agent team it is on (id, room, roster bots with bot ids) and `## Owner's agents` its owner's other agent bots. The hub renders
+both sections on every agent-room push and re-pushes the affected bots when a roster, the Agent team switch or a bot changes;
+the `privos-team` skill's `teams` command (`GET agents.a2a.teams.mine`) is the live view.
+
+**Decision requests.** A teammate's `question` with options (or `needs-approval`) addressed to a super agent is woken to it like any urgent task, while the decision card stays the teammate owner's. An active super agent whose principal is that owner (the kill switch is consulted) may answer a `question` through `POST agents.a2a.approvals.decide { rowId, option }` (CLI skill: `team.py answer --row ROW --option N`); the answer is audited as made by a super agent, the first of the owner's click and the bot's answer wins, and a `needs-approval` can only be decided by the owner. See [Bot-to-bot protocol](bot-to-bot-protocol.md#approval-flow).
+
 **When it runs.** A pass runs immediately when the flag changes and within seconds of the owner joining, leaving, being
 removed, creating a room, having a room role changed through the role methods, or being deactivated or reactivated. A cron
 (`SuperAgent_Reconcile_Interval_Minutes`, default 5, read at startup) catches everything else, such as a role change made
@@ -136,7 +149,8 @@ run a handler script before any model turn: [Agent Routines](./agent-routines.md
 
 `match` predicates, true if **any** holds: `mention` (the subject is mentioned), `reply` (a reply in a thread the subject
 posted in, or a quote of the subject), `hotRoom: { windowMinutes }` (the room was engaged with the subject within the
-window: a mention of or reply to the subject, or the owner posting), `keywords` (case-insensitive substrings), `senders`
+window: a mention of or reply to the subject, the owner posting, or the agent itself posting there; the agent's own
+message never matches), `keywords` (case-insensitive substrings), `senders`
 (user ids), `dm` (the message is in a DM of the subject), `notification` (for `notification.created`). Only types are
 validated: window and event counts must be positive (`maxEvents` an integer), `cooldownSeconds` 0 or more, and no value has
 an upper bound. An unknown key is rejected because a misspelled predicate would otherwise leave `match` empty, which
@@ -235,8 +249,13 @@ When a DM wakes the agent, it may ask the hub to answer inside the owner's own o
 agent badge ("sent by <agent>"). The bot never joins the DM.
 
 - The agent calls `agents.superAgent.dmReply` (CLI: `privos hub dm reply --room <dm> --text ...`). The hub accepts it only
-  from the agent room session, for a one-to-one DM of the owner with an active person, text only (attachments are
-  rejected).
+  from the agent room session, for a one-to-one DM of the owner with an active person, the owner's DM with the Universal
+  Assistant, or the owner's own Inbox; text only (attachments are rejected). Any other bot counterpart is refused
+  (`error-not-owner-dm`).
+- **Asking the Universal Assistant.** A post in the Inbox or the Universal Assistant DM is authored by the owner, so the
+  Universal Assistant starts a turn with the owner's access. Its answer is bot-authored and never wakes the agent; the agent
+  reads it with `agents.superAgent.ownerMessages`. The hub logs `[assistant-audit] outcome=agent-started-turn` with the
+  message id, agent id and session room.
 - **Approve (default).** The hub stores a draft and posts a card in the agent room with **Send** and **Discard**. Only the
   owner's click counts; another agent-room member or the bot is refused. Send posts the message through the normal send
   path (size, access and read-receipt rules apply). A newer draft for the same DM replaces the pending one. Drafts expire
@@ -250,6 +269,28 @@ agent badge ("sent by <agent>"). The bot never joins the DM.
 
 Every send, discard, supersede and mode switch writes a `super-agent.dm-reply` row (ids, outcome, mode; never the text).
 Source: `server/services/super-agent/dm-reply-drafts.ts` and `app/api/server/v1/agents-super-agent-dm-reply.ts`.
+
+## Owner reads
+
+A super agent reads its owner's conversations that it is never a member of, from its agent-room session only (same gate as
+DM reply: a bot with a live super-agent state whose session binding is its own agent room).
+
+| Route | Returns |
+|---|---|
+| `GET /v1/agents.superAgent.ownerRooms` `{ count?, offset? }` | `{ rooms: [{ _id, kind: 'dm' \| 'inbox', counterpart?: { _id, username, name, type }, lm? }], count, offset, total }`: every one-to-one DM of the owner (the Universal Assistant DM is a `dm` with a `bot` counterpart) and the owner's authentic Inbox, newest activity first |
+| `GET /v1/agents.superAgent.ownerMessages` `{ roomId, count?, offset?, oldest?, latest? }` | `{ messages, count, offset, total }`, shaped like `im.messages`, newest first, threads included; `oldest`/`latest` are exclusive ISO bounds |
+
+- Group DMs, another user's Inbox and every other room are refused (`error-not-owner-room`); bad dates are
+  `error-invalid-params`.
+- Nothing is marked read for the owner.
+- Each call writes a `super-agent.owner-read` row (room id, item count). A read whose row cannot be written is withheld
+  (`error-audit-failed`).
+- Both routes skip the bot-bearer room-binding decision (they check the agent-room binding themselves) and are on the
+  Universal Assistant's never-list, so `assistant.rest-get` cannot reach them.
+- Agent side: `privos-chat` actions `owner-rooms`, `owner-messages`, `owner-send`; CLI `privos hub owner rooms|messages`
+  (0.8.0, egress only).
+
+Source: `app/api/server/v1/agents-super-agent-owner-read.ts`, `server/services/super-agent/super-agent-owner-read.ts`.
 
 ## Kill switch
 
@@ -277,6 +318,7 @@ Durable rows in the server events collection (ids and counts only, never message
 | `super-agent.room-write` | a flagged bot's room-management write | the bot |
 | `super-agent.trigger-change` | a trigger of a super agent is added, updated (a prompt restore counts) or removed | the caller |
 | `super-agent.dm-reply` | a DM reply is sent, discarded or superseded, or the mode is switched | owner, bot or system |
+| `super-agent.owner-read` | each owner-rooms or owner-messages call | the bot |
 
 Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hub). Query recipe: the ops runbook.
 
@@ -292,6 +334,7 @@ Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hu
 | Filters and dispatch | `server/services/agent-trigger-filter.ts`, `agent-event-trigger-handler.ts` |
 | Trigger routes and authorship | `app/api/server/v1/agent-trigger-endpoints.ts` |
 | DM reply | `server/services/super-agent/dm-reply-drafts.ts` |
+| Owner reads | `server/services/super-agent/super-agent-owner-read.ts`, `app/api/server/v1/agents-super-agent-owner-read.ts` |
 
 ## Related
 
