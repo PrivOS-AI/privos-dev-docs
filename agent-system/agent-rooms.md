@@ -71,19 +71,37 @@ through the same permission gates:
 
 A message the agent itself authored never re-engages it.
 
-## Sandbox mode: collocated vs dedicated
+## Sandbox mode: collocated, dedicated or team
 
-A room's agent runs in one of two sandbox modes, chosen per room (proxy-persisted project `mode`):
+A room's agent runs in one of three sandbox modes, chosen per room (proxy-persisted project `mode`):
 
 | Mode | Container | Built-in tools | Use |
 |---|---|---|---|
 | **collocated** (default on tenants seeded with collocation) | shared VM core for many rooms/bots | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill` only — `Bash`, `Task*` and `mcp__*` are **denied by policy** | cheap chat agents without shell skills |
 | **dedicated** | one container per `(room, bot)` | full set incl. `Bash`/`Task*` | agents whose skills run scripts (the hub `privos-list` / `privos-assistant` skills need `Bash`), and delegated reads (`DELEGATED_READ_AS_ASKER.md`) |
+| **team** | one container per agent team with **Shared sandbox VM** on, hosting every project of every roster bot | full set, plus a shared `/team` directory | teammates that build on each other's work (see [Shared sandbox VM](./bot-to-bot-protocol.md#shared-sandbox-vm)) |
 
 Symptoms of a skill room left collocated: the agent reports "no shell / Bash tool available", and
 the AI Chat window shows the `dedicated-mode-required` notice. Switching is an operator action on
 the tenant sandbox proxy (`POST /api/sandbox/projects/<projectId>/mode {"mode":"dedicated"}` then
 `/start`); the hub sends the room's `collocated` directive on every dispatch.
+
+## Agent bot profile and direct messages
+
+An agent bot is reached in its agent room, never by direct message.
+
+- The bot's user card and profile show **Owner** (the person who created it; the Universal Assistant shows the platform).
+- For a member of the bot's agent room the chat action reads **Open agent room** and opens it. For anyone else it is
+  disabled with "Only members of this agent's room can chat with it".
+- `/direct/<bot-username>` and `/direct/<rid>` of an existing DM with an agent bot send a member to the agent room and
+  show an error to anyone else; no DM is created or opened.
+- The server refuses to create a DM that includes an agent bot, for people and for bots
+  (`error-agent-bot-direct-message`, with `agentRoomId` only when the caller is a member of that room). A bot tool that
+  tries to DM a person gets this error and should post in the shared room or its agent room instead.
+- Messages into an existing DM with an agent bot are refused too, from the person and from the bot, so no new unread
+  DM traffic appears; existing DM entries stay in the sidebar and open the agent room (member) or an error.
+- The Universal Assistant, room default bots and MCP app execution bots are not covered by this rule; the Ask Assistant
+  DM and an MCP app's `send_message` to a user work as before.
 
 ## Context Files
 
