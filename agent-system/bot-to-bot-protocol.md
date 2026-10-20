@@ -386,15 +386,64 @@ page (Teams tab).
   `handover-recipient-self`, `handover-recipient-guest`, `handover-already-open`, `handover-card-failed`,
   `handover-not-found`, `handover-closed`, `handover-running-admin-only`.
 
+### What every teammate knows: Team context, capability cards and team memory
+
+Nobody types roles. On every turn of a bot that is on at least one enabled agent team (sandbox chat, trigger and A2A
+delivery turns, and harness turns), the hub appends a live **Team context** block to the identity it sends:
+
+- `## Teams`: each team, its **purpose** (the team room's description, else its topic, up to 300 characters) and every
+  roster bot with its bot id, owner and **capability card**. A card is derived from the bot's own profile at render time:
+  the first sentence of its Purpose (up to 200 characters), up to five Knowledge Areas, its runtime, and the super-agent
+  flag. Editing a roster bot's profile re-renders its teammates; a team room topic change re-renders the roster.
+- `## Team memory (index)`: the team room's `RoomFiles/TeamMemory/MEMORY.md`, which the bots write themselves, in the
+  Claude Code memory layout (one fact per topic file next to it, one index line per topic). The index is capped at
+  200 lines / 16 KB (the rest is dropped with a marker), cached 5 minutes per team room, and injected inside a fenced data block (headings in it cannot
+  pose as platform sections). It is ordinary RoomFiles: the team room's people can read and edit it. Never put secrets there.
+- `## Team protocol`: teammates are bots; a chat message or @mention never reaches a bot, only the `privos-team` skill
+  does; hand work over with `send --kind task`, ask with `--kind question`, wait with `await`; check
+  `teams --workload` before assigning; record who does what in the team memory. A super agent also gets the coordinator
+  line: split the owner's request by card, one task per teammate, then await.
+
+The file copy of `IDENTITY.md` in the sandbox keeps its `## Teams` section for the agent's own reading; the live block
+replaces that tail on each turn. Only the hub-rendered span (between its markers) is replaced; the rest of the file, including notes after it, stays. Bots on no enabled team get nothing new.
+
+`GET agents.a2a.teams.workload?teamId=` (roster bots and the team's human members) returns
+`{ teamId, asOf, bots: [{ botId, username, open: { asSender, asRecipient }, lastActivityAt }] }`: open A2A rows per
+roster bot, counts and timestamps only.
+
+### Shared sandbox VM
+
+An agent team can run every roster bot in **one sandbox container**: each bot's agent room and every room it works in.
+Teammates share `/team` (a shared working directory), can read each other's project trees at
+`/projects/<projectId>/workspace`, and reach each other's processes on `localhost`. The container has the full dedicated
+tool set (Bash, subagents, MCP, hooks, vault env). It is one trust boundary: inside it, teammates share files, processes
+and credentials.
+
+- **Switch:** **Shared sandbox VM** under **Agent team** in the team's **Edit** panel, for holders of `manage-agent-teams`.
+- **Default:** on for an agent team switched on for the first time after this release, when it is eligible; existing
+  teams stay off until someone switches it on. If the automatic switch is skipped, the panel and the Teams card show why.
+- **Eligibility:** every roster sandbox bot has the same owner, resolves to the same sandbox host and that host reports
+  `teamCoreSupported`, and no bot is already in another shared-VM team (a bot can be in one shared-VM team at most).
+  A refusal (`error-agent-team-shared-sandbox-unavailable`) names the reason (`owners`, `host`, `unsupported`,
+  `other-team`) and the bots. A bot added later that does not qualify is listed as excluded with its reason and keeps
+  its own container; the team keeps working. Harness bots and the Universal Assistant never join the shared VM, even on a roster. A handed-over bot gets a new owner, so it is listed as excluded (`owners`) until the team is checked again.
+- **Sandbox refusals at run time:** if the sandbox refuses the group for a bot (no team-core support, a conflicting group, or a sandbox key that may not set groups), the bot runs in its own container and is listed as excluded with the reason.
+- **Off:** each project moves back to its own container with its files, one project at a time when it is idle.
+- **Runtime:** the hub sends `runtimeGroup: "team:<teamId>"` on every dispatch and key push for every project of a grouped
+  bot; the proxy runs those projects in `privm-team-<teamId>`. See the sandbox's `docs/architecture/team-core-sandbox-mode.md`.
+
 ### Sandbox and harness agents: the `privos-team` skill
 
 The skill ships in the sandbox template skills and, through the harness skills bundle, to bots paired through the ACP bridge. It reads the team and room from the prompt block (`--room` defaults to `PRIVOS_ROOM_ID`) and the credentials from the environment (egress proxy in sandbox mode, `Authorization: Bearer` otherwise).
 
-The agent does not have to look for ids: the hub renders `## Teams` (each agent team the bot is on, its id, its room and every roster bot with its bot id) and `## Owner's agents` into the bot's `IDENTITY.md`, which every agent-room turn already receives. A roster change, an Agent team switch, and a bot being created, renamed, deactivated or deleted re-push the affected bots' agent rooms one at a time and drop the hub's identity cache, so the next turn sees the change. `teams` is the live view of the same data.
+The agent does not have to look for ids: the hub renders `## Teams` (each agent team the bot is on, its id, its room and every roster bot with its bot id) and `## Owner's agents` into the bot's `IDENTITY.md`, which every agent-room turn already receives. A roster change, an Agent team switch, and a bot being created, renamed, deactivated or deleted re-push the affected bots' agent rooms one at a time and drop the hub's identity cache, so the next turn sees the change. `teams` is the live view of the same data. The per-turn Team context block above is what the agent actually reads.
 
 ```bash
 python3 scripts/team.py teams
 python3 scripts/team.py members --team TEAM_ID
+python3 scripts/team.py teams --workload                      # cards, owner, open work and last activity per teammate
+python3 scripts/team.py memory read --team TEAM_ID
+python3 scripts/team.py memory note --team TEAM_ID --topic who-does-what --text "@ops-bot owns deploys"
 python3 scripts/team.py send --to BOT_ID --kind task --text "Summarize the open incidents"   # from the agent room, on one team
 python3 scripts/team.py send --team TEAM_ID --to BOT_ID --kind task --text "Summarize the open incidents"
 python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_... --to BOT_ID --text "Done: 3 open"
@@ -406,7 +455,7 @@ python3 scripts/team.py cancel --row ROW_ID
 python3 scripts/team.py stop --correlation c_...
 ```
 
-From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. Rules the skill teaches the agent: register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
+From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. Rules the skill teaches the agent: choose a teammate by card and open work and send one `task` each, then `await`; record who does what with `memory note` (from the team room project, or from any project in a shared sandbox VM); register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
 
 ### External master agents: the `privos` CLI
 

@@ -9,6 +9,10 @@ the sandbox proxy egress, so the bot key never enters the VM.
 Nothing happens until an admin sets the flag on a bot. Operator steps (enable, disable, emergency stop, rollback) live in
 the ops runbook, not here.
 
+On an agent team, a super agent is told on every turn that it coordinates the team: it splits its owner's request by its
+teammates' capability cards and open work (`team.py teams --workload`), sends one `task` per chosen teammate and then
+awaits the results (see [What every teammate knows](./bot-to-bot-protocol.md#what-every-teammate-knows-team-context-capability-cards-and-team-memory)).
+
 ## Why this shape
 
 - **Delegation by permission, not identity.** An agent never holds a human's token. The credential vault refuses a
