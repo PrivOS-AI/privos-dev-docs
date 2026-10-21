@@ -128,16 +128,19 @@ Friendly and professional
 The hub renders this file from the agent's profile on every bot-key push. When the bot has a creator, an
 `Owner: @<username>` line follows the `Name:` line. The stored file holds the persona and the Teams section only.
 
-**Prompt render.** What a turn receives as `<system_identity>` is the stored copy plus two platform blocks added at
-prompt-build time, never written to the file:
+**Prompt render.** What a turn receives as `<system_identity>` is the stored copy plus platform blocks added at
+prompt-build time, never written to the file. The Team context block comes on every turn; the routing rules and the
+Working Principles only on the turn that starts a sandbox session (a new task or an agent switch) and on every trigger
+fire, so a long session carries them once:
 
 - the live **Team context** block for a bot on an enabled agent team (capability cards, team memory index, team
   protocol rules and the **Route what you find** rules: findings outside the bot's scope that are a business risk or
   opportunity go to the teammate whose card or open task they match, as one `FYI for <agent>: … | Source | Risk or
   opportunity (impact) | Suggested action` message, answered with `Known`, `Taking it: <task>` or `Not relevant`);
 - the **Working Principles**: memory tiers, feedback into rules, facts before claims, autonomy boundaries,
-  unattended-run discipline (`NO_REPORT`, run log, ledger dedupe, rate caps) and communication rules. Every
-  agent-room bot gets them; the Universal Assistant and voice prompts do not.
+  unattended-run discipline (`NO_REPORT`, run log, ledger dedupe, rate caps, declared services instead of ad-hoc
+  daemons) and communication rules, under 4 KB. Every agent-room bot gets them at session start; the Universal
+  Assistant and voice prompts do not.
 
 Workspace mechanics (where files, the rules file `MEMORY.md` and skills live) stay in the sandbox `PRIVOS.md`
 template.
