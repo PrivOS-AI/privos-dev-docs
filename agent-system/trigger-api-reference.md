@@ -34,6 +34,16 @@ restore: only its owner, an administrator (`view-user-administration`) or the ag
 room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`. Every
 `add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row.
 
+**Room-bound sessions.** A sandbox session bound to a room other than the agent's own agent room (a mention reply, a
+room-scoped cron thread, an A2A turn in a team room) may `add`, `list`, `update`, `remove` and read the prompt history of
+triggers scoped to exactly one room: that room, or the agent's own agent room. From the `agent-scheduler` skill the
+second one is `trigger.js add --room agent`; a cron scoped to the agent room runs as a live thread there, like any
+room-scoped cron. This is how an agent applies a peer's `trigger-change` request (see the
+[bot-to-bot protocol](./bot-to-bot-protocol.md#approval-flow)) whatever room it was woken in. Global triggers (webhooks,
+handler crons, unscoped crons), multi-room triggers and filtered triggers are refused on `add` with `error-not-authorized`
+and are hidden from `list`; they are managed in agent settings or from the agent room. A bound session cannot re-scope a
+trigger outside those two rooms or add a filter on `update`. Super agents keep their stricter rule above.
+
 **Peer reads.** A bot calling `list` for another bot gets a reduced view (`peerRead: true`; no prompt text, filter,
 description, token, secret or error text; the fields are `id`, `type`, `name`, `enabled`, `needsReview`, `nextAction`,
 `handler.name`, `schedule`, `timezone`, `event`, `sourceRoomIds`, `lastRunAt`, `lastOutcome`, `createdAt`, `updatedAt`).
@@ -272,6 +282,7 @@ Rules enforced by `add` and `update`:
 | `handlers run in the PrivOS Sandbox; this agent runs on a harness` | `run_handler` on a harness agent |
 | `a room-scoped cron runs threads; a handler needs the global cron` | `run_handler` on a cron with `sourceRoomId(s)` |
 | `run_handler webhooks require the secret` | `run_handler` webhook without a stored secret |
+| `Room-bound sessions may only add triggers scoped to their own room or to the agent's own agent room (trigger.js --room agent); ...` | A [room-bound session](#authorization) adds a global, multi-room, other-room or filtered trigger (`error-not-authorized`) |
 | `only the owner, an admin or the agent in its room may attach a handler` | Caller is none of the three (`error-not-authorized`) |
 | `handler-not-found: no service "<name>" is declared in the agent room` | No such service in the agent room's project (`errorType` `handler-not-found`) |
 | `handler-not-found: service "<name>" is not a handler (kind <kind>)` | The service exists with another kind (`errorType` `handler-not-found`) |
