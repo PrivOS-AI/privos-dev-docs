@@ -46,6 +46,13 @@ unscoped crons), multi-room triggers and filtered triggers are refused on `add` 
 from `list`; they are managed in agent settings or from the agent room. A bound session cannot re-scope a trigger outside
 those rooms or add a filter on `update`. Super agents keep their stricter rule above.
 
+An agent-room cron written by a bound session (by `add`, or by an `update` that moves it there) carries
+`createdFromRoom`, the bound room; `update` cannot set or clear it. Bound sessions reach only agent-room crons with that
+mark, so crons the owner set in the agent room stay out of reach. The run of a marked trigger opens in the agent room,
+where the session is not bound, so every run (scheduled or manual) starts with an origin rule naming the room and
+forbidding trigger, handler, persona, credential and skill changes in that run. That rule is a prompt instruction, not a
+proxy binding.
+
 **Peer reads.** A bot calling `list` for another bot gets a reduced view (`peerRead: true`; no prompt text, filter,
 description, token, secret or error text; the fields are `id`, `type`, `name`, `enabled`, `needsReview`, `nextAction`,
 `handler.name`, `schedule`, `timezone`, `event`, `sourceRoomIds`, `lastRunAt`, `lastOutcome`, `createdAt`, `updatedAt`).
