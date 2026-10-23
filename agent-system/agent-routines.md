@@ -47,6 +47,16 @@ handler from a turn in the agent's **agent room**: the hub looks in the agent ro
 room the agent happens to be chatting in. At add and update the hub asks that runtime for its services and refuses a name
 that is missing or is not a handler.
 
+### A handler that answers mentions and replies
+
+Without a handler trigger, a mention of the agent or a reply to it in a room the agent answers in starts a model turn
+through the room reply path. When an event trigger takes that message for its handler, the room reply path stays out, so
+the handler is the only thing that answers. The trigger must be enabled, have `nextAction: "run_handler"`, a `filter`
+with `subject: "bot"`, `events` including `message.new`, `coalesce` set (a coalesced buffer never drops an event), a room
+scope that covers the room, and a `match` whose `mention` or `reply` flag matches the message. The creator must still be
+a member of the room, and a trigger paused after three failed runs claims nothing. Exit 10 or a failed run still wakes
+the agent through the trigger. The agent room is unaffected: a mention there always starts a turn.
+
 ### What the handler receives
 
 One JSON object on stdin, never argv. The hub builds it in `buildPayloadBody`
