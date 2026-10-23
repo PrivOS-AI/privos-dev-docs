@@ -36,13 +36,15 @@ room may call them. Any other caller, and any session bound to another room, get
 
 **Room-bound sessions.** A sandbox session bound to a room other than the agent's own agent room (a mention reply, a
 room-scoped cron thread, an A2A turn in a team room) may `add`, `list`, `update`, `remove` and read the prompt history of
-triggers scoped to exactly one room: that room, or the agent's own agent room. From the `agent-scheduler` skill the
-second one is `trigger.js add --room agent`; a cron scoped to the agent room runs as a live thread there, like any
-room-scoped cron. This is how an agent applies a peer's `trigger-change` request (see the
-[bot-to-bot protocol](./bot-to-bot-protocol.md#approval-flow)) whatever room it was woken in. Global triggers (webhooks,
-handler crons, unscoped crons), multi-room triggers and filtered triggers are refused on `add` with `error-not-authorized`
-and are hidden from `list`; they are managed in agent settings or from the agent room. A bound session cannot re-scope a
-trigger outside those two rooms or add a filter on `update`. Super agents keep their stricter rule above.
+triggers scoped to exactly one room: that room, or, for the agent itself only, a **cron** scoped to its own agent room.
+From the `agent-scheduler` skill the second one is `trigger.js add --type cron --room agent`; it runs as a live thread in
+the agent room, like any room-scoped cron. This is how an agent applies a peer's `trigger-change` request (see the
+[bot-to-bot protocol](./bot-to-bot-protocol.md#approval-flow)) whatever room it was woken in. The exception is cron-only
+because an event trigger ignores events from the agent's own room, and another caller bound to the room (an owner or
+leader through the header) does not get it. Global triggers (webhooks, whatever room the body names; handler crons;
+unscoped crons), multi-room triggers and filtered triggers are refused on `add` with `error-not-authorized` and hidden
+from `list`; they are managed in agent settings or from the agent room. A bound session cannot re-scope a trigger outside
+those rooms or add a filter on `update`. Super agents keep their stricter rule above.
 
 **Peer reads.** A bot calling `list` for another bot gets a reduced view (`peerRead: true`; no prompt text, filter,
 description, token, secret or error text; the fields are `id`, `type`, `name`, `enabled`, `needsReview`, `nextAction`,
