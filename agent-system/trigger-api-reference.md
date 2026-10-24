@@ -173,6 +173,9 @@ An event trigger fires only for events the hub passes to the agent trigger dispa
 `notification.created` (filtered triggers only) and `file.created`, `file.updated`, `file.deleted`. Room, user, list item
 and folder events are accepted by `add` but do not fire. The message events other than `message.new`, and `message.mention`,
 `message.bot_mention` as trigger events, are not dispatched either; use a filter with `match.mention` to react to mentions.
+`a2a.task` (filtered `run_handler` triggers only) fires from bot-to-bot dispatch, not from the message stream: an urgent
+`task` another bot sends the agent runs the trigger's handler instead of a model turn; see
+[Agent Routines](./agent-routines.md#a-handler-that-takes-bot-to-bot-tasks).
 
 File events fire for an upload through the Files API and for a file written by a RoomFiles sync. The rules:
 
@@ -212,7 +215,7 @@ A filtered trigger can also run a handler script that screens each batch before 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `events` | string[] | Required, non-empty. `message.new` and/or `notification.created`. This replaces the trigger-level `event` |
+| `events` | string[] | Required, non-empty. `message.new` and/or `notification.created`, or `a2a.task` alone. This replaces the trigger-level `event` |
 | `subject` | string | `bot` (default) or `principal` (the agent's owner; super agents only) |
 | `rooms` | string[] or `"mirrored"` | Room ids you can access, or the rooms a super agent mirrors. For `principal` the default is `mirrored` and explicit ids must be mirrored rooms |
 | `includeDms` | boolean | `principal` only, default `true`: also evaluate the owner's one-to-one DMs |
@@ -228,6 +231,9 @@ Rules enforced by `add` and `update`:
   stores a rollback marker in `sourceRoomIds` so a hub without filter support never fires it; the current hub ignores it,
   and `update` ignores room-scope fields on a filtered trigger instead of applying them.
 - Only types are validated. Counts and windows must be positive, and no value has an upper bound.
+- `a2a.task` stands alone: `events` is exactly `["a2a.task"]`, `subject` is `bot`, `rooms` is not `"mirrored"`, `match`
+  holds only `senders` and `keywords`, and `coalesce` is refused. `cooldownSeconds` is accepted and ignored. It only does something on a
+  `run_handler` trigger.
 - A stored filtered trigger returns `filter` (normalised: defaults filled, keywords lower-cased) instead of `event`.
 
 **Response (cron/event):**
@@ -278,6 +284,11 @@ Rules enforced by `add` and `update`:
 | `promptTemplate is required for event triggers` | Empty prompt template |
 | `notification.created needs a filter` | `notification.created` used without a `filter` |
 | `filter.<field> ...` | A filter field has the wrong type or is not a known key |
+| `filter.events a2a.task cannot be combined with other events` | `a2a.task` listed with another event |
+| `filter.events a2a.task takes subject 'bot'` | `a2a.task` with `subject: principal` |
+| `filter.rooms 'mirrored' does not apply to a2a.task` | `a2a.task` with `rooms: "mirrored"` |
+| `filter.match.<key> does not apply to a2a.task` | `a2a.task` with `dm`, `mention`, `reply`, `hotRoom` or `notification` in `match` |
+| `filter.coalesce does not apply to a2a.task` | `a2a.task` with `coalesce` |
 | `Listening about the owner or in 'mirrored' rooms needs a super agent` | `subject: principal` or `rooms: "mirrored"` on an ordinary agent |
 | `A filtered trigger lists its events and rooms in the filter, not in event or sourceRoomIds` | `filter` sent together with `event`, `sourceRoomId` or `sourceRoomIds` |
 | `A trigger about the owner must be created by the owner or by the agent` | `subject: principal` created by someone else |

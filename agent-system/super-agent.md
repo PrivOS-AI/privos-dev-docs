@@ -143,7 +143,7 @@ run a handler script before any model turn: [Agent Routines](./agent-routines.md
 
 | Field | Meaning |
 |---|---|
-| `events` | Required, non-empty: `message.new`, `notification.created` |
+| `events` | Required, non-empty: `message.new`, `notification.created`, or `a2a.task` alone (bot subject only; bot-to-bot tasks for a handler, see [Agent Routines](./agent-routines.md#a-handler-that-takes-bot-to-bot-tasks)) |
 | `subject` | `bot` (default: mentions, replies and DMs about the agent) or `principal` (about its owner; super agents only) |
 | `rooms` | `'mirrored'` (the mirrored rooms; super agents only) or an explicit list of room ids. Default for `principal` is `mirrored`; for `bot` every room the bot is in |
 | `includeDms` | `principal` only, default `true`: also evaluate the owner's one-to-one DMs (the bot does not join them) |
