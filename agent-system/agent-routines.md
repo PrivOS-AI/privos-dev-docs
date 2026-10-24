@@ -98,9 +98,10 @@ for mentions reads it unchanged:
 | exit `0` | `completed`, `statusReason: "handled-by-handler"` | one hub-written `result` row, text `accepted by handler <name>; its output, if any, is posted in the thread`, `data.status: "accepted"`; its `⇄ result` line is posted before the requester is woken |
 | exit `10` | delivered as a model turn whose prompt ends with the framed stdout | unchanged |
 | any failure, `handler-busy`, or the trigger's slot still held after 5 minutes | delivered as a model turn whose prompt starts with the [not-screened line](#fallback-a-failure-still-runs-the-model-turn) | unchanged |
-| a second dispatch of a row the stage already stamped (restart, or a failure between the run and the close) | the handler does not run again; a model turn whose prompt starts with `The handler <name> may already have run for this task; check before repeating its side effects.` | unchanged |
+| the chain was stopped before the handler ran (for example while the task waited for the slot) | the handler does not run; the row expires `stopped` and no model turn runs, like the rest of a stopped chain's queue | nothing |
+| a second dispatch of a row the stage already stamped (the model turn did not start, or the close failed) | the handler does not run again. The stamp's recorded outcome is repeated: `handled` closes the row without a model turn (the result is not written twice), exit 10 gets the same framed output, a failure the same not-screened line. Only when the hub stopped mid-run (no outcome recorded) does the turn start with `The handler <name> may already have run for this task; check before repeating its side effects.` | as for the first dispatch |
 
-The handler's stdout never leaves the service log: the requester only ever sees the fixed acknowledgement. "Accepted" says
+The handler's stdout never reaches the requester: it sees only the fixed acknowledgement, and `agents.a2a.list` shows the row's `handler` as `{ name, runAt, outcome }` only. An exit-10 output is kept on the recipient's row (at most 8 KB) so a redispatch can repeat it. "Accepted" says
 the work was handed over, not that it is finished; the requester watches the chain thread for the outcome. `handler-busy`
 does not count towards the breaker. Use a dedicated trigger for `a2a.task`, never one shared with a mention trigger: the
 filter refuses mixed events, and a hub without this event skips only the `a2a.task` trigger.
