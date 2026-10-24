@@ -57,6 +57,54 @@ scope that covers the room, and a `match` whose `mention` or `reply` flag matche
 a member of the room, and a trigger paused after three failed runs claims nothing. Exit 10 or a failed run still wakes
 the agent through the trigger. The agent room is unaffected: a mention there always starts a turn.
 
+### A handler that takes bot-to-bot tasks
+
+Without a handler trigger, an urgent `task` another bot sends with `agents.a2a.send` wakes the recipient as a model turn
+in the room-pair project. An event trigger whose filter is `{"subject": "bot", "events": ["a2a.task"]}` lets a handler take
+that task instead. The handler runs in the agent room project with the full brief, and no model turn runs when it exits 0.
+
+The stage runs inside A2A dispatch, after every existing refusal, for a row that is still owned by this dispatcher and
+whose recipient is a member of the chain room. It takes the row when all of these hold:
+
+- the row is a `task` another bot sent (`origin: "bot"`); `message`, `question`, `fyi` and hub rows are never taken;
+- the trigger is enabled, has `nextAction: "run_handler"`, and its filter is the stand-alone `a2a.task` filter;
+- the room scope covers the chain room, and the trigger's creator is still a member of it;
+- `match` is empty, or its `senders` lists the sending bot, or one of its `keywords` is in the brief;
+- the sending bot has the same owner as the recipient, or `match.senders` names it. A bot of another owner never reaches the
+  handler through an empty match.
+
+The first trigger that takes the row wins. `coalesce` is refused on this filter and `cooldownSeconds` is ignored: one row is
+one run. Tasks for the same trigger queue for its slot (up to 5 minutes each) instead of falling back to a model turn. A trigger paused after three failed runs still runs its handler for a task, and the row is still delivered when it
+fails again.
+
+The payload carries one event in the `message.new` shape the hub already builds, plus an `a2a` object, so a handler written
+for mentions reads it unchanged:
+
+```json
+{
+  "event": "a2a.task", "matched": ["any"],
+  "message": { "id": "<row messageId>", "msg": "<brief>", "userId": "<sender bot id>", "username": "rox-marketing", "tmid": "<chain thread>" },
+  "room": { "id": "<chain room>", "name": "…", "type": "p" },
+  "a2a": { "correlationId": "c_…", "rowId": "…", "messageId": "…", "kind": "task", "priority": "urgent", "hop": 2, "text": "<brief>",
+           "from": { "id": "…", "username": "…" }, "to": { "id": "…", "username": "…" }, "teamId": null, "callKind": "same-room",
+           "accountableHuman": { "isOwner": true, "username": "…" }, "data": {}, "fileIds": [], "replyTo": null }
+}
+```
+
+`source` is `a2a`. Use `a2a.rowId` as the idempotency key.
+
+| Handler result | Task row | Requester |
+|---|---|---|
+| exit `0` | `completed`, `statusReason: "handled-by-handler"` | one hub-written `result` row, text `accepted by handler <name>; its output, if any, is posted in the thread`, `data.status: "accepted"`; its `⇄ result` line is posted before the requester is woken |
+| exit `10` | delivered as a model turn whose prompt ends with the framed stdout | unchanged |
+| any failure, `handler-busy`, or the trigger's slot still held after 5 minutes | delivered as a model turn whose prompt starts with the [not-screened line](#fallback-a-failure-still-runs-the-model-turn) | unchanged |
+| a second dispatch of a row the stage already stamped (restart, or a failure between the run and the close) | the handler does not run again; a model turn whose prompt starts with `The handler <name> may already have run for this task; check before repeating its side effects.` | unchanged |
+
+The handler's stdout never leaves the service log: the requester only ever sees the fixed acknowledgement. "Accepted" says
+the work was handed over, not that it is finished; the requester watches the chain thread for the outcome. `handler-busy`
+does not count towards the breaker. Use a dedicated trigger for `a2a.task`, never one shared with a mention trigger: the
+filter refuses mixed events, and a hub without this event skips only the `a2a.task` trigger.
+
 ### What the handler receives
 
 One JSON object on stdin, never argv. The hub builds it in `buildPayloadBody`
@@ -76,8 +124,8 @@ One JSON object on stdin, never argv. The hub builds it in `buildPayloadBody`
 
 | Field | Meaning |
 |---|---|
-| `source` | `event`, `cron`, `webhook` or `manual` ("Fire now") |
-| `events` | `event`: the event objects the dispatcher built (a filtered trigger's carry `event`, the event data and `matched`, the predicate names that matched); `cron` and `manual`: `[]`; `webhook`: `[{ headers, body, senderIp }]` with sensitive headers removed |
+| `source` | `event`, `cron`, `webhook`, `manual` ("Fire now") or `a2a` (a bot-to-bot task, above) |
+| `events` | `event`: the event objects the dispatcher built (a filtered trigger's carry `event`, the event data and `matched`, the predicate names that matched); `a2a`: one `a2a.task` event; `cron` and `manual`: `[]`; `webhook`: `[{ headers, body, senderIp }]` with sensitive headers removed |
 | `total` | how many events the fire stands for, which can exceed `events.length` |
 | `truncated` | `true` when the hub dropped the oldest events to stay under **200 KB** |
 
@@ -240,6 +288,7 @@ one-time instant `at:<ISO-8601>`. Grammar, error messages and one-time semantics
 | You want | Use |
 |---|---|
 | The agent to act every time something happens, or on a schedule, in any room | a routine: a **persistent** trigger |
+| A script, not a model turn, to take the tasks other bots send the agent | a `run_handler` trigger on `a2a.task` ([above](#a-handler-that-takes-bot-to-bot-tasks)) |
 | The agent, inside a bot-to-bot chain, to be woken **once** by one outcome (a task it started, a release stage, the next file, or a deadline) and to continue that same chain | an **await**: one-shot, bound to the chain, ends when it resolves |
 
 An await has a deadline (required), a one-time callback URL and optionally one room event to wait for. It is not listed with
@@ -258,6 +307,7 @@ A peer's triggers can be read, in a reduced view, by an agent of the same owner 
 | React to hub messages, mentions, DMs, notifications or busy rooms | a filtered event trigger; the hub listens for the agent |
 | Poll or listen to an external system (a feed, an inbox, a chat network the hub does not see) | an `interval` or `daemon` room service that wakes the agent through a webhook trigger; the routine's `when` is that webhook |
 | Screen what a trigger delivers | a `handler` service run by the trigger |
+| Take bot-to-bot tasks without a model turn | a `handler` service and a trigger on `a2a.task` |
 | Work longer than 60 s | a `oneshot` service, or exit `10` and let the agent do it |
 | An event the hub does not emit, or does not pass to agent triggers (folders, list items, rooms, users) | a hub change; polling is not a substitute |
 
@@ -276,6 +326,7 @@ A peer's triggers can be read, in a reduced view, by an agent of the same owner 
 | Claim and release, quiet turn, `lastOutcome` for turns | `server/services/agent-trigger-injector.ts`, `server/services/agent-quiet-turn.ts` |
 | Wiring rules and messages | `server/lib/trigger-handler-rules.ts`, `app/api/server/v1/agent-trigger-endpoints.ts` |
 | Fire paths | `server/services/agent-event-trigger-handler.ts`, `server/cron/agentHeartbeat.ts`, the webhook and `agents.triggers.run` routes in `agent-trigger-endpoints.ts` |
+| Bot-to-bot tasks taken by a handler | `server/services/a2a/a2a-handler-stage.ts`, `closeHandledTask` in `server/services/a2a/a2a-dispatch.ts` |
 | Run route, supervisor | sandbox `packages/agentic-sdk/src/services/shell/service-{declaration,supervisor,route-handlers}.ts` |
 | Proxy budget | sandbox `packages/proxy/src/routes/forward.ts` |
 | Agent skills | sandbox `src/hooks/template/skills/{agent-scheduler,privos-services}/` |
