@@ -429,10 +429,14 @@ and credentials.
   A refusal (`error-agent-team-shared-sandbox-unavailable`) names the reason (`owners`, `host`, `unsupported`,
   `other-team`) and the bots. A bot added later that does not qualify is listed as excluded with its reason and keeps
   its own container; the team keeps working. Harness bots and the Universal Assistant never join the shared VM, even on a roster. A handed-over bot gets a new owner, so it is listed as excluded (`owners`) until the team is checked again.
+- **Verification:** a team groups only after a passing eligibility check stamped it with its owner and sandbox host.
+  Teams switched on before that check existed are re-checked once when the hub starts; a team that fails (for example a
+  roster with two owners) is switched off with the reason shown in the panel, and a bot whose owner later changes stops
+  grouping. A team never groups on a roster the check has not seen.
 - **Sandbox refusals at run time:** if the sandbox refuses the group for a bot (no team-core support, a conflicting group, or a sandbox key that may not set groups), the bot runs in its own container and is listed as excluded with the reason.
 - **Off:** each project moves back to its own container with its files, one project at a time when it is idle.
 - **Runtime:** the hub sends `runtimeGroup: "team:<teamId>"` on every dispatch and key push for every project of a grouped
-  bot; the proxy runs those projects in `privm-team-<teamId>`. See the sandbox's `docs/architecture/team-core-sandbox-mode.md`.
+  bot; the proxy runs those projects in one team container (name prefix + `team-<teamId>`, for example `privm-<slug>-team-<teamId>` on a tenant). See the sandbox's `docs/architecture/team-core-sandbox-mode.md`.
 
 ### Sandbox and harness agents: the `privos-team` skill
 

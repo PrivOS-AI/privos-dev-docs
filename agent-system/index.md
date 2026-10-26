@@ -18,7 +18,7 @@ AI agents in PrivOS Hub — conversational bots powered by PrivOS Sandbox (Claud
 - [Room Services](./room-services.md) — Supervised processes that outlive an agent's turn (listeners, long jobs, pollers) and on-demand handlers a trigger runs first: declaration, states, owner stop, raw (board) and relay (VM) credentials, limits, the `privos-services` skill
 - [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) — `agents.a2a.*`: roster-scoped messages between agents with hub-enforced rules, chains, caps, approvals, the `privos-team` skill and the `privos agents a2a` CLI
 - [Super Agent](./super-agent.md) — A trusted agent bot that mirrors its owner's rooms and roles, writes app-owned list items, listens through hub-side subscription filters, replies in the owner's DMs after approval, and reaches the hub from its VM through the proxy egress
-- [Agent CLI Runtime](./agent-cli-runtime.md) — A room owner runs their own turns on Claude Code or Codex with their own login: the room setting, who may set it, eligibility, owner-turns-only rule, what the agent sees, and the warning that room members can obtain the login
+- [Agent CLI Runtime](./agent-cli-runtime.md) — A room owner runs their own turns on Claude Code or Codex with their own login: the room setting, who may set it, eligibility, owner-turns-only rule, what the agent sees, and the warning that room members can obtain the login; an agent team can hold one login for its shared VM, with the typed acknowledgements, the refused add-to-room paths and the threat model
 
 ## Concepts
 
