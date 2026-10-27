@@ -77,9 +77,17 @@ A room's agent runs in one of three sandbox modes, chosen per room (proxy-persis
 
 | Mode | Container | Built-in tools | Use |
 |---|---|---|---|
-| **collocated** (default on tenants seeded with collocation) | shared VM core for many rooms/bots | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill` only — `Bash`, `Task*` and `mcp__*` are **denied by policy** | cheap chat agents without shell skills |
-| **dedicated** | one container per `(room, bot)` | full set incl. `Bash`/`Task*` | agents whose skills run scripts (the hub `privos-list` / `privos-assistant` skills need `Bash`), and delegated reads (`DELEGATED_READ_AS_ASKER.md`) |
+| **collocated** (default on tenants seeded with collocation) | shared VM core for many rooms/bots | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill`, plus the in-process `Privos` tool — `Bash`, `Task*` and `mcp__*` are **denied by policy** | chat agents, including list/item/room work through `Privos` |
+| **dedicated** | one container per `(room, bot)` | full set incl. `Bash`/`Task*` and `Privos` | agents whose skills run local scripts or processes (`privos-publish`, `privos-team`, `agent-scheduler`, `privos-services`), and delegated reads (`DELEGATED_READ_AS_ASKER.md`) |
 | **team** | one container per agent team with **Shared sandbox VM** on, hosting every project of every roster bot | full set, plus a shared `/team` directory | teammates that build on each other's work (see [Shared sandbox VM](./bot-to-bot-protocol.md#shared-sandbox-vm)) |
+
+**The `Privos` tool.** Every core (collocated, dedicated, team) registers `Privos`, which runs the
+`@privos_ai/privos` CLI inside the core process with `{ args: string[] }`: `hub lists|items|stages|fields|rooms|
+messages|files|dm|owner|agents|triggers`, `hub items fields`, `hub api METHOD /api/v1/...` and `agents a2a`. Every call
+goes through the proxy `/egress` with the attempt's own proxy token, so the hub sees the same bot and room as the
+Python skill scripts. Writes need `--confirm`, `--room` defaults to the agent's room (`{room}` in `hub api`), `--file`
+is confined to the workspace, and credential or URL flags are refused. The platform `SKILL.md` files tell the agent
+to use it first and keep the Python scripts as the fallback where Bash exists.
 
 Symptoms of a skill room left collocated: the agent reports "no shell / Bash tool available", and
 the AI Chat window shows the `dedicated-mode-required` notice. Switching is an operator action on
