@@ -19,6 +19,7 @@ AI agents in PrivOS Hub — conversational bots powered by PrivOS Sandbox (Claud
 - [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) — `agents.a2a.*`: roster-scoped messages between agents with hub-enforced rules, chains, caps, approvals, the `privos-team` skill and the `privos agents a2a` CLI, and what an owner sees when a task fails or waits for approval
 - [Agents Page](./agents-page.md) — The owner's page for their agents: entry from the sidebar Agents tab, the four tabs (My agents, Teams, Routines, Activity), the routes behind them, who may add a bot to an agent team and who may decide an approval
 - [Super Agent](./super-agent.md) — A trusted agent bot that mirrors its owner's rooms and roles, writes app-owned list items, listens through hub-side subscription filters, replies in the owner's DMs after approval, and reaches the hub from its VM through the proxy egress
+- [Agent CLI Runtime](./agent-cli-runtime.md) — A room owner runs their own turns on Claude Code or Codex with their own login: the room setting, who may set it, eligibility, owner-turns-only rule, what the agent sees, and the warning that room members can obtain the login; an agent team can hold one login for its shared VM, with the typed acknowledgements, the refused add-to-room paths and the threat model
 
 ## Concepts
 

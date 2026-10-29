@@ -6,6 +6,18 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-10-20
+
+### Agent teams: shared sandbox VM, agent-bot profiles, Team context
+
+**Summary:** An agent team can run all its sandbox bots in one container (Shared sandbox VM, on by default for newly
+enabled eligible teams). Every turn of a teammate carries a live Team context block (capability cards, the team memory
+index, the protocol rules), and `agents.a2a.teams.workload` shows open work. An agent bot's profile names its owner and
+sends members to the agent room; DMs with agent bots are refused. Docs: [Bot-to-bot protocol](./agent-system/bot-to-bot-protocol.md),
+[Agent rooms](./agent-system/agent-rooms.md), [Super agent](./agent-system/super-agent.md).
+
+---
+
 ## 2026-09-18
 
 ### MCP apps — host-brokered microphone and screen wake lock

@@ -9,6 +9,10 @@ the sandbox proxy egress, so the bot key never enters the VM.
 Nothing happens until an admin sets the flag on a bot. Operator steps (enable, disable, emergency stop, rollback) live in
 the ops runbook, not here.
 
+On an agent team, a super agent is told on every turn that it coordinates the team: it splits its owner's request by its
+teammates' capability cards and open work (`team.py teams --workload`), sends one `task` per chosen teammate and then
+awaits the results (see [What every teammate knows](./bot-to-bot-protocol.md#what-every-teammate-knows-team-context-capability-cards-and-team-memory)).
+
 ## Why this shape
 
 - **Delegation by permission, not identity.** An agent never holds a human's token. The credential vault refuses a
@@ -100,6 +104,8 @@ agent team it is on (id, room, roster bots with bot ids) and `## Owner's agents`
 both sections on every agent-room push and re-pushes the affected bots when a roster, the Agent team switch or a bot changes;
 the `privos-team` skill's `teams` command (`GET agents.a2a.teams.mine`) is the live view.
 
+**Decision requests.** A teammate's `question` with options (or `needs-approval`) addressed to a super agent is woken to it like any urgent task, while the decision card stays the teammate owner's. An active super agent whose principal is that owner (the kill switch is consulted) may answer a `question` through `POST agents.a2a.approvals.decide { rowId, option }` (CLI skill: `team.py answer --row ROW --option N`); the answer is audited as made by a super agent, the first of the owner's click and the bot's answer wins, and a `needs-approval` can only be decided by the owner. See [Bot-to-bot protocol](bot-to-bot-protocol.md#approval-flow).
+
 **When it runs.** A pass runs immediately when the flag changes and within seconds of the owner joining, leaving, being
 removed, creating a room, having a room role changed through the role methods, or being deactivated or reactivated. A cron
 (`SuperAgent_Reconcile_Interval_Minutes`, default 5, read at startup) catches everything else, such as a role change made
@@ -137,7 +143,7 @@ run a handler script before any model turn: [Agent Routines](./agent-routines.md
 
 | Field | Meaning |
 |---|---|
-| `events` | Required, non-empty: `message.new`, `notification.created` |
+| `events` | Required, non-empty: `message.new`, `notification.created`, or `a2a.task` alone (bot subject only; bot-to-bot tasks for a handler, see [Agent Routines](./agent-routines.md#a-handler-that-takes-bot-to-bot-tasks)) |
 | `subject` | `bot` (default: mentions, replies and DMs about the agent) or `principal` (about its owner; super agents only) |
 | `rooms` | `'mirrored'` (the mirrored rooms; super agents only) or an explicit list of room ids. Default for `principal` is `mirrored`; for `bot` every room the bot is in |
 | `includeDms` | `principal` only, default `true`: also evaluate the owner's one-to-one DMs (the bot does not join them) |

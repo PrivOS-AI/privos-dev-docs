@@ -146,9 +146,14 @@ the AI Chat question form, an AI Chat reference answer, `agents.sandbox.answer`,
 always-on guard refuses a human message in a bot thread or a bot DM that looks like a key (known key prefixes, JWTs,
 PEM private keys, `token=`/`secret:` pairs with a long value). Commit SHAs, UUIDs and URLs pass.
 
-If the attempt ends before the key is saved, the thread gets a notice; a key saved later is still stored. If no
-thread claims a request within a minute (for example a board-direct attempt), the bot creator or room owner gets the
-card in their Universal Bot DM.
+If the attempt ends before the key is saved, the thread gets a notice; a key saved later is still stored.
+
+An askUser key card nobody completes within 10 minutes ends exactly as the modal's Cancel does: the paused attempt is
+cancelled, the reply closes as "Request cancelled.", and the thread gets one timeout notice. The vault request stays
+pending, so a form submitted later still saves the binding. No askUser card is ever copied to the Universal Bot DM. If no
+thread claims an askUser request within a minute (the card failed to post), the hub cancels its attempt the same way and
+marks the request notified. Only requests filed through the SDK (`vault.requestKey`) still reach the bot creator's
+Universal Bot DM.
 
 **Rotation from the agent.** When a stored key is rejected (401 or 403), the agent asks again with `rotate: true`.
 The card opens the form in rotate mode: value only, with scope, pattern, methods and env names read-only. The version

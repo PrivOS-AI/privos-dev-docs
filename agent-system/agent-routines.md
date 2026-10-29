@@ -47,6 +47,65 @@ handler from a turn in the agent's **agent room**: the hub looks in the agent ro
 room the agent happens to be chatting in. At add and update the hub asks that runtime for its services and refuses a name
 that is missing or is not a handler.
 
+### A handler that answers mentions and replies
+
+Without a handler trigger, a mention of the agent or a reply to it in a room the agent answers in starts a model turn
+through the room reply path. When an event trigger takes that message for its handler, the room reply path stays out, so
+the handler is the only thing that answers. The trigger must be enabled, have `nextAction: "run_handler"`, a `filter`
+with `subject: "bot"`, `events` including `message.new`, `coalesce` set (a coalesced buffer never drops an event), a room
+scope that covers the room, and a `match` whose `mention` or `reply` flag matches the message. The creator must still be
+a member of the room, and a trigger paused after three failed runs claims nothing. Exit 10 or a failed run still wakes
+the agent through the trigger. The agent room is unaffected: a mention there always starts a turn.
+
+### A handler that takes bot-to-bot tasks
+
+Without a handler trigger, an urgent `task` another bot sends with `agents.a2a.send` wakes the recipient as a model turn
+in the room-pair project. An event trigger whose filter is `{"subject": "bot", "events": ["a2a.task"]}` lets a handler take
+that task instead. The handler runs in the agent room project with the full brief, and no model turn runs when it exits 0.
+
+The stage runs inside A2A dispatch, after every existing refusal, for a row that is still owned by this dispatcher and
+whose recipient is a member of the chain room. It takes the row when all of these hold:
+
+- the row is a `task` another bot sent (`origin: "bot"`); `message`, `question`, `fyi` and hub rows are never taken;
+- the trigger is enabled, has `nextAction: "run_handler"`, and its filter is the stand-alone `a2a.task` filter;
+- the room scope covers the chain room, and the trigger's creator is still a member of it;
+- `match` is empty, or its `senders` lists the sending bot, or one of its `keywords` is in the brief;
+- the sending bot has the same owner as the recipient, or `match.senders` names it. A bot of another owner never reaches the
+  handler through an empty match.
+
+The first trigger that takes the row wins. `coalesce` is refused on this filter and `cooldownSeconds` is ignored: one row is
+one run. Tasks for the same trigger queue for its slot (up to 5 minutes each) instead of falling back to a model turn. A trigger paused after three failed runs still runs its handler for a task, and the row is still delivered when it
+fails again.
+
+The payload carries one event in the `message.new` shape the hub already builds, plus an `a2a` object, so a handler written
+for mentions reads it unchanged:
+
+```json
+{
+  "event": "a2a.task", "matched": ["any"],
+  "message": { "id": "<row messageId>", "msg": "<brief>", "userId": "<sender bot id>", "username": "rox-marketing", "tmid": "<chain thread>" },
+  "room": { "id": "<chain room>", "name": "…", "type": "p" },
+  "a2a": { "correlationId": "c_…", "rowId": "…", "messageId": "…", "kind": "task", "priority": "urgent", "hop": 2, "text": "<brief>",
+           "from": { "id": "…", "username": "…" }, "to": { "id": "…", "username": "…" }, "teamId": null, "callKind": "same-room",
+           "accountableHuman": { "isOwner": true, "username": "…" }, "data": {}, "fileIds": [], "replyTo": null }
+}
+```
+
+`source` is `a2a`. Use `a2a.rowId` as the idempotency key.
+
+| Handler result | Task row | Requester |
+|---|---|---|
+| exit `0` | `completed`, `statusReason: "handled-by-handler"` | one hub-written `result` row, text `accepted by handler <name>; its output, if any, is posted in the thread`, `data.status: "accepted"`; its `⇄ result` line is posted before the requester is woken |
+| exit `10` | delivered as a model turn whose prompt ends with the framed stdout | unchanged |
+| any failure, `handler-busy`, or the trigger's slot still held after 5 minutes | delivered as a model turn whose prompt starts with the [not-screened line](#fallback-a-failure-still-runs-the-model-turn) | unchanged |
+| the chain was stopped before the handler ran (for example while the task waited for the slot) | the handler does not run; the row expires `stopped` and no model turn runs, like the rest of a stopped chain's queue | nothing |
+| a second dispatch of a row the stage already stamped (the model turn did not start, or the close failed) | the handler does not run again. The stamp's recorded outcome is repeated: `handled` closes the row without a model turn (the result is not written twice), exit 10 gets the same framed output, a failure the same not-screened line. Only when the hub stopped mid-run (no outcome recorded) does the turn start with `The handler <name> may already have run for this task; check before repeating its side effects.` | as for the first dispatch |
+
+The handler's stdout never reaches the requester: it sees only the fixed acknowledgement, and `agents.a2a.list` shows the row's `handler` as `{ name, runAt, outcome }` only. An exit-10 output is kept on the recipient's row (at most 8 KB) so a redispatch can repeat it. "Accepted" says
+the work was handed over, not that it is finished; the requester watches the chain thread for the outcome. `handler-busy`
+does not count towards the breaker. Use a dedicated trigger for `a2a.task`, never one shared with a mention trigger: the
+filter refuses mixed events, and a hub without this event skips only the `a2a.task` trigger.
+
 ### What the handler receives
 
 One JSON object on stdin, never argv. The hub builds it in `buildPayloadBody`
@@ -66,8 +125,8 @@ One JSON object on stdin, never argv. The hub builds it in `buildPayloadBody`
 
 | Field | Meaning |
 |---|---|
-| `source` | `event`, `cron`, `webhook` or `manual` ("Fire now") |
-| `events` | `event`: the event objects the dispatcher built (a filtered trigger's carry `event`, the event data and `matched`, the predicate names that matched); `cron` and `manual`: `[]`; `webhook`: `[{ headers, body, senderIp }]` with sensitive headers removed |
+| `source` | `event`, `cron`, `webhook`, `manual` ("Fire now") or `a2a` (a bot-to-bot task, above) |
+| `events` | `event`: the event objects the dispatcher built (a filtered trigger's carry `event`, the event data and `matched`, the predicate names that matched); `a2a`: one `a2a.task` event; `cron` and `manual`: `[]`; `webhook`: `[{ headers, body, senderIp }]` with sensitive headers removed |
 | `total` | how many events the fire stands for, which can exceed `events.length` |
 | `truncated` | `true` when the hub dropped the oldest events to stay under **200 KB** |
 
@@ -225,6 +284,23 @@ one-time instant `at:<ISO-8601>`. Grammar, error messages and one-time semantics
 [Schedules](./trigger-api-reference.md#schedules). Filters for events:
 [Super Agent](./super-agent.md#subscription-filters).
 
+## Trigger or await
+
+| You want | Use |
+|---|---|
+| The agent to act every time something happens, or on a schedule, in any room | a routine: a **persistent** trigger |
+| A script, not a model turn, to take the tasks other bots send the agent | a `run_handler` trigger on `a2a.task` ([above](#a-handler-that-takes-bot-to-bot-tasks)) |
+| The agent, inside a bot-to-bot chain, to be woken **once** by one outcome (a task it started, a release stage, the next file, or a deadline) and to continue that same chain | an **await**: one-shot, bound to the chain, ends when it resolves |
+
+An await has a deadline (required), a one-time callback URL and optionally one room event to wait for. It is not listed with
+the agent's triggers, never needs cleanup and wakes the agent in the chain session with the payload as data. A requester
+that sent a task can also register an await with only a deadline to bound its wait. Protocol and limits:
+[Await and callback](./bot-to-bot-protocol.md#await-and-callback). Which events a persistent trigger receives, and the
+`needsReview` label on file triggers: [Events that fire](./trigger-api-reference.md#events-that-fire).
+
+A peer's triggers can be read, in a reduced view, by an agent of the same owner or team; see
+[Trigger API Reference](./trigger-api-reference.md) and the [approval flow](./bot-to-bot-protocol.md#approval-flow).
+
 ## When a routine hands work to another agent
 
 A routine turn may send a task to a teammate with the `privos-team` skill ([Bot-to-Bot Protocol](./bot-to-bot-protocol.md)). When
@@ -243,8 +319,9 @@ new reason; a runtime's free-text error is never echoed.
 | React to hub messages, mentions, DMs, notifications or busy rooms | a filtered event trigger; the hub listens for the agent |
 | Poll or listen to an external system (a feed, an inbox, a chat network the hub does not see) | an `interval` or `daemon` room service that wakes the agent through a webhook trigger; the routine's `when` is that webhook |
 | Screen what a trigger delivers | a `handler` service run by the trigger |
+| Take bot-to-bot tasks without a model turn | a `handler` service and a trigger on `a2a.task` |
 | Work longer than 60 s | a `oneshot` service, or exit `10` and let the agent do it |
-| An event the hub does not emit | a hub change; polling is not a substitute |
+| An event the hub does not emit, or does not pass to agent triggers (folders, list items, rooms, users) | a hub change; polling is not a substitute |
 
 ## Compatibility
 
@@ -261,6 +338,7 @@ new reason; a runtime's free-text error is never echoed.
 | Claim and release, quiet turn, `lastOutcome` for turns | `server/services/agent-trigger-injector.ts`, `server/services/agent-quiet-turn.ts` |
 | Wiring rules and messages | `server/lib/trigger-handler-rules.ts`, `app/api/server/v1/agent-trigger-endpoints.ts` |
 | Fire paths | `server/services/agent-event-trigger-handler.ts`, `server/cron/agentHeartbeat.ts`, the webhook and `agents.triggers.run` routes in `agent-trigger-endpoints.ts` |
+| Bot-to-bot tasks taken by a handler | `server/services/a2a/a2a-handler-stage.ts`, `closeHandledTask` in `server/services/a2a/a2a-dispatch.ts` |
 | Run route, supervisor | sandbox `packages/agentic-sdk/src/services/shell/service-{declaration,supervisor,route-handlers}.ts` |
 | Proxy budget | sandbox `packages/proxy/src/routes/forward.ts` |
 | Plain-language reasons for undelivered tasks (`why`, `fix`) | `server/services/a2a/a2a-status-reasons.ts`, `A2A_Why_*` and `A2A_Fix_*` in the English locale |
