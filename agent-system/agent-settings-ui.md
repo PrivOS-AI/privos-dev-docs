@@ -42,7 +42,7 @@ Main container component. Reads `botId` from `room.customFields.agentBotId`.
 
 ### Features
 
-- **Trigger list** — fetches from `GET /v1/agents.triggers.list`
+- **Routines section** — the heading reads "Routines"; the list comes from `GET /v1/agents.triggers.list`, which also returns `maxTriggers`
 - **Type icons** — clock (cron), permalink (webhook), lightning (event)
 - **Schedule labels** — human-readable (e.g., "Every hour" instead of "every_1h")
 - **Prompt preview** — truncated with ellipsis
@@ -50,8 +50,9 @@ Main container component. Reads `botId` from `room.customFields.agentBotId`.
 - **Toggle switch** — enable/disable via `POST /v1/agents.triggers.update`
 - **Copy webhook URL** — clipboard copy for webhook triggers
 - **Delete button** — remove via `POST /v1/agents.triggers.remove`
-- **Add Trigger button** — opens inline form (disabled when 5 triggers reached)
-- **Max triggers callout** — warning when limit reached
+- **Add Trigger button** — opens inline form (disabled once the list reaches `maxTriggers`)
+- **Max triggers callout** — warning when limit reached. The limit is the hub's (`MAX_TRIGGERS_PER_AGENT`, returned as `maxTriggers`); the client never hard-codes it
+- **Run now** — fires a routine once without waiting for its schedule (see [Run now](#run-now))
 
 ### Trigger card
 
@@ -61,7 +62,7 @@ Every trigger renders as one generic card; nothing in it is specific to a routin
 
 | Line | Content |
 |---|---|
-| Title | `name`, else the **When** summary, else "Webhook", else the type. A tag reads "Ran at {{time}}" on a one-time trigger that has fired (disabled, with `lastRunAt`); the plain "Last run" line is hidden for it |
+| Title | `name`, else the **When** summary, else "Webhook", else the type. A tag reads "Routine" when the trigger has a playbook path or a handler and "Trigger" otherwise (`triggerKindOf`). Another tag reads "Ran at {{time}}" on a one-time trigger that has fired (disabled, with `lastRunAt`); the plain "Last run" line is hidden for it |
 | Subtitle | `description` |
 | **When** | cron: the schedule label (`cronDisplayLabel`), e.g. "Every 3 hours", "Daily at 09:00 (Asia/Bangkok)" or "Once at <local date time>"; plain event: the event; filtered event: one line `events · subject · rooms · predicates · cooldown · batch`. A wall-clock pattern names its timezone only when one is stored and it differs from the browser's. Empty for a webhook |
 | **Then** | `Agent`, or `handler <name> → agent on exit 10` for a `run_handler` trigger. Hidden for an `emit_event` webhook |
@@ -70,7 +71,25 @@ Every trigger renders as one generic card; nothing in it is specific to a routin
 | Next run | a pure interval (from the last run) or the instant of a pending one-time trigger |
 | Last run | `lastRunAt`. For a trigger **without** a handler, ` · ran, nothing to say` (`quiet`) or ` · ran, posted a reply` (`posted`) |
 | Last outcome | handler triggers only: `Last outcome: <lastOutcome> (<lastError>)` |
+| Handler last run | handler triggers only, and only after **Load handlers** was clicked in this tab session: `Handler last run: exit <code> in <duration>`, or `timed out after <duration>`. It comes from the `lastRun` the runtime keeps for the service (`handlerLastRunOf`); the card never fetches it by itself |
+| Run now | a button, except on a room-scoped cron and on an `emit_event` webhook (`canRunTriggerNow`) |
 | Hints (red) | `handler stopped by the owner: the agent runs instead` when `lastError` is `owner-disabled`; `paused after 3 failed handler runs: fix the handler or edit the trigger` when `lastOutcome` is `paused` |
+
+### Run now
+
+**Run now** calls `POST /v1/agents.triggers.run { botId, triggerId }`. Why it exists: to test a routine without waiting for its
+schedule or its event. It goes through `dispatchTriggerAction` with `source: 'manual'`, the path a scheduled fire takes, so a
+handler trigger runs its handler first (the payload's `source` is `manual`, see [Agent Routines](./agent-routines.md#what-the-handler-receives)).
+
+- The route answers when the run has *started*, not when it ends: `{ started: true }` once the trigger's slot is claimed (a
+  handler trigger: right after the claim; the handler is not awaited), or `{ started: false, outcome, reason, errorType }`.
+  `errorType: "trigger-busy"` means the slot is held by another fire; any other refusal is `trigger-not-started` with the
+  runtime's `reason` (for example `harness-offline` or `downloading`). The route stops waiting after `RUN_START_WAIT_MS` and
+  treats a run still starting as begun, because the browser is cut off at 100 s.
+- The card shows a toast, then reads the trigger list again 3 s later, so the outcome the run recorded (`lastOutcome`, `lastRunAt`) appears without a reload.
+- A manual run stamps `lastRunAt`, except on a pending one-time trigger, which would otherwise never fire. It is attributed like a scheduled fire: the trigger's creator, else the agent's owner.
+- A scheduled fire that lands while a manual run holds the slot is skipped (claim rules: [Agent Routines](./agent-routines.md#claim-one-fire-at-a-time-per-trigger)).
+- Hidden for a room-scoped cron (it fires as one thread per room, which one click cannot stand for) and for an `emit_event` webhook (it has no prompt to run). Access is the one of `agents.triggers.list`; for a super agent that means its owner, an administrator or the agent itself.
 
 The scoped-rooms line is not shown for a filtered trigger (its rooms are in the filter), and the Rooms picker is hidden for
 a filtered trigger and for a cron whose Then is a handler.
@@ -141,11 +160,30 @@ Inline form for adding new triggers. Shows conditional fields based on selected 
 ### Then (what runs)
 
 A **Then** select appears for all three types: `Agent turn` or `Run handler` (a webhook also keeps `Emit Event`). Choosing
-`Run handler` shows a **Handler name** input (placeholder `e.g. screen-rooms`) and the hint "A service of this agent's room
-that is declared as a handler. It runs first: exit 0 ends the run, exit 10 wakes the agent with its output, anything else
-runs the agent." For a cron it also shows "A handler runs once per fire, so this cron runs globally and not in rooms." and
-hides the Rooms picker. `Run handler` is not offered for a harness agent. The form sends `nextAction: "run_handler"` and
-`handler: { name }`.
+`Run handler` shows a **Handler name** field and the hint "A service of this agent's room that is declared as a handler. It
+runs first: exit 0 ends the run, exit 10 wakes the agent with its output, anything else runs the agent." For a cron it also
+shows "A handler runs once per fire, so this cron runs globally and not in rooms." and hides the Rooms picker. `Run handler`
+is not offered for a harness agent. The form sends `nextAction: "run_handler"` and `handler: { name }`.
+
+**The handler field is a select, filled by `GET /v1/agents.handlers.list?botId=&wake=`** (`trigger-handler-select.tsx`).
+The route lists the services declared in the agent room's runtime and returns `{ services: [{ name, kind, state,
+timeoutSeconds, lastRun }], reason? }` with that field list only; `services` is always present and the route never answers
+a 500. Same access as `agents.triggers.list`.
+
+| Moment | Request | Effect |
+|---|---|---|
+| The form opens | `wake=false` (one passive read) | Never starts a runtime. A running one fills the select at once; a stopped one answers `reason: "idle"` and the field reads "Runtime idle, load handlers to pick one" |
+| **Load handlers** clicked | `wake=true` | The only read that may start a runtime. The result is kept for the tab session, so the cards can show a handler's last run |
+
+The select lists only services whose `kind` is `handler`. With none declared the hint reads "No handler declared yet. In the
+agent room, ask the agent to declare one with the privos-services skill". Any `reason` other than `idle` (`harness`,
+`collocated`, `no-sandbox`, `no-bot-key`, `unavailable`; the hub's `HANDLER_LIST_REASONS`) turns the field back into a text
+input with the reason shown, and the hub checks the typed name when the trigger is saved. At save the hub asks the runtime
+again (`checkHandlerExists`) and retries that check once after 2 s when the failure was `network` or `invalid-response`,
+never after `aborted`; the check and its retry together stay under the browser's 100 s cut-off.
+
+**Prompt.** With Then set to a handler, the prompt hint reads "Used only when the handler exits 10 or fails", and an empty
+prompt is prefilled with `Follow AgentFiles/routines/<handler>.md` until the owner edits it.
 
 ### Schedule Options
 
@@ -193,14 +231,10 @@ The editor does not edit `timezone` of a stored trigger.
 
 ### Event Options
 
-| Value | Label |
-|-------|-------|
-| `message.new` | New message |
-| `message.mention` | Mention |
-| `user.joined` | User joined |
-| `file.created` | File created |
-| `list.item.created` | List item created |
-| `list.item.stage_changed` | List item stage changed |
+The event dropdown offers every event the hub accepts for an event trigger, 20 in all, each with a label
+(`EVENT_LABEL_KEYS` in `AgentTriggerForm.tsx`, the `Agent_Trigger_Event_*` keys). The hub's allowlist is `VALID_EVENTS` in
+`app/api/server/v1/agent-trigger-endpoints.ts`; a zip restore validates against the same list. Filtered subscriptions
+(mentions, DMs, hot rooms) are written through the API: [Super Agent](./super-agent.md#subscription-filters).
 
 ### Webhook Auto-Copy
 
@@ -225,7 +259,7 @@ On successful webhook trigger creation, the returned `webhookUrl` is automatical
 | `Trigger_Source_Room` | Source Room (optional — all rooms if empty) |
 | `Copy_Webhook_URL` | Copy Webhook URL |
 | `No_triggers_configured` | No triggers configured yet |
-| `Max_triggers_reached` | Maximum 5 triggers per agent |
+| `Max_triggers_reached` | Maximum {{max}} triggers per agent |
 | `Agent_Trigger_When` | When |
 | `Agent_Trigger_Then` | Then |
 | `Agent_Trigger_Then_Agent` | Agent |
@@ -236,5 +270,9 @@ On successful webhook trigger creation, the returned `webhookUrl` is automatical
 | `Agent_Trigger_Ran_At` | Ran at {{time}} |
 | `Agent_Trigger_Timezone_Hint` | Times are in {{timezone}} |
 | `Agent_Trigger_Cron_Raw` | Cron expression |
+| `Agent_Routines`, `Agent_Routine`, `Agent_Trigger_Kind_Trigger` | Routines, Routine, Trigger |
+| `Agent_Trigger_Run_Now` | Run now |
+| `Agent_Trigger_Handlers_Load` | Load handlers |
+| `Agent_Trigger_Prompt_Handler_Hint` | Used only when the handler exits 10 or fails |
 
 The other trigger keys (`Agent_Trigger_*`) live in `packages/i18n/src/locales/en.i18n.json`, the only locale that carries them.

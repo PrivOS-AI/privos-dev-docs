@@ -14,6 +14,7 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.triggers.update` | Yes | Update an existing trigger |
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
 | POST | `/v1/agents.triggers.run` | Yes | Manually fire a trigger |
+| GET | `/v1/agents.handlers.list` | Yes | List the services of the agent room's runtime, for the handler picker (`wake=true` may start the runtime; see [Agent Settings UI](./agent-settings-ui.md#then-what-runs)) |
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
 | POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`, `await`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
 | POST | `/v1/agents.a2a.callback/:token` | No | One-time callback that wakes an agent waiting in a bot-to-bot chain; not a trigger, see [Await and callback](./bot-to-bot-protocol.md#await-and-callback) |
@@ -69,7 +70,7 @@ lets one bot write another bot's triggers: a change is an A2A request the peer r
 
 ## GET /v1/agents.triggers.list
 
-List all triggers for an agent. The list never returns `webhookSecret`; it returns `webhookToken`, which alone fires a legacy `agentic_response` webhook that has no stored secret, so treat the list output as sensitive. The privos CLI wraps these reads (`privos hub triggers list|get`) and prints only a fingerprint of the token.
+List all triggers for an agent, with `maxTriggers`, the most triggers one agent may hold. The list never returns `webhookSecret` (add and regenerate return it once); it returns `webhookToken`, which alone fires a legacy `agentic_response` webhook that has no stored secret, so treat the list output as sensitive. The privos CLI wraps these reads (`privos hub triggers list|get`) and prints only a fingerprint of the token.
 
 **Query Parameters:**
 
@@ -108,6 +109,7 @@ List all triggers for an agent. The list never returns `webhookSecret`; it retur
       "lastRunAt": null
     }
   ],
+  "maxTriggers": 20,
   "success": true
 }
 ```
@@ -491,13 +493,21 @@ Manually fire a trigger immediately. Updates `lastRunAt` when the fire started, 
 
 The trigger's prompt (or promptTemplate) is injected into the agent room with context `"Manual trigger run"`.
 
-**Response:**
+**Response:** the call answers when the run has started, not when it ends.
 
 ```json
-{
-  "success": true
-}
+{ "success": true, "started": true }
 ```
+
+A fire that did not start is still HTTP 200:
+
+```json
+{ "success": true, "started": false, "outcome": "skipped-active", "reason": "…", "errorType": "trigger-busy" }
+```
+
+`errorType` is `trigger-busy` when another fire holds the trigger's slot and `trigger-not-started` otherwise; `reason` (when
+present) is the runtime's code, for example `harness-offline`, `downloading` or `config-missing`. How the settings card
+words them: [Run now](./agent-settings-ui.md#run-now).
 
 **Errors:**
 
@@ -505,7 +515,6 @@ The trigger's prompt (or promptTemplate) is injected into the agent room with co
 |-------|-------|
 | `Trigger not found` | Trigger ID doesn't exist on this bot |
 | `Trigger has no prompt` | Trigger has neither prompt nor promptTemplate |
-| `Failed to inject trigger message` | Agent room or bot user not found, nothing started, or the same trigger is already running (`skipped-active`) |
 
 ---
 
