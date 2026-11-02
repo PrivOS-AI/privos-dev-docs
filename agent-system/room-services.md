@@ -126,8 +126,9 @@ platform treats it as work it may stop and start again, unlike an agent turn, a 
 
 - an operation that writes inside the workspace and leaves it where it is (the bot-key push) runs beside the services
   and does not touch them;
-- an operation that removes or replaces the runtime (a reset, a removal, a new runtime contract, a rebuild of a team
-  core) stops them with their grace first, when no turn, shell, terminal or sync runs, and starts them again after it;
+- an operation that removes or replaces the runtime (a reset, a removal, a new runtime contract) stops them with
+  their grace first, when no turn, shell, terminal or sync runs, and starts them again after it; a team core busy
+  only with services is replaced at the daily 02:00 maintenance, under every member's writer;
 - a project that moves to another VM has its services forgotten in the old one; the agent declares them again there;
 - the idle stop never stops a core that runs a service.
 
