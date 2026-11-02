@@ -121,6 +121,20 @@ starts exactly one new instance. On shutdown, every service gets its grace befor
 Memory is checked every 15 s over the whole process group; above `maxMemoryMb` the group is killed (`exit_signal =
 'memory'`) and the restart policy applies.
 
+**Services and project operations.** A running service holds its project's workspace as a `service` reader. The
+platform treats it as work it may stop and start again, unlike an agent turn, a plain shell, a terminal or a file sync:
+
+- an operation that writes inside the workspace and leaves it where it is (the bot-key push) runs beside the services
+  and does not touch them;
+- an operation that removes or replaces the runtime (a reset, a removal, a new runtime contract, a rebuild of a team
+  core) stops them with their grace first, when no turn, shell, terminal or sync runs, and starts them again after it;
+- a project that moves to another VM has its services forgotten in the old one; the agent declares them again there;
+- the idle stop never stops a core that runs a service.
+
+So a service may be stopped and restarted at any time. Write it to survive that: keep its state in files, write each
+of its own files by appending whole lines or by writing a temporary file and renaming it, and never let two services
+(or a service and the agent) rewrite the same file.
+
 ## Handlers
 
 A handler is declared like any service (`kind: handler`, a `cmd`, optional `cwd`, `env`, `vault`, `timeoutSeconds`,
@@ -211,8 +225,9 @@ row per binding), reused across runs, and dropped on redeclare, rotation or revo
   binding's base-URL variable.
 - A named binding the project does not export refuses the start: `vault-binding-missing: <NAME>`. Refusals a retry
   cannot fix (a missing binding, a refused binding, a missing `cwd`, a command that cannot be executed) park the service
-  in `crashed_until_apply`; others (a closed vault, a busy workspace lease, a database error) are retried with the
-  crash backoff.
+  in `crashed_until_apply`; others (a closed vault, a database error) are retried with the crash backoff. A start
+  refused because a project operation holds the workspace is not a crash: it is tried again every 2 s, the service log
+  says `[privos] waiting for a project operation to finish`, and the wait never counts toward the crash ceiling.
 - **Rotate and revoke:** on the board, rotating a binding restarts the services that use it (a new materialisation,
   new audit rows) and revoking it stops them (`crashed_until_apply`, `vault-binding-revoked: <NAME>`). In a VM the relay
   resolves every request, so a rotation needs nothing and a revocation is felt as a refusal at the service's next call.
@@ -247,7 +262,7 @@ The board reads its own env; a core gets them from the proxy env. Fleet tenants 
 | `POST /api/projects/:id/services/:name/enable` | a person only |
 | `GET /api/projects/:id/services/:name/logs?lines=200` | log tail |
 | `POST /api/projects/:id/services/:name/run` | the platform or the in-project agent: run a handler once, see [The `run` route](#the-run-route) |
-| `POST /api/projects/:id/services/stop-all` | a person or the platform; `?ifIdle=1` refuses (409) while an attempt, a plain shell or a terminal runs; the proxy uses it to move a core to a new runtime contract |
+| `POST /api/projects/:id/services/stop-all` | a person or the platform; `?ifIdle=1` refuses (409) while an attempt, a plain shell or a terminal runs; instances end with `exit_signal = 'parked'` and the definitions stay, so a `reconcile` or the core's next boot starts them again. The proxy uses it before an operation that removes or replaces the project's runtime (reset, remove, a new runtime contract, the dedicated bot-key self-heal) and restarts them after it |
 | `POST /api/projects/:id/services/reconcile` | a person or the platform: start what should run (the proxy calls it when a recreate could not follow a stop) |
 
 On the board, a person is the shared key or a person's ring key; an agent ring key is not, and any caller sending
