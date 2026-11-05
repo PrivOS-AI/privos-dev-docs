@@ -161,6 +161,19 @@ counts. Declare it when a tool needs to know who is calling, and take the caller
 signed user token instead; see
 [Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity).
 
+### Sharing tools with agents and other apps
+
+```json
+"toolAccess": { "mcpapp.crm.upsertContact": "shared" },
+"capabilities": { "verifiedActor": true, "caller_app": true, "cross_room": true }
+```
+
+`toolAccess` lists the tools agents and other apps may call; every key must be in
+`tools[]` and the only value is `"shared"`. `{}` means nothing is shared, and leaving
+the field out means not declared. `caller_app` and `cross_room` tell a tool which app
+called it and whether that app's bot is outside the room. See
+[Agents and App-to-App Calls](./agents-and-app-to-app-calls.md).
+
 ### UI build output and bundling
 
 Declaring a `ui://` resource (or, for an INSTANT app, `ui.entryPoints`) means

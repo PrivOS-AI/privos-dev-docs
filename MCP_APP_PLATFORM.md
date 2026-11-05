@@ -11,6 +11,7 @@ Documentation has been split into smaller focused docs:
 | [INSTANT apps](./mcp-app-platform/instant-apps.md) | Frontend-only apps: manifest contract, data in Lists, publish checklist |
 | [API Reference](./mcp-app-platform/api-reference.md) | REST endpoints, MCP tools, scopes |
 | [React SDK](./mcp-app-platform/react-sdk-reference.md) | `@privos_ai/app-react` hooks |
+| [Agents and App-to-App Calls](./mcp-app-platform/agents-and-app-to-app-calls.md) | `toolAccess`, who can call your tools, checking the caller, refusal codes |
 | [Admin Guide](./mcp-app-platform/admin-guide.md) | Register, configure, install apps |
 | [Install and operate your own MCP app](./mcp-app-platform/install-and-operate-your-own-mcp-app.md) | Pair a Relay app, verify the hub fingerprint, keep it running, update and uninstall it |
 | [Publishing CLI](./mcp-app-platform/publishing-cli.md) | `privos-app publish` — package/lint/upload/version/submit, browser approval or publisher token |

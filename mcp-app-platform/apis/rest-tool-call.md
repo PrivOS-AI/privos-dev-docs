@@ -19,7 +19,7 @@ files, folders, messages, rooms and users, call the hub REST API via `app.rest()
 | `mcpAppId` | string | Yes | App ID to execute the tool on |
 | `toolName` | string | Yes | Name of the tool to execute |
 | `arguments` | object | No | Tool-specific arguments |
-| `roomId` | string | No | Room context for the tool execution |
+| `roomId` | string | No for people and for a bot calling its own app. Required for a bot calling another app | Room context for the tool execution |
 
 ```json
 {
@@ -53,7 +53,8 @@ The response depends on the tool being called. See the [PrivOS MCP Tools documen
 ### Security
 
 - **Scope Enforcement**: The tool's required scope is checked against the app's granted scopes. If the app doesn't have the necessary scope, the call is rejected.
-- **Room Context**: When `roomId` is provided, user membership in the room is validated.
+- **Room Context**: When `roomId` is provided, the caller must be able to access the room. Another app's server is the one exception.
+- **Bots**: Agents and app servers follow extra rules. See [Agents and App-to-App Calls](../agents-and-app-to-app-calls.md), which also lists the refusal codes.
 
 ### Errors
 

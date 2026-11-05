@@ -582,6 +582,8 @@ bridge/SDK:
   existing apps keep their prior grant (refresh does not re-narrow).
 - **Central `scope → {method, path-prefix}[]` map**: `server/services/mcp-rest-allowlist.ts`
   (`isRequestAllowed(method, path, scopes)`) expands granted scopes into the REST allowlist.
+- **A bot may only name its own app:** on `POST /api/v1/mcp-apps.rest-call`, a bot naming another app gets 403
+  `APP_IDENTITY_MISMATCH`, because the Hub signs the named app's identity onto the call.
 - **Enforcement is server-side (authoritative):** route `POST /api/v1/mcp-apps.rest-call`
   runs the call as the user and rejects out-of-allowlist requests (403). The host bridge
   forwards to it (`host/rest.request`); the iframe never sees the token.
