@@ -9,7 +9,7 @@ Thin React wrapper around the MCP `@modelcontextprotocol/ext-apps` SDK with Priv
 | Hook | Returns | Description |
 |------|---------|-------------|
 | `usePrivosApp()` | `McpApp` | MCP app instance for `app.rest()`, `app.uploadFile()`, `app.storage`, and `callServerTool()` |
-| `usePrivosContext()` | `PrivosContext` | `userId`, `username`, `theme`, `roomId`, `roomName`, `userRoles`, `effectiveScopes?`, `roomSlug?`, `appId?`, `appUrl?`, `themeTokens?` — see note below on extra runtime fields |
+| `usePrivosContext()` | `PrivosContext` | `userId`, `username`, `theme`, `roomId`, `roomName`, `userRoles`, `effectiveScopes?`, `roomSlug?`, `appId?`, `appUrl?`, `themeTokens?`, `locale?` — see note below on extra runtime fields |
 | `usePrivosCapability(scope)` | `{ resolved, granted, scope }` | Presentation/degradation helper only — the Hub remains the sole authorization authority, this never gates real access |
 | `usePrivosTool(name, args)` | `{ data, loading, error, refetch }` | Generic auto-fetching tool call. Skips the fetch while any arg value is empty/null/undefined |
 | `useLists(roomId)` | `{ data, loading, error, refetch }` | Lists in room |
@@ -256,7 +256,7 @@ carries `microphone: true, wakeLock: true` on hubs that broker.
 Subscribes to `HOST_CONTEXT_CHANGED` push + fetches PrivOS-specific context:
 
 ```tsx
-const { roomId, userId, username, theme, roomName, userRoles, effectiveScopes, roomSlug, appId, appUrl, themeTokens } = usePrivosContext();
+const { roomId, userId, username, theme, roomName, userRoles, effectiveScopes, roomSlug, appId, appUrl, themeTokens, locale } = usePrivosContext();
 ```
 
 The hook's underlying fetch is the `mcpapp.context.get` tool call documented in
@@ -271,6 +271,10 @@ user token. See [Signed user token](#signed-user-token).
   `PrivosAppProvider` already writes each one onto this document's `<html>` as a CSS custom
   property automatically — see [Theme Inheritance](./theme-inheritance.md) for the full contract
   and how to consume it directly instead of (or alongside) the auto-applied CSS variables.
+- `locale` (`string`, optional, SDK `>= 0.9.0`) — the language the user reads the Hub in, as a
+  canonical BCP 47 tag (`vi-VN`, `en`), updated live when they switch language. Use it for `Intl`
+  formatting and to pick your own translation, with `navigator.language` as the fallback. The
+  provider does not set `<html lang>` from it — see [Locale Inheritance](./locale-inheritance.md).
 - `appId` / `roomSlug` / `appUrl` (`basic:information`) — this app's id, the room slug, and the deep-link URL to the app inside the room (`${ROOT_URL}/{channel|direct|group}/{roomSlug}/mcpapp/{appId}`)
 
 Use with a `ThemeProvider` for Auto/Light/Dark mode support. See [Developer Guide — Theme Sync](./developer-guide.md#7-theme-sync-lightdark-mode).
