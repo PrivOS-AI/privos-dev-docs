@@ -6,6 +6,23 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-11-09
+
+### MCP apps — the Hub UI language reaches embedded apps
+
+**Summary:** An MCP app could not tell which language the user reads the Hub in: it runs in a
+cross-origin iframe, and `navigator.language` reports the browser, not the Hub preference. The Hub
+now sends `locale` (a canonical BCP 47 tag such as `vi-VN`) on every `HOST_CONTEXT_CHANGED`, next to
+the theme, announced by `hostCapabilities.locale`. The value is the user's own language, else the
+workspace default. It is re-sent when the user switches language, so an open app follows without
+a reload. `@privos_ai/app-react` `0.9.0` exposes it as `usePrivosContext().locale`.
+
+**Docs + reference demo:** Added [`mcp-app-platform/locale-inheritance.md`](./mcp-app-platform/locale-inheritance.md)
+(contract, timing, reading it with and without the SDK, picking a translation, `Intl` formatting,
+fallbacks) and a **Language & locale** tab in the `privos-mcp-app-demo` reference app.
+
+---
+
 ## 2026-10-20
 
 ### Agent teams: shared sandbox VM, agent-bot profiles, Team context

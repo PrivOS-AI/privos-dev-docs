@@ -395,8 +395,8 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
-| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready |
-| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips and live theme saves — see [Theme Inheritance](./theme-inheritance.md)) |
+| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready; `hostCapabilities.theme` / `.locale` announce the theme-token and locale fields |
+| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, locale?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips, live theme saves and language switches — see [Theme Inheritance](./theme-inheritance.md) and [Locale Inheritance](./locale-inheritance.md)) |
 | `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `mcpapp.bot.sendMessage`, `mcpapp.db.create`). For lists/files/messages/rooms/users, use the REST API via `app.rest()` instead. |
 | `rooms/upload` | App → host | `{ roomId, fileName, base64Data, mimeType?, description?, uploadOnly? }` | `{ message: ... }` (default) **or** `{ file: { _id, name, type, size, url } }` (when `uploadOnly: true`) | Upload a file into a room using the host user's credentials. Default behavior also posts a user-authored message. Pass `uploadOnly: true` to upload only (no message) — useful when you want a bot to be the sole author of the resulting message via `mcpapp.bot.sendAttachment`. |
 | `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |
