@@ -111,6 +111,8 @@ Update field definitions (bumps version, uses `validationLevel: 'moderate'`).
 |---|---|
 | **Scope** | `db:schema:read` |
 
+`mcpapp.db.listCollections` accepts `paginate: true` (see [Paging MCP list tools](../list-pagination.md)).
+
 ### `mcpapp.db.dropCollection`
 
 Drops the MongoDB collection and removes the schema document.
@@ -194,9 +196,10 @@ Soft-delete: sets `_deletedAt` timestamp. Cascade rules are enforced.
 | `collection` | string | Yes | Collection name |
 | `where` | array | No | Filter clauses |
 | `orderBy` | array | No | Sort `[{ field, direction }]` |
-| `limit` | number | No | Max 1000 (default) |
+| `limit` | number | No | Max 1000 (default). With `paginate: true`: default 50, max 200 |
 | `offset` | number | No | Skip for pagination |
 | `populate` | string[] | No | Reference fields to resolve |
+| `paginate` | boolean | No | `true` returns `{ items, pagination }`, see [Paging MCP list tools](../list-pagination.md) |
 
 **Where clause operators:** `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not-in`, `array-contains`, `array-contains-any`
 
@@ -209,11 +212,17 @@ Soft-delete: sets `_deletedAt` timestamp. Cascade rules are enforced.
 }
 ```
 
-Response: `{ "records": [...], "total": 42 }`
+Response: `{ "records": [...], "total": 42, "totalCapped": false }`
+
+Records are sorted by `orderBy`, then by `_id`, so offset pages never repeat or skip a record. `total` stops at
+10,000: when more records match, `total` is 10,000 and `totalCapped` is `true`, because a filter on an app-defined
+field may have no index and an exact count would scan the whole collection.
+
+With `paginate: true` the response is `{ items, pagination }`, with `pagination.totalCapped` set when the count stopped.
 
 ### `mcpapp.db.count`
 
-Returns `{ "count": number }`.
+Returns `{ "count": number, "capped": boolean }`. Counting stops at 10,000; `capped` is `true` when more records match.
 
 ### `mcpapp.db.aggregate`
 

@@ -15,6 +15,7 @@ Detailed API reference organized by category.
 | [Notification Tool](./tools-notifications.md) | Create governed room-member notifications |
 | [UI Resources](./rest-ui-resource.md) | Fetch app UI HTML resources |
 | [Item Query](./items-query.md) | `items.query` — filtered, cursor-paginated item retrieval |
+| [Paging MCP list tools](../list-pagination.md) | `paginate: true` envelope for every built-in MCP list tool |
 
 ## PrivOS MCP Tools
 

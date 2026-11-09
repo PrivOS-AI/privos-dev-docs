@@ -193,3 +193,8 @@ has `count` permitted items — and no total is exposed.
 `mcpapp.lists.queryItems` takes the same arguments and requires the same scope.
 `mcpapp.lists.getItems` remains for compatibility, but pages by offset, so rows shift
 across page boundaries whenever the list changes between calls.
+
+Both MCP tools also accept `paginate: true`, which answers with the common
+`{ items, pagination }` envelope and adds a `total` (`null` on an isolated list unless the
+caller is room owner/admin). `queryItems` then pages by `offset`, or by `cursor` when one is
+passed. See [Paging MCP list tools](../list-pagination.md).
