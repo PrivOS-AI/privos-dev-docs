@@ -61,6 +61,6 @@ Complete reference of all 19 webhook event types organized by category.
 
 **Mention Event Structure**: The `message.mention` event uses a different payload structure with a `form` object instead of `room`, and raw field names (`_id`, `rid`, `msg`).
 
-**Bot Mention vs Mention**: `message.mention` broadcasts to all bots in the room when any user is mentioned. `message.bot_mention` delivers only to the specific bot(s) that were @mentioned, using `deliverToBot()` (not affected by `globalListener`).
+**Bot Mention vs Mention**: `message.mention` broadcasts to all bots in the room when any user is mentioned. `message.bot_mention` delivers only to the specific bot(s) that were @mentioned, using `deliverToBot()`. Room events only reach bots that are members of the room.
 
 **Inline Buttons**: Buttons with `bot-event` action trigger `message.mention` webhooks with `metadata` in the `form` object.

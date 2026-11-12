@@ -6,6 +6,35 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-11-09
+
+### MCP apps — the Hub UI language reaches embedded apps
+
+**Summary:** An MCP app could not tell which language the user reads the Hub in: it runs in a
+cross-origin iframe, and `navigator.language` reports the browser, not the Hub preference. The Hub
+now sends `locale` (a canonical BCP 47 tag such as `vi-VN`) on every `HOST_CONTEXT_CHANGED`, next to
+the theme, announced by `hostCapabilities.locale`. The value is the user's own language, else the
+workspace default. It is re-sent when the user switches language, so an open app follows without
+a reload. `@privos_ai/app-react` `0.9.0` exposes it as `usePrivosContext().locale`.
+
+**Docs + reference demo:** Added [`mcp-app-platform/locale-inheritance.md`](./mcp-app-platform/locale-inheritance.md)
+(contract, timing, reading it with and without the SDK, picking a translation, `Intl` formatting,
+fallbacks) and a **Language & locale** tab in the `privos-mcp-app-demo` reference app.
+
+---
+
+## 2026-10-20
+
+### Agent teams: shared sandbox VM, agent-bot profiles, Team context
+
+**Summary:** An agent team can run all its sandbox bots in one container (Shared sandbox VM, on by default for newly
+enabled eligible teams). Every turn of a teammate carries a live Team context block (capability cards, the team memory
+index, the protocol rules), and `agents.a2a.teams.workload` shows open work. An agent bot's profile names its owner and
+sends members to the agent room; DMs with agent bots are refused. Docs: [Bot-to-bot protocol](./agent-system/bot-to-bot-protocol.md),
+[Agent rooms](./agent-system/agent-rooms.md), [Super agent](./agent-system/super-agent.md).
+
+---
+
 ## 2026-09-18
 
 ### MCP apps — host-brokered microphone and screen wake lock

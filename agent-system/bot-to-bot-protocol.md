@@ -116,9 +116,11 @@ Each mailbox row records the path that authorized it (`authPath`). The hub never
 
 Each recipient gets one row in `rocketchat_agent_a2a_messages` (the mailbox, the audit log and the approval ledger are one table). A row is inserted as `dispatching` with a lease, the hub wakes the recipient in a sandbox project bound to the destination room (`room-<roomId>-<botId>`), and the row becomes `delivered` once the runtime accepts the turn. If the runtime cannot start (an offline or busy harness bot, a project still downloading) the row stays `queued` and a one-minute cron job redelivers it with backoff (5 attempts, 60 s to 600 s). Queued rows older than 24 hours expire as `stale`. Every transition is a compare-and-set, so a row is never delivered twice. Rows are removed 30 days after they close.
 
+**A recipient's handler can take a task.** When the recipient has an enabled `run_handler` trigger on `a2a.task` that takes the row (a `task` from a bot of the same owner, or from a bot its filter names in `match.senders`), the hub runs that handler in the recipient's agent room project before any model turn ([Agent Routines](./agent-routines.md#a-handler-that-takes-bot-to-bot-tasks)). Exit 0 closes the row `completed` with `statusReason: handled-by-handler` and inserts one `result` row from the recipient to the sender: fixed text `accepted by handler <name>; its output, if any, is posted in the thread`, `data: { handler, rowId, status: "accepted" }`, `replyTo` the task, hop clamped to 4, outside the chain cap. Its `⇄ result` line is posted before the sender is woken, and a chain stopped while the handler ran still takes this one result; a task whose chain was stopped before its handler ran expires `stopped` instead. "Accepted" means the work was handed over, not finished: the sender watches the thread. Any other handler outcome delivers the row as the model turn it would have had.
+
 In the destination room the hub posts one fixed line per record in the chain thread. Detail is read on demand with `agents.a2a.list` or `privos agents a2a chain`.
 
-Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `awaiting-decision` only on rows written before decision requests woke their addressee (current rows keep the decision under `approval.status`), `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`.
+Accepting a send is not delivering it: `send` answers with every row `queued`, and the dispatcher moves it on asynchronously. A closed row carries a `statusReason`: `awaiting-decision` only on rows written before decision requests woke their addressee (current rows keep the decision under `approval.status`), `recipient-super-agent` (a super agent takes bot rows only from bots on an agent team it is also on), `participant-missing`, `dispatch-error` or `not-started` (the runtime did not start after the redelivery attempts), `member-removed` or an `a2a-…` code from the recheck before a redelivery, `stale`, `deadline`, `stopped`, `handled-by-handler` (a `completed` task the recipient's handler took).
 
 **Usage per chain.** A recipient's turn runs under the hub session key `task-<projectId>-a2a-<correlationId>`. The sandbox analytics endpoint returns the attempt's `taskId` with each LLM call, and the hub's AI-usage sync stores it with the derived `a2aCorrelationId` on `rocketchat_ai_usage_logs` (rows synced before this field existed have neither). Admin → Engagement → AI usage shows "via chain <id>" under the user, filters by **Chain**, and the CSV export carries `taskId` and `a2aCorrelationId`; the REST routes `engagement-dashboard/ai-usage/*` take `?a2aCorrelationId=`. Cost per chain is `sum(totalCostUSD)` over rows with that id; cost per sender is a join of those rows with `rocketchat_agent_a2a_messages` on the chain id.
 
@@ -133,7 +135,7 @@ Accepting a send is not delivering it: `send` answers with every row `queued`, a
 7. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. It may be answered by the owner on the card, or through `POST agents.a2a.approvals.decide { rowId, option }` by the addressed bot when that bot is an active super agent whose principal is the approver (the super agent kill switch is consulted); the first decision wins, through the same one-time resolution as the click. A `needs-approval` is never decided by a bot. A question without options is an ordinary message to its recipient.
 8. **Loop guard.** A decision request from B to A is refused with `a2a-decision-ping-pong` while A has a pending decision request addressed to B on the same chain, whether or not it carries `replyTo`. No new cap exists; hop, chain and quota limits are unchanged.
 9. **Refusals on the card path.** `a2a-approver-missing` (the owner no longer exists), `a2a-approver-inactive` (deactivated), `a2a-approver-unreachable` (in neither room). The Universal Assistant is not consulted: `a2a-ub-disabled` and `a2a-approver-not-admitted` no longer occur here. The sender's agent room (and the chain thread when it exists) says why a card was not delivered.
-10. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`; on approval the peer changes its own triggers and answers a `result`. The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
+10. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`, where `trigger` holds the `trigger.js` fields (`id` for update and remove, `type`, `name`, `schedule`, `timezone`, `prompt`, optional `room`); on approval the peer changes its own triggers and answers a `result` with the trigger id and the room it runs in. The peer creates the trigger in its own agent room (`trigger.js --room agent`, accepted from any [room-bound session](./trigger-api-reference.md#authorization)) unless `trigger.room` names a room, so the asker sends the request from the room it is in, a team room included. The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
 
 ## Prompt block
 
@@ -327,7 +329,7 @@ Returned as `errorType` with HTTP 400 or 403.
 |-------|-----|---------|
 | `GET agents.a2a.teams.mine[?botId=]` | a bot (its own data); a person passes `botId` and must own the bot or hold `view-user-administration` | `{ asOf, teams: [{ teamId, name, roomId, enabled, members: [{ botId, username, name, runtime, superAgent, you }] }], ownerAgents: [{ botId, username, name, runtime, superAgent }] }`: every agent team the bot is on (turned-off teams flagged) and its owner's other agent bots |
 | `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
-| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, attempts, ts, closedAt, text, data?, approval?` |
+| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=&mine=true&approval=pending` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, why, fix, attempts, ts, closedAt, text, data?, approval?`. `why` and `fix` are the plain-language reason and the next step for `statusReason` (see [Agent Routines](./agent-routines.md#when-a-routine-hands-work-to-another-agent)). `mine=true` narrows any caller, an admin included, to rows whose sender or recipient is a bot they created or where they are the chain's human, the sender's human or the approver; it never widens the role scope. `approval=pending` keeps the approval requests that are still open and have a card. The approver of a request they do not own as chain human reads `data.approval { action, draft }` and nothing else of `data` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
 | `POST agents.a2a.await { correlationId, roomId, teamId?, replyTo?, messageId, deadlineAt, text, match? }` | an eligible agent bot in a chain it takes part in | Register an await; returns `callbackPath` and `callbackSecret` once. See [Await and callback](#await-and-callback) |
 | `POST agents.a2a.await.cancel { rowId }` | the registering bot, the chain's accountable human, or a holder of `view-user-administration` | Drain a waiting await without a wake |
@@ -335,6 +337,9 @@ Returned as `errorType` with HTTP 400 or 403.
 | `GET agents.a2a.teams.status?teamId=` | `manage-agent-teams` holder | `{ teamId, enabled }` |
 | `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot). Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
 | `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
+| `GET agents.a2a.teams.list` | a person (a bot gets `a2a-not-authorized`) | `{ teams: [{ teamId, roomId, enabled }] }`: the agent teams the caller is a member of (ordinary teams are absent); feeds the "Agent team" tag in the sidebar |
+| `GET agents.a2a.teams.overview` | a person | Per agent bot the caller created: every team it is in, with its roster, whether it is rostered, the caller's team role and the caller's risk tiers; feeds the Teams tab of the [Agents page](./agents-page.md) |
+| `POST agents.a2a.approvals.decide { rowId, decision \| option }` | the row's approver only (not an admin, not a bot) | Decide an open approval request or question as the card button would: `{ type: "none" }` once decided, `{ type: "error", text }` with the reason otherwise. Same effects as the card: decision row, card annotation, chain-thread line |
 | `GET agents.a2a.teams.handover.preview?teamId=` | a person who owns a bot on the roster, the initiator or recipient of the open or last handover, or a holder of `view-user-administration` | `{ canStart, refusal?, move, skip, open?, last? }`: the caller's own bots that would move (runtime, super agent, sandbox host of the agent room, triggers, other rooms), the other roster bots with a skip reason, and the open and last handover. Full `open`/`last` details (stages, errors, vault key names) go only to that handover's initiator, recipient and admins; anyone else gets `{ status, expiresAt }` |
 | `POST agents.a2a.teams.handover.start { teamId, recipientUsername }` | a person who built bots on the roster and holds `owner` in the team room | Starts one invite per team; see [Handing over an agent team](#handing-over-an-agent-team) |
 | `POST agents.a2a.teams.handover.cancel { handoverId }` | the initiator while pending; a holder of `view-user-administration` while pending or running | Cancels the invite, or stops a running handover (bots already moved stay moved) |
@@ -347,6 +352,48 @@ Returned as `errorType` with HTTP 400 or 403.
 2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
 3. A bot that leaves or is removed from the team leaves the roster.
 4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
+5. In the team room, every bot row of the member list carries **On agent team** or **Not on agent team**, and the room header shows a pill ("Agent team on · N bots", "Agent team off", or "Bot-to-bot paused workspace-wide" when the kill switch is off) that opens the member list. Both appear only in a team that is an agent team, and any team member sees them. The same roster actions, with the owner's risk tiers, are on the Teams tab of the [Agents page](./agents-page.md).
+
+### What the owner sees
+
+Why this exists: `send --wait` watches a task for a few seconds only, so a task that fails later, after the sender's turn has ended, left the owner with the sender's earlier "delivered" or "pending". The hub now says so itself, in plain words, where the owner is already looking.
+
+**Platform lines.** The hub posts them as the **Universal Assistant**, so no bot can pass as one. Each carries a marker (`privosMetadata.a2a`) that the client draws as a one-line record ("sender ⇄ receivers" with a verb such as "Not delivered to", "Waiting for approval from", "Approved by", "Denied by"). Where they appear:
+
+| Where | What is posted |
+|---|---|
+| The chain thread in the destination room (the team thread) | Every platform line of the chain |
+| The sender's own agent room, or the owner's Universal Assistant DM | A copy of the undelivered line, only when the sender acted there and the room still has that member (an approval-card refusal goes to the agent room only). A public channel or another team the sender acted in never gets a copy |
+
+The lines, in the order a task meets them:
+
+- **Undelivered** (`undelivered:` plus the reason and the fix): the hub gave up delivering an urgent task a bot sent. The text for each cause is one table in the hub, `server/services/a2a/a2a-status-reasons.ts`; `agents.a2a.list` returns the same words as `why` and `fix` per row.
+- **Waiting for approval from @approver · expires <time>**: a `needs-approval` row exists. The time is in the approver's own UTC offset and a link opens the card in their Universal Assistant DM. It is posted once the chain thread exists.
+- **Approved by / Denied by @person** and **approval expired · final for 24 hours for this action**: the decision, from the card button or from the Agents page. The card in the Universal Assistant DM is annotated with the same outcome.
+- **Approval card could not be delivered** (one of the refusals below).
+- **Agent team switched off · queued tasks that will not be delivered: N**: one summary line per chain when someone turns the team off while tasks are queued. The sweep expires those rows without a line each.
+- A **stop** line ("chain stopped by @name"), an ordinary record rather than a Universal Assistant line: it is posted as the bot that stopped the chain, or as the chain's initiator when a person did. Stopping a chain expires its queued rows without a line each and wakes no sender.
+
+A runtime's own error text is never copied into a line: anything that is not a short code reads "the agent's runtime refused the turn".
+
+**The late-failure wake.** A sender that sent with `send --wait` has already told its owner "delivered" or "pending" by the time a queued task finally fails. The hub therefore wakes the sender **once**, as one turn in its own agent room, with the reason and the fix and the instruction to tell the owner and not to send again or message other agents. The turn has no `send` line to copy. It happens only when all of these hold:
+
+- the task was an urgent row a bot sent (rows the platform inserted and `fyi` rows say nothing), and the cause is a platform or runtime one (`machine` in the reason table); a task that expired, was stopped, or lost a member never wakes anyone;
+- the bot-to-bot kill switch is on, the sender is an agent bot (not the Universal Assistant) with an owner, and the sender has no trigger turn running;
+- the chain was not stopped and the team (if any) is still switched on;
+- no earlier wake for the same chain, sender and reason: the claim `senderNotifiedAt.<senderId>:<reason>` on the chain is a compare-and-set, so several recipients failing together wake the sender once. The row that won also gets `senderNotifiedAt`.
+
+Visibility never decides delivery: a line or a wake that fails to post leaves the row as it is.
+
+**Approval refusals.** A card that cannot be posted is refused at send time with one of three codes (the Universal Assistant is not consulted on the card path, see the refusal list above). No row is stored and nothing is final for 24 hours, so the sender can try again once the cause is fixed. The refusal names the cause and the fix; the same text is posted as a line in the sender's agent room and, when it exists, in the chain thread.
+
+| Code | Cause | Who fixes it |
+|---|---|---|
+| `a2a-approver-missing` | The owner of the agent that needs the decision no longer exists | A workspace admin gives the agent a new owner |
+| `a2a-approver-inactive` | That owner is deactivated | Reactivate the owner or give the agent a new owner |
+| `a2a-approver-unreachable` | That owner is in neither the agent room nor the room of the chain | The owner joins the room of the chain, or the work starts from the agent room |
+
+**Agents page.** Everything above, per owner, is also on [the Agents page](./agents-page.md): the Activity tab lists the owner's rows with `why` and `fix`, and an approver reads the draft and decides there without opening the card.
 
 ### Handing over an agent team
 
@@ -386,15 +433,68 @@ page (Teams tab).
   `handover-recipient-self`, `handover-recipient-guest`, `handover-already-open`, `handover-card-failed`,
   `handover-not-found`, `handover-closed`, `handover-running-admin-only`.
 
+### What every teammate knows: Team context, capability cards and team memory
+
+Nobody types roles. On every turn of a bot that is on at least one enabled agent team (sandbox chat, trigger and A2A
+delivery turns, and harness turns), the hub appends a live **Team context** block to the identity it sends:
+
+- `## Teams`: each team, its **purpose** (the team room's description, else its topic, up to 300 characters) and every
+  roster bot with its bot id, owner and **capability card**. A card is derived from the bot's own profile at render time:
+  the first sentence of its Purpose (up to 200 characters), up to five Knowledge Areas, its runtime, and the super-agent
+  flag. Editing a roster bot's profile re-renders its teammates; a team room topic change re-renders the roster.
+- `## Team memory (index)`: the team room's `RoomFiles/TeamMemory/MEMORY.md`, which the bots write themselves, in the
+  Claude Code memory layout (one fact per topic file next to it, one index line per topic). The index is capped at
+  200 lines / 16 KB (the rest is dropped with a marker), cached 5 minutes per team room, and injected inside a fenced data block (headings in it cannot
+  pose as platform sections). It is ordinary RoomFiles: the team room's people can read and edit it. Never put secrets there.
+- `## Team protocol`: teammates are bots; a chat message or @mention never reaches a bot, only the `privos-team` skill
+  does; hand work over with `send --kind task`, ask with `--kind question`, wait with `await`; check
+  `teams --workload` before assigning; record who does what in the team memory. A super agent also gets the coordinator
+  line: split the owner's request by card, one task per teammate, then await.
+
+The file copy of `IDENTITY.md` in the sandbox keeps its `## Teams` section for the agent's own reading; the live block
+replaces that tail on each turn. Only the hub-rendered span (between its markers) is replaced; the rest of the file, including notes after it, stays. Bots on no enabled team get nothing new.
+
+`GET agents.a2a.teams.workload?teamId=` (roster bots and the team's human members) returns
+`{ teamId, asOf, bots: [{ botId, username, open: { asSender, asRecipient }, lastActivityAt }] }`: open A2A rows per
+roster bot, counts and timestamps only.
+
+### Shared sandbox VM
+
+An agent team can run every roster bot in **one sandbox container**: each bot's agent room and every room it works in.
+Teammates share `/team` (a shared working directory), can read each other's project trees at
+`/projects/<projectId>/workspace`, and reach each other's processes on `localhost`. The container has the full dedicated
+tool set (Bash, subagents, MCP, hooks, vault env). It is one trust boundary: inside it, teammates share files, processes
+and credentials.
+
+- **Switch:** **Shared sandbox VM** under **Agent team** in the team's **Edit** panel, for holders of `manage-agent-teams`.
+- **Default:** on for an agent team switched on for the first time after this release, when it is eligible; existing
+  teams stay off until someone switches it on. If the automatic switch is skipped, the panel and the Teams card show why.
+- **Eligibility:** every roster sandbox bot has the same owner, resolves to the same sandbox host and that host reports
+  `teamCoreSupported`, and no bot is already in another shared-VM team (a bot can be in one shared-VM team at most).
+  A refusal (`error-agent-team-shared-sandbox-unavailable`) names the reason (`owners`, `host`, `unsupported`,
+  `other-team`) and the bots. A bot added later that does not qualify is listed as excluded with its reason and keeps
+  its own container; the team keeps working. Harness bots and the Universal Assistant never join the shared VM, even on a roster. A handed-over bot gets a new owner, so it is listed as excluded (`owners`) until the team is checked again.
+- **Verification:** a team groups only after a passing eligibility check stamped it with its owner and sandbox host.
+  Teams switched on before that check existed are re-checked once when the hub starts; a team that fails (for example a
+  roster with two owners) is switched off with the reason shown in the panel, and a bot whose owner later changes stops
+  grouping. A team never groups on a roster the check has not seen.
+- **Sandbox refusals at run time:** if the sandbox refuses the group for a bot (no team-core support, a conflicting group, or a sandbox key that may not set groups), the bot runs in its own container and is listed as excluded with the reason.
+- **Off:** each project moves back to its own container with its files, one project at a time when it is idle.
+- **Runtime:** the hub sends `runtimeGroup: "team:<teamId>"` on every dispatch and key push for every project of a grouped
+  bot; the proxy runs those projects in one team container (name prefix + `team-<teamId>`, for example `privm-<slug>-team-<teamId>` on a tenant). See the sandbox's `docs/architecture/team-core-sandbox-mode.md`.
+
 ### Sandbox and harness agents: the `privos-team` skill
 
 The skill ships in the sandbox template skills and, through the harness skills bundle, to bots paired through the ACP bridge. It reads the team and room from the prompt block (`--room` defaults to `PRIVOS_ROOM_ID`) and the credentials from the environment (egress proxy in sandbox mode, `Authorization: Bearer` otherwise).
 
-The agent does not have to look for ids: the hub renders `## Teams` (each agent team the bot is on, its id, its room and every roster bot with its bot id) and `## Owner's agents` into the bot's `IDENTITY.md`, which every agent-room turn already receives. A roster change, an Agent team switch, and a bot being created, renamed, deactivated or deleted re-push the affected bots' agent rooms one at a time and drop the hub's identity cache, so the next turn sees the change. `teams` is the live view of the same data.
+The agent does not have to look for ids: the hub renders `## Teams` (each agent team the bot is on, its id, its room and every roster bot with its bot id) and `## Owner's agents` into the bot's `IDENTITY.md`, which every agent-room turn already receives. A roster change, an Agent team switch, and a bot being created, renamed, deactivated or deleted re-push the affected bots' agent rooms one at a time and drop the hub's identity cache, so the next turn sees the change. `teams` is the live view of the same data. The per-turn Team context block above is what the agent actually reads.
 
 ```bash
 python3 scripts/team.py teams
 python3 scripts/team.py members --team TEAM_ID
+python3 scripts/team.py teams --workload                      # cards, owner, open work and last activity per teammate
+python3 scripts/team.py memory read --team TEAM_ID
+python3 scripts/team.py memory note --team TEAM_ID --topic who-does-what --text "@ops-bot owns deploys"
 python3 scripts/team.py send --to BOT_ID --kind task --text "Summarize the open incidents"   # from the agent room, on one team
 python3 scripts/team.py send --team TEAM_ID --to BOT_ID --kind task --text "Summarize the open incidents"
 python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_... --to BOT_ID --text "Done: 3 open"
@@ -406,7 +506,7 @@ python3 scripts/team.py cancel --row ROW_ID
 python3 scripts/team.py stop --correlation c_...
 ```
 
-From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. Rules the skill teaches the agent: register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
+From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. Rules the skill teaches the agent: choose a teammate by card and open work and send one `task` each, then `await`; record who does what with `memory note` (from the team room project, or from any project in a shared sandbox VM); register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
 
 ### External master agents: the `privos` CLI
 
@@ -427,3 +527,5 @@ Pair it with `privos subscribe` (read-only, human credentials) to watch the resu
 - [Trigger API Reference](./trigger-api-reference.md) — `agents.reply` and the other trigger routes
 - [Agent Harness Runtime](./agent-harness-runtime.md) — how harness bots are paired and woken
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md) — bot-key authentication
+- [Agents Page](./agents-page.md) — the owner's view of agents, teams, routines and bot-to-bot activity
+- [Agent Routines](./agent-routines.md#when-a-routine-hands-work-to-another-agent) — where the plain-language reasons come from

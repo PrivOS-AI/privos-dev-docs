@@ -71,19 +71,45 @@ through the same permission gates:
 
 A message the agent itself authored never re-engages it.
 
-## Sandbox mode: collocated vs dedicated
+## Sandbox mode: collocated, dedicated or team
 
-A room's agent runs in one of two sandbox modes, chosen per room (proxy-persisted project `mode`):
+A room's agent runs in one of three sandbox modes, chosen per room (proxy-persisted project `mode`):
 
 | Mode | Container | Built-in tools | Use |
 |---|---|---|---|
-| **collocated** (default on tenants seeded with collocation) | shared VM core for many rooms/bots | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill` only — `Bash`, `Task*` and `mcp__*` are **denied by policy** | cheap chat agents without shell skills |
-| **dedicated** | one container per `(room, bot)` | full set incl. `Bash`/`Task*` | agents whose skills run scripts (the hub `privos-list` / `privos-assistant` skills need `Bash`), and delegated reads (`DELEGATED_READ_AS_ASKER.md`) |
+| **collocated** (default on tenants seeded with collocation) | shared VM core for many rooms/bots | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill`, plus the in-process `Privos` tool — `Bash`, `Task*` and `mcp__*` are **denied by policy** | chat agents, including list/item/room work through `Privos` |
+| **dedicated** | one container per `(room, bot)` | full set incl. `Bash`/`Task*` and `Privos` | agents whose skills run local scripts or processes (`privos-publish`, `privos-team`, `agent-scheduler`, `privos-services`), and delegated reads (`DELEGATED_READ_AS_ASKER.md`) |
+| **team** | one container per agent team with **Shared sandbox VM** on, hosting every project of every roster bot | full set, plus a shared `/team` directory | teammates that build on each other's work (see [Shared sandbox VM](./bot-to-bot-protocol.md#shared-sandbox-vm)) |
+
+**The `Privos` tool.** Every core (collocated, dedicated, team) registers `Privos`, which runs the
+`@privos_ai/privos` CLI inside the core process with `{ args: string[] }`: `hub lists|items|stages|fields|rooms|
+messages|files|dm|owner|agents|triggers`, `hub items fields`, `hub api METHOD /api/v1/...` and `agents a2a`. Every call
+goes through the proxy `/egress` with the attempt's own proxy token, so the hub sees the same bot and room as the
+Python skill scripts. Writes need `--confirm`, `--room` defaults to the agent's room (`{room}` in `hub api`), `--file`
+is confined to the workspace, and credential or URL flags are refused. The platform `SKILL.md` files tell the agent
+to use it first and keep the Python scripts as the fallback where Bash exists.
 
 Symptoms of a skill room left collocated: the agent reports "no shell / Bash tool available", and
 the AI Chat window shows the `dedicated-mode-required` notice. Switching is an operator action on
 the tenant sandbox proxy (`POST /api/sandbox/projects/<projectId>/mode {"mode":"dedicated"}` then
 `/start`); the hub sends the room's `collocated` directive on every dispatch.
+
+## Agent bot profile and direct messages
+
+An agent bot is reached in its agent room, never by direct message.
+
+- The bot's user card and profile show **Owner** (the person who created it; the Universal Assistant shows the platform).
+- For a member of the bot's agent room the chat action reads **Open agent room** and opens it. For anyone else it is
+  disabled with "Only members of this agent's room can chat with it".
+- `/direct/<bot-username>` and `/direct/<rid>` of an existing DM with an agent bot send a member to the agent room and
+  show an error to anyone else; no DM is created or opened.
+- The server refuses to create a DM that includes an agent bot, for people and for bots
+  (`error-agent-bot-direct-message`, with `agentRoomId` only when the caller is a member of that room). A bot tool that
+  tries to DM a person gets this error and should post in the shared room or its agent room instead.
+- Messages into an existing DM with an agent bot are refused too, from the person and from the bot, so no new unread
+  DM traffic appears; existing DM entries stay in the sidebar and open the agent room (member) or an error.
+- The Universal Assistant, room default bots and MCP app execution bots are not covered by this rule; the Ask Assistant
+  DM and an MCP app's `send_message` to a user work as before.
 
 ## Context Files
 
@@ -106,6 +132,26 @@ Friendly and professional
 - Product FAQ
 - Billing
 ```
+
+The hub renders this file from the agent's profile on every bot-key push. When the bot has a creator, an
+`Owner: @<username>` line follows the `Name:` line. The stored file holds the persona and the Teams section only.
+
+**Prompt render.** What a turn receives as `<system_identity>` is the stored copy plus platform blocks added at
+prompt-build time, never written to the file. The Team context block comes on every turn; the routing rules and the
+Working Principles only on the turn that starts a sandbox session (a new task or an agent switch) and on every trigger
+fire, so a long session carries them once:
+
+- the live **Team context** block for a bot on an enabled agent team (capability cards, team memory index, team
+  protocol rules and the **Route what you find** rules: findings outside the bot's scope that are a business risk or
+  opportunity go to the teammate whose card or open task they match, as one `FYI for <agent>: … | Source | Risk or
+  opportunity (impact) | Suggested action` message, answered with `Known`, `Taking it: <task>` or `Not relevant`);
+- the **Working Principles**: memory tiers, feedback into rules, facts before claims, autonomy boundaries,
+  unattended-run discipline (`NO_REPORT`, run log, ledger dedupe, rate caps, declared services instead of ad-hoc
+  daemons) and communication rules, under 4 KB. Every agent-room bot gets them at session start; the Universal
+  Assistant and voice prompts do not.
+
+Workspace mechanics (where files, the rules file `MEMORY.md` and skills live) stay in the sandbox `PRIVOS.md`
+template.
 
 ### CLAUDE.md
 

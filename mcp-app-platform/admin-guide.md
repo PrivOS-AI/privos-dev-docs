@@ -135,6 +135,18 @@ Configurable per app in Admin → Apps → Settings:
 | `owner` | Room owners |
 | `leader` | Room leaders |
 
+## Agents and Other Apps
+
+Room agents and other apps' servers can call an app's tools. Workspace admins control two switches:
+
+- **Agents and other apps may call this app**, per room, on by default, in the room's app settings.
+- **This app may call other apps**, per calling app, on by default, in the app's admin settings.
+
+Two settings control enforcement: `MCP_Apps_Agent_Guard_Mode` (`enforce` by default, `off` is a kill switch) and
+`MCP_Apps_Shared_Tools_Mode` (`off` by default, then `audit` and `enforce`). Under `off` and `audit` the switches do not
+stop other apps' servers; they do stop agents. An app update that shares more tools needs the workspace owner's
+consent. See [Agents and App-to-App Calls](./agents-and-app-to-app-calls.md).
+
 ## Installing from a Room
 
 1. In a room, click the **layers icon** ("+" menu) in the tab bar

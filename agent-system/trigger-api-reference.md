@@ -14,6 +14,7 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.triggers.update` | Yes | Update an existing trigger |
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
 | POST | `/v1/agents.triggers.run` | Yes | Manually fire a trigger |
+| GET | `/v1/agents.handlers.list` | Yes | List the services of the agent room's runtime, for the handler picker (`wake=true` may start the runtime; see [Agent Settings UI](./agent-settings-ui.md#then-what-runs)) |
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
 | POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`, `await`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
 | POST | `/v1/agents.a2a.callback/:token` | No | One-time callback that wakes an agent waiting in a bot-to-bot chain; not a trigger, see [Await and callback](./bot-to-bot-protocol.md#await-and-callback) |
@@ -34,6 +35,25 @@ restore: only its owner, an administrator (`view-user-administration`) or the ag
 room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`. Every
 `add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row.
 
+**Room-bound sessions.** A sandbox session bound to a room other than the agent's own agent room (a mention reply, a
+room-scoped cron thread, an A2A turn in a team room) may `add`, `list`, `update`, `remove` and read the prompt history of
+triggers scoped to exactly one room: that room, or, for the agent itself only, a **cron** scoped to its own agent room.
+From the `agent-scheduler` skill the second one is `trigger.js add --type cron --room agent`; it runs as a live thread in
+the agent room, like any room-scoped cron. This is how an agent applies a peer's `trigger-change` request (see the
+[bot-to-bot protocol](./bot-to-bot-protocol.md#approval-flow)) whatever room it was woken in. The exception is cron-only
+because an event trigger ignores events from the agent's own room, and another caller bound to the room (an owner or
+leader through the header) does not get it. Global triggers (webhooks, whatever room the body names; handler crons;
+unscoped crons), multi-room triggers and filtered triggers are refused on `add` with `error-not-authorized` and hidden
+from `list`; they are managed in agent settings or from the agent room. A bound session cannot re-scope a trigger outside
+those rooms or add a filter on `update`. Super agents keep their stricter rule above.
+
+An agent-room cron written by a bound session (by `add`, or by an `update` that moves it there) carries
+`createdFromRoom`, the bound room; `update` cannot set or clear it. Bound sessions reach only agent-room crons with that
+mark, so crons the owner set in the agent room stay out of reach. The run of a marked trigger opens in the agent room,
+where the session is not bound, so every run (scheduled or manual) starts with an origin rule naming the room and
+forbidding trigger, handler, persona, credential and skill changes in that run. That rule is a prompt instruction, not a
+proxy binding.
+
 **Peer reads.** A bot calling `list` for another bot gets a reduced view (`peerRead: true`; no prompt text, filter,
 description, token, secret or error text; the fields are `id`, `type`, `name`, `enabled`, `needsReview`, `nextAction`,
 `handler.name`, `schedule`, `timezone`, `event`, `sourceRoomIds`, `lastRunAt`, `lastOutcome`, `createdAt`, `updatedAt`).
@@ -50,7 +70,7 @@ lets one bot write another bot's triggers: a change is an A2A request the peer r
 
 ## GET /v1/agents.triggers.list
 
-List all triggers for an agent. The list never returns `webhookSecret`; it returns `webhookToken`, which alone fires a legacy `agentic_response` webhook that has no stored secret, so treat the list output as sensitive. The privos CLI wraps these reads (`privos hub triggers list|get`) and prints only a fingerprint of the token.
+List all triggers for an agent, with `maxTriggers`, the most triggers one agent may hold. The list never returns `webhookSecret` (add and regenerate return it once); it returns `webhookToken`, which alone fires a legacy `agentic_response` webhook that has no stored secret, so treat the list output as sensitive. The privos CLI wraps these reads (`privos hub triggers list|get`) and prints only a fingerprint of the token.
 
 **Query Parameters:**
 
@@ -89,6 +109,7 @@ List all triggers for an agent. The list never returns `webhookSecret`; it retur
       "lastRunAt": null
     }
   ],
+  "maxTriggers": 20,
   "success": true
 }
 ```
@@ -154,6 +175,9 @@ An event trigger fires only for events the hub passes to the agent trigger dispa
 `notification.created` (filtered triggers only) and `file.created`, `file.updated`, `file.deleted`. Room, user, list item
 and folder events are accepted by `add` but do not fire. The message events other than `message.new`, and `message.mention`,
 `message.bot_mention` as trigger events, are not dispatched either; use a filter with `match.mention` to react to mentions.
+`a2a.task` (filtered `run_handler` triggers only) fires from bot-to-bot dispatch, not from the message stream: an urgent
+`task` another bot sends the agent runs the trigger's handler instead of a model turn; see
+[Agent Routines](./agent-routines.md#a-handler-that-takes-bot-to-bot-tasks).
 
 File events fire for an upload through the Files API and for a file written by a RoomFiles sync. The rules:
 
@@ -193,7 +217,7 @@ A filtered trigger can also run a handler script that screens each batch before 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `events` | string[] | Required, non-empty. `message.new` and/or `notification.created`. This replaces the trigger-level `event` |
+| `events` | string[] | Required, non-empty. `message.new` and/or `notification.created`, or `a2a.task` alone. This replaces the trigger-level `event` |
 | `subject` | string | `bot` (default) or `principal` (the agent's owner; super agents only) |
 | `rooms` | string[] or `"mirrored"` | Room ids you can access, or the rooms a super agent mirrors. For `principal` the default is `mirrored` and explicit ids must be mirrored rooms |
 | `includeDms` | boolean | `principal` only, default `true`: also evaluate the owner's one-to-one DMs |
@@ -209,6 +233,9 @@ Rules enforced by `add` and `update`:
   stores a rollback marker in `sourceRoomIds` so a hub without filter support never fires it; the current hub ignores it,
   and `update` ignores room-scope fields on a filtered trigger instead of applying them.
 - Only types are validated. Counts and windows must be positive, and no value has an upper bound.
+- `a2a.task` stands alone: `events` is exactly `["a2a.task"]`, `subject` is `bot`, `rooms` is not `"mirrored"`, `match`
+  holds only `senders` and `keywords`, and `coalesce` is refused. `cooldownSeconds` is accepted and ignored. It only does something on a
+  `run_handler` trigger.
 - A stored filtered trigger returns `filter` (normalised: defaults filled, keywords lower-cased) instead of `event`.
 
 **Response (cron/event):**
@@ -259,6 +286,11 @@ Rules enforced by `add` and `update`:
 | `promptTemplate is required for event triggers` | Empty prompt template |
 | `notification.created needs a filter` | `notification.created` used without a `filter` |
 | `filter.<field> ...` | A filter field has the wrong type or is not a known key |
+| `filter.events a2a.task cannot be combined with other events` | `a2a.task` listed with another event |
+| `filter.events a2a.task takes subject 'bot'` | `a2a.task` with `subject: principal` |
+| `filter.rooms 'mirrored' does not apply to a2a.task` | `a2a.task` with `rooms: "mirrored"` |
+| `filter.match.<key> does not apply to a2a.task` | `a2a.task` with `dm`, `mention`, `reply`, `hotRoom` or `notification` in `match` |
+| `filter.coalesce does not apply to a2a.task` | `a2a.task` with `coalesce` |
 | `Listening about the owner or in 'mirrored' rooms needs a super agent` | `subject: principal` or `rooms: "mirrored"` on an ordinary agent |
 | `A filtered trigger lists its events and rooms in the filter, not in event or sourceRoomIds` | `filter` sent together with `event`, `sourceRoomId` or `sourceRoomIds` |
 | `A trigger about the owner must be created by the owner or by the agent` | `subject: principal` created by someone else |
@@ -272,6 +304,7 @@ Rules enforced by `add` and `update`:
 | `handlers run in the PrivOS Sandbox; this agent runs on a harness` | `run_handler` on a harness agent |
 | `a room-scoped cron runs threads; a handler needs the global cron` | `run_handler` on a cron with `sourceRoomId(s)` |
 | `run_handler webhooks require the secret` | `run_handler` webhook without a stored secret |
+| `Room-bound sessions may only add triggers scoped to their own room or to the agent's own agent room (trigger.js --room agent); ...` | A [room-bound session](#authorization) adds a global, multi-room, other-room or filtered trigger (`error-not-authorized`) |
 | `only the owner, an admin or the agent in its room may attach a handler` | Caller is none of the three (`error-not-authorized`) |
 | `handler-not-found: no service "<name>" is declared in the agent room` | No such service in the agent room's project (`errorType` `handler-not-found`) |
 | `handler-not-found: service "<name>" is not a handler (kind <kind>)` | The service exists with another kind (`errorType` `handler-not-found`) |
@@ -460,13 +493,21 @@ Manually fire a trigger immediately. Updates `lastRunAt` when the fire started, 
 
 The trigger's prompt (or promptTemplate) is injected into the agent room with context `"Manual trigger run"`.
 
-**Response:**
+**Response:** the call answers when the run has started, not when it ends.
 
 ```json
-{
-  "success": true
-}
+{ "success": true, "started": true }
 ```
+
+A fire that did not start is still HTTP 200:
+
+```json
+{ "success": true, "started": false, "outcome": "skipped-active", "reason": "…", "errorType": "trigger-busy" }
+```
+
+`errorType` is `trigger-busy` when another fire holds the trigger's slot and `trigger-not-started` otherwise; `reason` (when
+present) is the runtime's code, for example `harness-offline`, `downloading` or `config-missing`. How the settings card
+words them: [Run now](./agent-settings-ui.md#run-now).
 
 **Errors:**
 
@@ -474,7 +515,6 @@ The trigger's prompt (or promptTemplate) is injected into the agent room with co
 |-------|-------|
 | `Trigger not found` | Trigger ID doesn't exist on this bot |
 | `Trigger has no prompt` | Trigger has neither prompt nor promptTemplate |
-| `Failed to inject trigger message` | Agent room or bot user not found, nothing started, or the same trigger is already running (`skipped-active`) |
 
 ---
 

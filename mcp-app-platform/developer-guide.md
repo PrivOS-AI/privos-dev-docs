@@ -161,6 +161,19 @@ counts. Declare it when a tool needs to know who is calling, and take the caller
 signed user token instead; see
 [Tools — Context › Signed user identity](./apis/tools-context.md#signed-user-identity).
 
+### Sharing tools with agents and other apps
+
+```json
+"toolAccess": { "mcpapp.crm.upsertContact": "shared" },
+"capabilities": { "verifiedActor": true, "caller_app": true, "cross_room": true }
+```
+
+`toolAccess` lists the tools agents and other apps may call; every key must be in
+`tools[]` and the only value is `"shared"`. `{}` means nothing is shared, and leaving
+the field out means not declared. `caller_app` and `cross_room` tell a tool which app
+called it and whether that app's bot is outside the room. See
+[Agents and App-to-App Calls](./agents-and-app-to-app-calls.md).
+
 ### UI build output and bundling
 
 Declaring a `ui://` resource (or, for an INSTANT app, `ui.entryPoints`) means
@@ -382,8 +395,8 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
-| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready |
-| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips and live theme saves — see [Theme Inheritance](./theme-inheritance.md)) |
+| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready; `hostCapabilities.theme` / `.locale` announce the theme-token and locale fields |
+| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, locale?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips, live theme saves and language switches — see [Theme Inheritance](./theme-inheritance.md) and [Locale Inheritance](./locale-inheritance.md)) |
 | `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `mcpapp.bot.sendMessage`, `mcpapp.db.create`). For lists/files/messages/rooms/users, use the REST API via `app.rest()` instead. |
 | `rooms/upload` | App → host | `{ roomId, fileName, base64Data, mimeType?, description?, uploadOnly? }` | `{ message: ... }` (default) **or** `{ file: { _id, name, type, size, url } }` (when `uploadOnly: true`) | Upload a file into a room using the host user's credentials. Default behavior also posts a user-authored message. Pass `uploadOnly: true` to upload only (no message) — useful when you want a bot to be the sole author of the resulting message via `mcpapp.bot.sendAttachment`. |
 | `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |

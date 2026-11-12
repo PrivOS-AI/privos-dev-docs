@@ -33,7 +33,7 @@ Send a message in an AI chat session, updating attached contexts automatically.
 | `message` | string | Yes | Message text |
 | `attachedContexts` | array | No | Array of attached contexts to track |
 | `context` | string | No | Optional context for AI instruction |
-| `referenceAnswer` | string | No | Optional reference answer |
+| `referenceAnswer` | string | No | Answers to the pending `AskUser` question: a JSON object keyed by question text. Submits the answers and resumes the paused run (see [Update Question Answers](#update-question-answers)) |
 | `contextPrefix` | string | No | Prefix for inserted context |
 
 **Context Object:**
@@ -392,34 +392,29 @@ Remove entity context from a session (unlinks from specific entity).
 POST /v1/ai-messages.updateQuestionAnswers
 ```
 
-Submit answers to pending questions in AI chat flow.
+Save progress on a pending `AskUser` form, one call per answered question when the form has several questions.
+This call **never resumes the agent**. To submit the answers and continue the run, send them with
+[`ai-messages.send`](#send-message) and `referenceAnswer`, then call `ai-messages.startGeneration` with the returned AI
+message id. Do not cancel the pending turn first: a `referenceAnswer` sent when no question is pending is acknowledged
+and dropped.
 
 **Body Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `sessionId` | string | Yes | Session ID |
-| `roomId` | string | Yes | Room ID |
-| `answers` | object | Yes | Answers to questions |
+| `answers` | object | Yes | Answers keyed by the exact `question` text of the pending question (not the `header`, not an index) |
+| `currentQuestionIndex` | number | No | Index of the question the form shows next |
 
 **Request:**
 
 ```json
 {
   "sessionId": "SESSION_456",
-  "roomId": "ROOM_123",
   "answers": {
-    "timeline": {
-      "header": "Timeline",
-      "answer": "Q2 2024",
-      "isCustom": false
-    },
-    "budget": {
-      "header": "Budget",
-      "answer": "$50,000",
-      "isCustom": true
-    }
-  }
+    "Which color theme?": { "header": "Color theme", "answer": "Blue", "isCustom": false }
+  },
+  "currentQuestionIndex": 1
 }
 ```
 
@@ -430,6 +425,30 @@ Submit answers to pending questions in AI chat flow.
   "success": true
 }
 ```
+
+**Errors:**
+
+| Code | When |
+|------|------|
+| `no-pending-question` | The session has no pending question (already answered, cancelled, or expired) |
+| `unknown-question` | A key in `answers` is not the `question` text of the pending question |
+| `credential-question-uses-secure-form` | The pending question asks for a credential; answer it through the secure form |
+| `error-secret-in-bot-thread` | An answer looks like a secret |
+
+**Submitting the answers (resumes the run):**
+
+```json
+POST /v1/ai-messages.send
+{
+  "sessionId": "SESSION_456",
+  "roomId": "ROOM_123",
+  "content": "",
+  "referenceAnswer": "{\"Which color theme?\":\"Blue\"}"
+}
+```
+
+`referenceAnswer` is a JSON string of an object keyed by question text; a multi-select answer is an array of labels.
+Keep the entity fields (`entityType`, `entityId`, `flowChatId`, ...) the session was started with.
 
 ---
 
