@@ -358,14 +358,17 @@ There is no `USER_SELECT` or `MEMBER_SELECT` type.
 | `NUMBER` | Numeric input | `42` |
 | `DATE` | Date picker | `"2024-01-15"` |
 | `DATE_TIME` | Date + time picker | `"2024-01-15T10:00:00.000Z"` |
-| `SELECT` | Single select from options | `"High"` |
-| `MULTI_SELECT` | Multiple select | `["A", "B"]` |
+| `SELECT` | Single select from options | `"opt_high"` (an option `_id`) |
+| `MULTI_SELECT` | Multiple select | `["opt_a", "opt_b"]` (option `_id`s) |
 | `USER` | Single user reference | `"USER_ID"` |
 | `CHECKBOX` | Boolean checkbox | `true` |
 | `URL` | Link | `"https://example.com"` |
 | `FILE` | Single file reference | file ref object |
 | `FILE_MULTIPLE` | Multiple file references | array of file ref objects |
 | `DOCUMENT` | Rich text document | `[{"_id": "...", "content": "..."}]` |
+
+SELECT and MULTI_SELECT values are stored exactly as sent and are not checked against the options. The Hub UI shows
+only values that are option `_id`s; give options a stable `_id` (your app's own code) and write that `_id`.
 | `ASSIGNEE` | User(s) assigned to the item — see [Assignee values](#assignee-field-values) below | `"USER_ID"`, `{"_id": "USER_ID"}`, or an array of either |
 | `DEADLINE` | Due-date style field | `"2024-01-15"` |
 | `DEPENDENCIES` | Links to other items | array of item IDs |

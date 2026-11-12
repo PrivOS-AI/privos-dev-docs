@@ -514,6 +514,8 @@ PUT /api/v1/internal/rooms/:roomId/lists/:listId/fields/:fieldId
 |-----------|------|----------|-------------|
 | `data` | object | Yes | Partial field update |
 
+Only the properties present in `data` (`name`, `type`, `options`, `order`, `displayFormat`) change; the rest of the field is kept, and a `null` property counts as not sent. Sending `options` replaces the whole option list. A field cannot change to or from `DEPENDENCIES`. Changing the type keeps stored item values as they are.
+
 **Response:**
 
 ```json

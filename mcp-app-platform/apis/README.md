@@ -18,11 +18,12 @@ Detailed API reference organized by category.
 
 ## PrivOS MCP Tools
 
-REST-first is the primary integration path: data operations (lists, items, files,
-folders, messages, rooms, users, stages) are reached through `/api/v1` via the granted
+Files, folders, messages, rooms and users are reached through `/api/v1` via the granted
 OAuth scopes — see [Auth & REST Integration](../auth-and-rest-integration.md) and the
-REST endpoints above. The MCP tools below remain for capabilities with **no REST
-equivalent**:
+REST endpoints above. Lists, stages, items and their fields have a complete MCP tool set,
+which is the supported path for an app's installation bot: the room-scoped list REST routes
+need a room owner/admin session. The other MCP tools below cover capabilities with
+**no REST equivalent**:
 
 | Document | Description |
 |----------|-------------|
@@ -30,6 +31,8 @@ equivalent**:
 | [App Storage Tools](./tools-app.md) | `mcpapp.app.*` — per-app `localData` key/value store |
 | [Bot Tools](./tools-bot.md) | Use the manifest-declared, admin-created installation-owned agent bot in approved Rooms, or legacy token-selected messaging |
 | [Database Tools](./tools-database.md) | `mcpapp.db.*` — schema, CRUD, query, aggregate; `mcpapp.objects.*` — content-addressed object storage |
+| [Lists & Items Tools](./tools-lists.md) | `mcpapp.lists.*` — CRUD for lists, items, field definitions, field options and item field values |
+| [Stages Tools](./tools-stages.md) | `mcpapp.stages.*` — kanban stages |
 
 ## Authentication
 
