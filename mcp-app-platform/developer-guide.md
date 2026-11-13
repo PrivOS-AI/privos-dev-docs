@@ -214,10 +214,49 @@ picking arbitrary values:
 When `runtime` is present, `resources.memoryMb` and `resources.cpus` **must
 equal** the `recommendedSize` row exactly — the Portal rejects a manifest that
 declares a recommendation and then requests different resources.
-`minimumSize` is the floor the app is tested against; a buyer running below
-`recommendedSize` (once a size picker ships) is trading cost for OOM risk they
-accept themselves, not the app's fault. `tmpSizeMb` is unrelated to sizing and
-not part of this table.
+`minimumSize` is the floor the app is tested against. The workspace admin picks a
+size at install, and can resize later in Hub admin → Apps → the app's settings →
+Runtime size, never below `minimumSize`. A workspace running below
+`recommendedSize` is trading cost for OOM risk it accepts itself; that is not the app's
+fault. `tmpSizeMb` is unrelated to sizing and not part of this table.
+
+#### Reading your limits at runtime
+
+The size is **not** passed to the container as an environment variable. Read the
+limits the kernel enforces from the container's cgroup instead. A resize recreates
+the container, so reading them once at startup is enough. There is no swap: going
+over the memory limit kills the container (OOM), along with all the work in flight.
+
+```js
+import { readFileSync } from 'node:fs';
+import os from 'node:os';
+
+const read = (path) => { try { return readFileSync(path, 'utf8').trim(); } catch { return null; } };
+
+export function runtimeLimits() {
+	// cgroup v2 (PrivOS fleet), with a cgroup v1 fallback for older self-hosted Docker hosts.
+	const memRaw = read('/sys/fs/cgroup/memory.max') ?? read('/sys/fs/cgroup/memory/memory.limit_in_bytes');
+	const memBytes = memRaw && memRaw !== 'max' && Number(memRaw) < 2 ** 60 ? Number(memRaw) : os.totalmem(); // no limit → host RAM
+	let cpus = os.availableParallelism();
+	const cpuMax = read('/sys/fs/cgroup/cpu.max'); // "400000 100000" = 4 CPUs, "max 100000" = unlimited
+	if (cpuMax) {
+		const [quota, period] = cpuMax.split(' ');
+		if (quota !== 'max') cpus = Number(quota) / Number(period);
+	} else {
+		const quota = Number(read('/sys/fs/cgroup/cpu/cpu.cfs_quota_us'));
+		const period = Number(read('/sys/fs/cgroup/cpu/cpu.cfs_period_us'));
+		if (quota > 0 && period > 0) cpus = quota / period;
+	}
+	return { memoryMb: Math.floor(memBytes / 1048576), cpus };
+}
+```
+
+Use the numbers to cap expensive work, such as concurrent browser sessions, jobs or workers.
+Refuse new work cleanly once the cap is reached, and say that an admin can resize. Base
+the cap on `memoryMb`/`cpus`, not on the size name, so it stays correct on a
+self-hosted install and if the table changes. To test locally, run the container
+with the same limits as a size, for example `docker run --memory=2g --memory-swap=2g --cpus=2 …` for L.
+`/tmp` is a RAM-backed tmpfs (`tmpSizeMb`) and counts against the same memory limit.
 
 ## 6. App Server Requirements
 
@@ -395,8 +434,8 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 
 | Method | Direction | Params | Returns | Purpose |
 |--------|-----------|--------|---------|---------|
-| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready |
-| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips and live theme saves — see [Theme Inheritance](./theme-inheritance.md)) |
+| `ui/initialize` | Host → app | `{ hostCapabilities }` | — | First message after iframe load — signals host is ready; `hostCapabilities.theme` / `.locale` announce the theme-token and locale fields |
+| `HOST_CONTEXT_CHANGED` | Host → app | `{ userId, roomId, roomName, theme, surfaceColor, themeTokens?, locale?, ... }` | — | Push host context (sent once after `ui/initialize`, then on any change, incl. mode flips, live theme saves and language switches — see [Theme Inheritance](./theme-inheritance.md) and [Locale Inheritance](./locale-inheritance.md)) |
 | `tools/call` | App → host | `{ name, arguments }` | tool-specific | Invoke a PrivOS MCP tool (e.g. `mcpapp.bot.sendMessage`, `mcpapp.db.create`). For lists/files/messages/rooms/users, use the REST API via `app.rest()` instead. |
 | `rooms/upload` | App → host | `{ roomId, fileName, base64Data, mimeType?, description?, uploadOnly? }` | `{ message: ... }` (default) **or** `{ file: { _id, name, type, size, url } }` (when `uploadOnly: true`) | Upload a file into a room using the host user's credentials. Default behavior also posts a user-authored message. Pass `uploadOnly: true` to upload only (no message) — useful when you want a bot to be the sole author of the resulting message via `mcpapp.bot.sendAttachment`. |
 | `OPEN_LINK` | App → host | `{ url }` | — | Open external URL in new tab (`noopener,noreferrer`) |
