@@ -4,6 +4,11 @@ Every built-in MCP tool that returns a list can answer with one common envelope:
 read the next page. You ask for it with `paginate: true`. Without that flag a tool keeps the response shape it has always
 had, so existing apps keep working unchanged.
 
+**Availability:** live on the DEV channel and all OFFICIAL tenants from `v7.15.42-tenant.464` (hub PR #692).
+
+**The envelope is opt-in for now, and will become the default.** Migrate your list calls before the announced switch:
+after it, the old shapes are no longer returned. See the announcement guide for the migration steps and traps.
+
 ## The envelope
 
 ```json
