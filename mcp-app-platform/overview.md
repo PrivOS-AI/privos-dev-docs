@@ -81,6 +81,7 @@ PrivOS Hub Host
 | [Theme Inheritance](./theme-inheritance.md) | How an app inherits the workspace theme — `--base-*` token broadcast, `hostCapabilities.theme`, SDK auto-apply |
 | [Locale Inheritance](./locale-inheritance.md) | How an app learns the user's Hub language — `locale` on the context push, `hostCapabilities.locale`, translation and `Intl` formatting |
 | [Database API](./apis/tools-database.md) | `mcpapp.db.*` tools — schema, CRUD, query, references |
+| [Paging MCP list tools](./list-pagination.md) | `paginate: true` envelope (`limit`, `offset`, `total`, `hasMore`) for every built-in list tool |
 | [Agents and App-to-App Calls](./agents-and-app-to-app-calls.md) | `toolAccess`, who can call your tools, checking the caller |
 | [Admin Guide](./admin-guide.md) | Register direct/relay apps, configure install perms |
 | [Install and operate your own MCP app](./install-and-operate-your-own-mcp-app.md) | Pair a Relay app, verify the hub fingerprint, keep it running, update and uninstall it |

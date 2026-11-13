@@ -8,6 +8,20 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ## 2026-11-09
 
+### MCP list tools: opt-in pagination, Files tab rules on file and folder tools
+
+**Summary:** Every built-in MCP list tool accepts `paginate: true` and then answers
+`{ items, pagination: { limit, offset, total, hasMore, nextOffset, nextCursor } }` (default 50, max 200). Without
+the flag responses keep their old shape. `total` is `null` on an isolated list for members (a count would reveal hidden
+items) and when a count runs past 10 s; `mcpapp.db.query` / `db.count` stop at 10,000 and now say so (`totalCapped`,
+`capped`). `lists.getItems` no longer returns an empty page for offsets of 200 or more. MCP file and folder tools now
+apply the Files tab rules: `.`-prefixed names need `view-room-hidden-files`, and the folder of an isolated-list item
+needs access to that item. `folders.getContent` returns `childFiles`. Available on the Production version and the
+Develop version. The envelope becomes the **default on 2026-11-20**, so list calls must be migrated before then.
+Docs: [Paging MCP list tools](./mcp-app-platform/list-pagination.md).
+
+---
+
 ### MCP apps — the Hub UI language reaches embedded apps
 
 **Summary:** An MCP app could not tell which language the user reads the Hub in: it runs in a

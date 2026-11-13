@@ -61,7 +61,7 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `mcpapp.db.updateMany` | db:write | Update records matching filter |
 | `mcpapp.db.delete` | db:write | Soft-delete record by ID |
 | `mcpapp.db.deleteMany` | db:write | Soft-delete records matching filter |
-| `mcpapp.db.query` | db:read | Query with filters, sort, pagination |
+| `mcpapp.db.query` | db:read | Query with filters, sort, pagination (`paginate: true` for the common envelope) |
 | `mcpapp.db.count` | db:read | Count records matching filter |
 | `mcpapp.db.aggregate` | db:read | Aggregation (count/sum/avg/min/max) |
 | `mcpapp.db.populate` | db:read | Resolve reference fields (1-level) |
@@ -70,6 +70,10 @@ Tools apps can call via `callServerTool()` or React hooks:
 | `mcpapp.objects.get` | db:read | Read one exact object's metadata + content, integrity-verified |
 
 > **Database API:** See [apis/tools-database.md](./apis/tools-database.md) for full database and object-storage tool documentation with examples.
+>
+> **Paging:** every built-in list tool (database, lists, stages, files, folders, messages, room members) accepts
+> `paginate: true` and then answers `{ items, pagination: { limit, offset, total, hasMore, nextOffset, nextCursor } }`.
+> See [Paging MCP list tools](./list-pagination.md).
 >
 > **Data operations (lists, items, files, folders, messages, rooms, users):** call the hub
 > REST API via `app.rest()` — see [Auth & REST Integration](./auth-and-rest-integration.md).
