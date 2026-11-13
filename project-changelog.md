@@ -16,8 +16,9 @@ the flag responses keep their old shape. `total` is `null` on an isolated list f
 items) and when a count runs past 10 s; `mcpapp.db.query` / `db.count` stop at 10,000 and now say so (`totalCapped`,
 `capped`). `lists.getItems` no longer returns an empty page for offsets of 200 or more. MCP file and folder tools now
 apply the Files tab rules: `.`-prefixed names need `view-room-hidden-files`, and the folder of an isolated-list item
-needs access to that item. `folders.getContent` returns `childFiles`. Hub PR #692, live on the DEV channel and all OFFICIAL tenants from `v7.15.42-tenant.464`. Docs:
-[Paging MCP list tools](./mcp-app-platform/list-pagination.md).
+needs access to that item. `folders.getContent` returns `childFiles`. Available on the Production version and the
+Develop version. The envelope becomes the **default on 2026-11-20**, so list calls must be migrated before then.
+Docs: [Paging MCP list tools](./mcp-app-platform/list-pagination.md).
 
 ---
 
