@@ -293,6 +293,10 @@ it posting; the **decision gate** lets a cheap decision model drop a match befor
 - The turn runs, but no room sees anything: no placeholder, no reply, no error notice, no question box. The text it would
   have posted is kept on the trigger as `lastWouldPost` (at most 5,000 characters) with `lastOutcome: "would-post"`, and
   the times of the last 100 are kept for the card's 24-hour count. `NO_REPORT` or empty output is still `quiet`.
+- The prompt of an observed turn starts with a fixed line telling the agent not to post, send or write anywhere and to
+  end with the text it would have posted (`OBSERVE_MODE_LINE` in `agent-trigger-injector.ts`). The hub withholds the
+  final reply itself; a post the agent makes through its own tools (privos-chat, `team.py send`, list writes) is held back
+  only by that prompt line. The sandbox does not enforce it.
 - A handler trigger still runs its handler, which posts by itself if its script does; the model turn after it is
   observed, and the handler outcome then replaces `would-post` as usual.
 - "Fire now" runs observed. Switching back to live removes the kept text and times.
