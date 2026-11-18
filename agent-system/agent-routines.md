@@ -316,7 +316,7 @@ it posting; the **decision gate** lets a cheap decision model drop a match befor
 - Sent with an event fire that has no handler (a handler is its own gate), no mention or DM match in the batch, and a
   message to read; never with "Fire now".
 - The hub sends, with the sync attempt request: the platform questions, each led by the routine's rubric
-  (`targets_us`, `asks_for_action` and `direction_settled` are yes/no, `urgency` is a score from 1 to 4); a state
+  (`targets_us`, `asks_for_action` and `direction_settled` are yes/no, `urgency` is a score over four levels, `no time pressure`, `within the week`, `today`, `needs action now`, answered as the level index 0-3; the decision route refuses a score question without its levels); a state
   window, which is every message of the batch, oldest first (one message keeps 4,000 characters; a larger batch keeps
   the newest 8 at 1,200 each and says how many it left out), plus a bounded window of the newest one's thread or of the
   room's main line (ids and usernames kept, attachments, system messages and edit copies left out); the threshold; and
