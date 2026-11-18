@@ -435,7 +435,7 @@ Returned by `agents.triggers.list`; never accepted on `add` or `update`.
 |---|---|
 | `lastRunAt` | When the trigger last fired (cron and event: before the dispatch; webhook and manual run: after it) |
 | `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet`, `posted`, `failed`, `would-post` or `assessed-ignore`; see [outcome codes](./agent-routines.md#outcome-codes) |
-| `lastGate` | What the decision gate said on the last fire that carried it: `{ probabilities, cost, at }` (`probabilities` maps `targets_us`, `asks_for_action`, `direction_settled` to a probability and `urgency` to its level), or `{ skipped: true, reason, at }` |
+| `lastGate` | What the decision gate said on the last fire that carried it: `{ probabilities, cost, at }` (`probabilities` maps `targets_us`, `asks_for_action`, `direction_settled` to a probability and `urgency` to its level index, 0 (no time pressure) to 3 (needs action now)), or `{ skipped: true, reason, at }` |
 | `lastWouldPost`, `wouldPostAt`, `wouldPosts` | Observe mode: `{ text, at }` of the last turn that would have posted (text at most 5,000 characters), the times of the last 100 such turns, and `{ text, at }` of the newest 20, newest last (each text at most 2,000 characters) |
 | `lastError` | The failure code behind a `fallback` or `paused` (`exit-1`, `timed-out`, `owner-disabled`, …). Cleared by a `handled` or `woke` run; never holds output or payload |
 | `consecutiveFallbacks` | Fallbacks in a row; at 3 the next failing fire is `paused`. Reset by a successful run or any `update` |
