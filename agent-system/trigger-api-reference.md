@@ -33,7 +33,9 @@ All authenticated endpoints verify **bot ownership**: the requesting user must b
 A [super agent](./super-agent.md) adds a stricter rule for `list`, `add`, `update`, `remove`, `run` and the prompt-history
 restore: only its owner, an administrator (`view-user-administration`) or the agent itself from a session in its own agent
 room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`. Every
-`add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row.
+`add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row. On every agent, an
+`update` that changes whether a trigger runs, what it runs or how it is gated, and every `remove`, writes an
+`agent-trigger.changed` row ([audit](#observe-mode-and-the-decision-gate-mode-and-assess)).
 
 **Room-bound sessions.** A sandbox session bound to a room other than the agent's own agent room (a mention reply, a
 room-scoped cron thread, an A2A turn in a team room) may `add`, `list`, `update`, `remove` and read the prompt history of
@@ -365,7 +367,7 @@ Accepted on `add` and `update`, returned by `list`. Behaviour, the card and the 
 
 | Field | Rule |
 |---|---|
-| `mode` | `live` or `observe`. Live is stored as no field, so `list` returns `mode` only for `observe`. Switching to `live` also removes `lastWouldPost` and `wouldPostAt`. Refused with `mode-not-applicable` on a cron, a webhook with `nextAction: emit_event`, and a trigger that only answers mentions, DMs or bot tasks (a filter whose only predicates are `mention` and `dm`, an `a2a.task` filter, the legacy `message.mention` and `message.bot_mention` events) |
+| `mode` | `live` or `observe`. Live is stored as no field, so `list` returns `mode` only for `observe`. Switching to `live` also removes `lastWouldPost`, `wouldPostAt` and `wouldPosts`. Refused with `mode-not-applicable` on a cron, a webhook with `nextAction: emit_event`, and a trigger that only answers mentions, DMs or bot tasks (a filter whose only predicates are `mention` and `dm`, an `a2a.task` filter, the legacy `message.mention` and `message.bot_mention` events) |
 | `assess` | `{ "rubric": "<1-2000 characters>", "threshold": <number> }`; no other key. `threshold` defaults to 0.6 and is clamped to 0.5-0.95 when stored. `assess: null` removes it and `lastGate`. Refused with `assess-not-applicable` unless the trigger is a filtered event trigger listening to `message.new` that does not only answer mentions or DMs, and on a harness agent |
 
 - **Who.** Only a person who created the agent, or a holder of `view-user-administration`, may change either field. The
@@ -378,8 +380,17 @@ Accepted on `add` and `update`, returned by `list`. Behaviour, the card and the 
 - **Update.** The checks run on the trigger as it will be after the write, so a filter edit that would leave a stored
   gate or observe mode inapplicable is refused unless the same write removes it.
 - **Audit.** The `agent-trigger.created` row of every `add`, and on a super agent the `super-agent.trigger-change` row of
-  an `add` or `update`, record `mode` and `assess: { threshold }`, never the rubric. An `update` of an ordinary agent
-  writes no audit row, as for a handler change.
+  an `add` or `update`, record `mode` and `assess: { threshold }`, never the rubric. On every agent, an `update` that
+  changes `enabled`, the handler wiring (`nextAction` to or from `run_handler`, or the handler's name), `mode` or
+  `assess` writes one `agent-trigger.changed` row before the write:
+  `{ botId, triggerId, action: "update", type, by, changes }`. `changes` holds only what changed: `enabled`,
+  `nextAction`, `handler` (the name, or null), `mode` (`observe` or `live`) and `assess` (`{ threshold }` or null).
+  `by` is `agent` (the bot itself or another bot), `owner` (the person who created the agent), `admin` or `member`.
+  Every `remove` writes one with `action: "remove"`, the handler name when the trigger ran one, and the mode and
+  threshold it held. A prompt, schedule or filter edit alone writes none. Ids and settings only: never prompt or rubric
+  text.
+- **Export and import.** Both fields are exported and restored under these same rules; see
+  [Agent Routines](./agent-routines.md#observe-mode-and-the-decision-gate).
 
 ---
 
@@ -422,7 +433,7 @@ Returned by `agents.triggers.list`; never accepted on `add` or `update`.
 | `lastRunAt` | When the trigger last fired (cron and event: before the dispatch; webhook and manual run: after it) |
 | `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet`, `posted`, `failed`, `would-post` or `assessed-ignore`; see [outcome codes](./agent-routines.md#outcome-codes) |
 | `lastGate` | What the decision gate said on the last fire that carried it: `{ probabilities, cost, at }` (`probabilities` maps `targets_us`, `asks_for_action`, `direction_settled` to a probability and `urgency` to its level), or `{ skipped: true, reason, at }` |
-| `lastWouldPost`, `wouldPostAt` | Observe mode: `{ text, at }` of the last turn that would have posted (text at most 5,000 characters), and the times of the last 100 such turns |
+| `lastWouldPost`, `wouldPostAt`, `wouldPosts` | Observe mode: `{ text, at }` of the last turn that would have posted (text at most 5,000 characters), the times of the last 100 such turns, and `{ text, at }` of the newest 20, newest last (each text at most 2,000 characters) |
 | `lastError` | The failure code behind a `fallback` or `paused` (`exit-1`, `timed-out`, `owner-disabled`, …). Cleared by a `handled` or `woke` run; never holds output or payload |
 | `consecutiveFallbacks` | Fallbacks in a row; at 3 the next failing fire is `paused`. Reset by a successful run or any `update` |
 | `updatedBy`, `updatedAt` | The last editor |
