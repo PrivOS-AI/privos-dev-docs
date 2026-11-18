@@ -292,14 +292,21 @@ it posting; the **decision gate** lets a cheap decision model drop a match befor
 
 - The turn runs, but no room sees anything: no placeholder, no reply, no error notice, no question box. The text it would
   have posted is kept on the trigger as `lastWouldPost` (at most 5,000 characters) with `lastOutcome: "would-post"`, and
-  the times of the last 100 are kept for the card's 24-hour count. `NO_REPORT` or empty output is still `quiet`.
+  the times of the last 100 are kept for the card's 24-hour count. The texts of the newest 20 are also kept as
+  `wouldPosts` (each at most 2,000 characters, a longer one ending in `…`), so a period in observe mode can be read on
+  the card, not only counted. `NO_REPORT` or empty output is still `quiet`.
 - The prompt of an observed turn starts with a fixed line telling the agent not to post, send or write anywhere and to
   end with the text it would have posted (`OBSERVE_MODE_LINE` in `agent-trigger-injector.ts`). The hub withholds the
   final reply itself; a post the agent makes through its own tools (privos-chat, `team.py send`, list writes) is held back
   only by that prompt line. The sandbox does not enforce it.
 - A handler trigger still runs its handler, which posts by itself if its script does; the model turn after it is
   observed, and the handler outcome then replaces `would-post` as usual.
-- "Fire now" runs observed. Switching back to live removes the kept text and times.
+- "Fire now" runs observed. Switching back to live removes the kept texts and times.
+- Agent export and import carry `mode` and `assess` under the same rules as a write through the API, and never what
+  the trigger recorded (`lastGate`, `lastWouldPost`, `wouldPostAt`, `wouldPosts`, `lastOutcome`). An exported observed
+  trigger never comes back live: when observe cannot be kept on the restored trigger it is imported turned off, with a
+  notice. A gate that cannot be kept (a harness agent, a filter it does not apply to, a malformed value) is dropped
+  with a notice. A team archive goes through the same restore.
 - Not on a cron, a webhook that emits an event, or a trigger that only answers mentions, DMs or bot tasks.
 
 **The decision gate** (`assess: { rubric, threshold? }`):
@@ -331,7 +338,7 @@ it posting; the **decision gate** lets a cheap decision model drop a match befor
   a cron never runs observed.
 
 **On the card.** `observing · N would-post in 24 h` (with a note when a handler may still post), the last would-post text
-folded under it, `assessed-ignore · targets 0.42 · action 0.10 · settled 0.80 · $0.00002` after an ignore, and
+folded under it and the earlier kept ones in a second folded list, newest first, `assessed-ignore · targets 0.42 · action 0.10 · settled 0.80 · $0.00002` after an ignore, and
 `gate skipped: <reason>` after a skip. `lastGate` belongs to the last fire that carried the gate, so it can sit next to a
 newer `posted`.
 
