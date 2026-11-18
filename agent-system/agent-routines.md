@@ -345,8 +345,12 @@ newer `posted`.
 **Who may change them.** Only a person who created the agent, or a holder of `view-user-administration`. The agent
 itself, other owners or leaders of the agent room and any bot are refused, so an agent can never switch its own routine
 to live or loosen its gate. This follows the handler rule of [Who may wire a handler](#who-may-wire-a-handler) but is
-stricter: the agent in its own agent room may wire a handler, not change these two fields. A value sent back unchanged
-passes for any editor. Audit rows record `mode` and the threshold, never the rubric.
+stricter: the agent in its own agent room may wire a handler, not change these two fields. One write is open to anyone
+who may add a trigger, the agent itself included, because it only tightens: **adding a new trigger in observe mode
+without `assess`**. That is how an agent sets up a routine its owner asked to try first (`trigger.js add … --observe` in
+the `agent-scheduler` skill, which refuses `--observe` on `update`); only the owner or an admin then switches it to live,
+turns it off or removes it. A value sent back unchanged passes for any editor. Audit rows record `mode` and the
+threshold, never the rubric.
 
 **The `decider` model.** An alias on the central LiteLLM gateway, called through `POST /v1/systemone` (LiteLLM 1.104.2 or
 later). It points to Clef (`cloudflare/clef-flash`) on Cloudflare Workers AI; Jev through OpenRouter
