@@ -69,7 +69,9 @@ Every trigger renders as one generic card; nothing in it is specific to a routin
 | **Playbook** | the first `AgentFiles/routines/<name>.md` path found in the trigger's prompt field, as text |
 | Prompt | the full prompt of the trigger's type (`promptTemplate` for event, `prompt` otherwise) |
 | Next run | a pure interval (from the last run) or the instant of a pending one-time trigger |
-| Last run | `lastRunAt`. For a trigger **without** a handler, ` · ran, nothing to say` (`quiet`) or ` · ran, posted a reply` (`posted`) |
+| Last run | `lastRunAt`. For a trigger **without** a handler, the turn outcome: ` · ran, nothing to say` (`quiet`), ` · ran, posted a reply` (`posted`), ` · ran, failed` (`failed`), ` · ran in observe mode, kept what it would have posted` (`would-post`) or ` · assessed, not run` (`assessed-ignore`) (`turnOutcomeKey`) |
+| Observing | observe mode only: `observing · N would-post in 24 h` (the count reads with a plus at the hub's cap), the note `the handler still posts by itself if its script does` on a handler trigger, and `Last would-post (<time>)` with the kept text folded under it. See [observe mode](./agent-routines.md#observe-mode-and-the-decision-gate) |
+| Gate | decision-gate triggers only, from `lastGate`: `assessed-ignore · targets … · action … · settled … · $<cost>` after an ignore, or `gate skipped: <reason>` after the gate could not decide and the turn ran |
 | Last outcome | handler triggers only: `Last outcome: <lastOutcome> (<lastError>)` |
 | Handler last run | handler triggers only, and only after **Load handlers** was clicked in this tab session: `Handler last run: exit <code> in <duration>`, or `timed out after <duration>`. It comes from the `lastRun` the runtime keeps for the service (`handlerLastRunOf`); the card never fetches it by itself |
 | Run now | a button, except on a room-scoped cron and on an `emit_event` webhook (`canRunTriggerNow`) |
