@@ -186,12 +186,15 @@ turn ends. Values the hub actually writes:
 | `paused` | the breaker held the model turn back |
 | `quiet` | a turn ended with `NO_REPORT` or with empty output (every trigger, with or without a handler) |
 | `posted` | a turn ended with text that was posted |
+| `failed` | a turn ended with an error; the room got the platform's failure notice, never the error text |
+| `would-post` | a turn in [observe mode](#observe-mode-and-the-decision-gate) ended with text; nothing was posted |
+| `assessed-ignore` | the [decision gate](#observe-mode-and-the-decision-gate) said ignore; no turn started |
 
 The typing also lists `started`, `not-started` and `skipped-active` (`TriggerLastOutcome` in
 `packages/core-typings/src/BotTokens.ts`); the hub does not write them to the trigger today.
 
-On a handler trigger the dispatch writes `woke` or `fallback` after the model turn has finished, so it replaces the `quiet`
-or `posted` the turn wrote; `quiet` and `posted` are only the final word on triggers that run no handler.
+On a handler trigger the dispatch writes `woke` or `fallback` after the model turn has finished, so it replaces the
+outcome the turn wrote; the turn outcomes are only the final word on triggers that run no handler.
 
 `lastError` (never the handler's output, the payload or the runtime's `reason`) is one of:
 
@@ -276,6 +279,82 @@ What the hub does (`isQuietReply`, `handleComplete` in `agent-trigger-injector.t
 A playbook adopts it with one line: *otherwise reply exactly `NO_REPORT`*. A hub without this rule posts the word as a
 message, so adopt it only on a tenant that runs the hub with the rule.
 
+## Observe mode and the decision gate
+
+Why: a new routine posts on every match before its playbook is right, and a hot-room or keyword trigger starts a model
+turn, and a VM, for many messages that need nobody. **Observe mode** lets the owner watch a routine for a while without
+it posting; the **decision gate** lets a cheap decision model drop a match before any VM starts. Hub
+[#756](https://github.com/PrivOS-AI/privos-hub/pull/756) (`server/services/agent-trigger-assess-state.ts`,
+`agent-trigger-injector.ts`), sandbox [#377](https://github.com/PrivOS-AI/privos-sandbox/pull/377). Fields and refusals:
+[Trigger API Reference](./trigger-api-reference.md#observe-mode-and-the-decision-gate-mode-and-assess).
+
+**Observe mode** (`mode: "observe"`; the default is live):
+
+- The turn runs, but no room sees anything: no placeholder, no reply, no error notice, no question box. The text it would
+  have posted is kept on the trigger as `lastWouldPost` (at most 5,000 characters) with `lastOutcome: "would-post"`, and
+  the times of the last 100 are kept for the card's 24-hour count. `NO_REPORT` or empty output is still `quiet`.
+- The prompt of an observed turn starts with a fixed line telling the agent not to post, send or write anywhere and to
+  end with the text it would have posted (`OBSERVE_MODE_LINE` in `agent-trigger-injector.ts`). The hub withholds the
+  final reply itself; a post the agent makes through its own tools (privos-chat, `team.py send`, list writes) is held back
+  only by that prompt line. The sandbox does not enforce it.
+- A handler trigger still runs its handler, which posts by itself if its script does; the model turn after it is
+  observed, and the handler outcome then replaces `would-post` as usual.
+- "Fire now" runs observed. Switching back to live removes the kept text and times.
+- Not on a cron, a webhook that emits an event, or a trigger that only answers mentions, DMs or bot tasks.
+
+**The decision gate** (`assess: { rubric, threshold? }`):
+
+- Only on a filtered event trigger that listens to `message.new` and does not only answer mentions or DMs, on a sandbox
+  agent (a harness agent's turns never pass the sandbox proxy).
+- Sent with an event fire that has no handler (a handler is its own gate), no mention or DM match in the batch, and a
+  message to read; never with "Fire now".
+- The hub sends, with the sync attempt request: the platform questions, each led by the routine's rubric
+  (`targets_us`, `asks_for_action` and `direction_settled` are yes/no, `urgency` is a score from 1 to 4); a state
+  window, which is every message of the batch, oldest first (one message keeps 4,000 characters; a larger batch keeps
+  the newest 8 at 1,200 each and says how many it left out), plus a bounded window of the newest one's thread or of the
+  room's main line (ids and usernames kept, attachments, system messages and edit copies left out); the threshold; and
+  `model: "decider"`. The questions ask about any of the new messages, so an ignore drops the batch only when none
+  qualifies.
+- The sandbox proxy asks the decision model once, with the workspace's own gateway key, before any VM is acquired or
+  woken: `run` when every yes/no answer reaches the threshold, otherwise `ignore`. It answers with `gate` on the sync
+  response. Contract: the sandbox's `docs/architecture/sandbox-mode.md`, "Decision gate before an attempt".
+- On `ignore` no attempt exists: the hub drops its placeholders, posts nothing and records
+  `lastOutcome: "assessed-ignore"` with `lastGate: { probabilities, cost, at }`. An ignore does not start the filter's
+  cooldown, so the next message is not delayed by it. If the connection drops on a gated request and recovery finds no
+  attempt, it ends as an ignore with `reason: "answer-lost"` and no notice. On `run` it records `lastGate` the same way
+  and the turn posts as usual.
+- **Fail open.** Any gate failure (no provider configured, a timeout, a gateway error, a workspace key that is blocked or
+  not granted `decider`, a malformed answer) is `skipped` and the turn runs; the hub records
+  `lastGate: { skipped: true, reason, at }`. A message the hub cannot read sends no gate, and a result without `gate`
+  (an older sandbox) clears `lastGate`. A gate error never loses a fire.
+- **Never on an explicit request.** A batch with a mention or DM match runs live and ungated, whatever the trigger stores;
+  a cron never runs observed.
+
+**On the card.** `observing · N would-post in 24 h` (with a note when a handler may still post), the last would-post text
+folded under it, `assessed-ignore · targets 0.42 · action 0.10 · settled 0.80 · $0.00002` after an ignore, and
+`gate skipped: <reason>` after a skip. `lastGate` belongs to the last fire that carried the gate, so it can sit next to a
+newer `posted`.
+
+**Who may change them.** Only a person who created the agent, or a holder of `view-user-administration`. The agent
+itself, other owners or leaders of the agent room and any bot are refused, so an agent can never switch its own routine
+to live or loosen its gate. This follows the handler rule of [Who may wire a handler](#who-may-wire-a-handler) but is
+stricter: the agent in its own agent room may wire a handler, not change these two fields. A value sent back unchanged
+passes for any editor. Audit rows record `mode` and the threshold, never the rubric.
+
+**The `decider` model.** An alias on the central LiteLLM gateway, called through `POST /v1/systemone` (LiteLLM 1.104.2 or
+later). It points to Clef (`cloudflare/clef-flash`) on Cloudflare Workers AI; Jev through OpenRouter
+(`openrouter/typesafe/jev-1.14`) replaces it by changing the alias's model, with no code change. Each call is billed to
+the workspace key and tagged with the project in the gateway's spend log; the cost of an ignored fire is on the card. Operator steps
+(credential, grant, data-protection entry) live in the ops runbook.
+
+**Rejected here.**
+
+| Concept | Why not |
+|---|---|
+| A gate in the hub | The hub holds no workspace gateway key; calling the gateway from the hub would add a second credential path and configure LiteLLM in two places |
+| A gate in the VM | VMs hold no provider key (the proxy relays their model calls), and by then a VM has been acquired |
+| A per-runtime harness hook | It runs after the child has started and needs one hook per runtime; the proxy gate covers every runtime before anything starts |
+
 ## The `when` stage
 
 Triggers are documented in [Trigger Registry](./trigger-registry.md) and [Trigger API Reference](./trigger-api-reference.md).
@@ -336,6 +415,7 @@ new reason; a runtime's free-text error is never echoed.
 |---|---|
 | Dispatch, payload, outcome table, breaker | `server/services/agent-trigger-handler-dispatch.ts` |
 | Claim and release, quiet turn, `lastOutcome` for turns | `server/services/agent-trigger-injector.ts`, `server/services/agent-quiet-turn.ts` |
+| Observe mode and decision gate: applicability, questions, state window | `server/services/agent-trigger-assess-state.ts`; the gate call is sandbox `packages/proxy/src/services/decision-gate.ts` |
 | Wiring rules and messages | `server/lib/trigger-handler-rules.ts`, `app/api/server/v1/agent-trigger-endpoints.ts` |
 | Fire paths | `server/services/agent-event-trigger-handler.ts`, `server/cron/agentHeartbeat.ts`, the webhook and `agents.triggers.run` routes in `agent-trigger-endpoints.ts` |
 | Bot-to-bot tasks taken by a handler | `server/services/a2a/a2a-handler-stage.ts`, `closeHandledTask` in `server/services/a2a/a2a-dispatch.ts` |

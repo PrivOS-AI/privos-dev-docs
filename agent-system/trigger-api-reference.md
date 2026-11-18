@@ -130,6 +130,8 @@ Add a new trigger. Maximum 20 triggers per agent.
 | `description` | string | No | One line shown under the title |
 | `nextAction` | string | No | What a fire does: `agentic_response` (default), `run_handler`, or `emit_event` (webhook only). See [Running a handler](#running-a-handler-nextaction-and-handler) |
 | `handler` | object | With `run_handler` | `{ "name": "<service>" }`, the room service to run first |
+| `mode` | string | No | `live` (default) or `observe`. See [Observe mode and the decision gate](#observe-mode-and-the-decision-gate-mode-and-assess) |
+| `assess` | object | No | `{ "rubric", "threshold"? }`, the decision gate of a filtered `message.new` trigger. Same section |
 
 **Body Parameters (type=cron):**
 
@@ -356,6 +358,31 @@ agent builder chat ([Agent Builder](./agent-builder.md)) and by `trigger.js`
 
 ---
 
+## Observe mode and the decision gate (`mode` and `assess`)
+
+Accepted on `add` and `update`, returned by `list`. Behaviour, the card and the `decider` model:
+[Agent Routines](./agent-routines.md#observe-mode-and-the-decision-gate).
+
+| Field | Rule |
+|---|---|
+| `mode` | `live` or `observe`. Live is stored as no field, so `list` returns `mode` only for `observe`. Switching to `live` also removes `lastWouldPost` and `wouldPostAt`. Refused with `mode-not-applicable` on a cron, a webhook with `nextAction: emit_event`, and a trigger that only answers mentions, DMs or bot tasks (a filter whose only predicates are `mention` and `dm`, an `a2a.task` filter, the legacy `message.mention` and `message.bot_mention` events) |
+| `assess` | `{ "rubric": "<1-2000 characters>", "threshold": <number> }`; no other key. `threshold` defaults to 0.6 and is clamped to 0.5-0.95 when stored. `assess: null` removes it and `lastGate`. Refused with `assess-not-applicable` unless the trigger is a filtered event trigger listening to `message.new` that does not only answer mentions or DMs, and on a harness agent |
+
+- **Who.** Only a person who created the agent, or a holder of `view-user-administration`, may change either field. The
+  agent itself, other owners or leaders of the agent room and any bot get
+  `only the agent owner or an admin may change mode or assess` (`error-not-authorized`). Only a change is checked: a
+  value sent back as stored passes for any editor and writes nothing. Removing a trigger that is in observe mode or has
+  `assess`, or turning it off (`enabled` false), needs the same person and is refused otherwise with
+  `only the agent owner or an admin may remove or disable a trigger in observe mode or with assess`, so an agent cannot
+  swap its observed routine for a live copy. A removal is audited with the mode and threshold, never the rubric.
+- **Update.** The checks run on the trigger as it will be after the write, so a filter edit that would leave a stored
+  gate or observe mode inapplicable is refused unless the same write removes it.
+- **Audit.** The `agent-trigger.created` row of every `add`, and on a super agent the `super-agent.trigger-change` row of
+  an `add` or `update`, record `mode` and `assess: { threshold }`, never the rubric. An `update` of an ordinary agent
+  writes no audit row, as for a handler change.
+
+---
+
 ## Running a handler (`nextAction` and `handler`)
 
 Every trigger type can run a room service before, or instead of, the model turn. Behaviour, exit codes and fallback:
@@ -393,7 +420,9 @@ Returned by `agents.triggers.list`; never accepted on `add` or `update`.
 | Field | Meaning |
 |---|---|
 | `lastRunAt` | When the trigger last fired (cron and event: before the dispatch; webhook and manual run: after it) |
-| `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet` or `posted`; see [outcome codes](./agent-routines.md#outcome-codes) |
+| `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet`, `posted`, `failed`, `would-post` or `assessed-ignore`; see [outcome codes](./agent-routines.md#outcome-codes) |
+| `lastGate` | What the decision gate said on the last fire that carried it: `{ probabilities, cost, at }` (`probabilities` maps `targets_us`, `asks_for_action`, `direction_settled` to a probability and `urgency` to its level), or `{ skipped: true, reason, at }` |
+| `lastWouldPost`, `wouldPostAt` | Observe mode: `{ text, at }` of the last turn that would have posted (text at most 5,000 characters), and the times of the last 100 such turns |
 | `lastError` | The failure code behind a `fallback` or `paused` (`exit-1`, `timed-out`, `owner-disabled`, …). Cleared by a `handled` or `woke` run; never holds output or payload |
 | `consecutiveFallbacks` | Fallbacks in a row; at 3 the next failing fire is `paused`. Reset by a successful run or any `update` |
 | `updatedBy`, `updatedAt` | The last editor |
@@ -438,6 +467,8 @@ Update fields on an existing trigger.
 | `name`, `description` | string | No | Card title and subtitle |
 | `nextAction` | string | No | `agentic_response`, `run_handler` or `emit_event` (webhook only); see [Running a handler](#running-a-handler-nextaction-and-handler) |
 | `handler` | object | No | `{ "name": "<service>" }` |
+| `mode` | string | No | `live` or `observe`; see [Observe mode and the decision gate](#observe-mode-and-the-decision-gate-mode-and-assess) |
+| `assess` | object or null | No | `{ "rubric", "threshold"? }`; `null` removes the gate |
 
 Only provided fields are updated. At least one updatable field is required. The trigger records `updatedBy` (the caller's
 user id) and `updatedAt`. Writing the prompt field of the trigger's type removes a stray copy in the other field (a

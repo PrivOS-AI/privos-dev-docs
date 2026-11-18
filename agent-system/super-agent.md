@@ -9,9 +9,24 @@ the sandbox proxy egress, so the bot key never enters the VM.
 Nothing happens until an admin sets the flag on a bot. Operator steps (enable, disable, emergency stop, rollback) live in
 the ops runbook, not here.
 
-On an agent team, a super agent is told on every turn that it coordinates the team: it splits its owner's request by its
-teammates' capability cards and open work (`team.py teams --workload`), sends one `task` per chosen teammate and then
-awaits the results (see [What every teammate knows](./bot-to-bot-protocol.md#what-every-teammate-knows-team-context-capability-cards-and-team-memory)).
+## On an agent team
+
+A super agent on an agent team is told on every turn that it coordinates the team: it splits its owner's request by its
+teammates' capability cards and open work (`team.py teams --workload`), sends one `task` per chosen teammate whose text
+is the owner's own words for that part plus routing facts, and then awaits the results (see
+[What every teammate knows](./bot-to-bot-protocol.md#what-every-teammate-knows-team-context-capability-cards-and-team-memory)).
+
+Teammates answer with a [work state](./bot-to-bot-protocol.md#envelope). Two lines of the super agent rules the hub
+renders with its teams say what reaches the owner (`a2a-teams-mine.ts`,
+[hub #755](https://github.com/PrivOS-AI/privos-hub/pull/755)):
+
+- a result to the owner, and the summary of a `team.py report`, is one sentence with the outcome and the link; a blocker
+  is a second sentence; technical evidence stays in the chain or the file;
+- a teammate's unfinished draft is never announced as done: it relays `ready` results and `blocked` needs and keeps
+  `progress` internal.
+
+A person's reply in a chain thread reaches a super agent only when that person is its owner
+([A person's reply in a chain thread](./bot-to-bot-protocol.md#a-persons-reply-in-a-chain-thread)).
 
 ## Why this shape
 
@@ -339,6 +354,19 @@ Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hu
 | Trigger routes and authorship | `app/api/server/v1/agent-trigger-endpoints.ts` |
 | DM reply | `server/services/super-agent/dm-reply-drafts.ts` |
 | Owner reads | `server/services/super-agent/super-agent-owner-read.ts`, `app/api/server/v1/agents-super-agent-owner-read.ts` |
+
+## Rejected concepts
+
+Ideas that were weighed and deliberately not built. Re-open one only with new evidence. Protocol-level decisions are in
+[Bot-to-Bot Protocol, Rejected concepts](./bot-to-bot-protocol.md#rejected-concepts).
+
+| Concept | Why not |
+|---|---|
+| The bot as owner of every room its owner is in, whatever the owner's own role there | It would exceed the owner's authority. The mirror copies the owner's role, so where the owner is a plain member the bot is one ([Why this shape](#why-this-shape)) |
+| The bot joining the owner's direct messages | A one-to-one DM has a fixed pair of people; adding a bot turns it into a group conversation the other person never agreed to. The hub evaluates the owner's DMs itself (`includeDms`) and the bot answers [as the owner](#dm-reply-as-the-owner) without joining |
+| Per-contact or per-room approval lists for DM replies | Dropped by the owner when DM replies were designed, in favour of one switch per agent: approve every draft (the default) or auto for every DM |
+| Owner-editable platform prompt blocks, with a diff when the platform text changes | The hub injects the platform blocks and they cannot be overridden; the owner's own text lives in `MEMORY.md` and the profile, so there is nothing to diff |
+| A separate supervision panel | The [Agents page](./agents-page.md) already shows agents, teams, routines and activity, and its Activity tab opens with what needs the owner |
 
 ## Related
 
