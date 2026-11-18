@@ -56,8 +56,9 @@ The tab opens with what needs the owner. Rows carry the sender's [work state](./
 | **Done** | State `ready` or `dropped`, closed rows, and states a later report from the same bot replaced; the latest 10 |
 | **All activity** | The log below, unchanged |
 
-A state counts only as the latest one its bot reported on that chain, so a `blocked` answered by a later `ready` is
-done. A row shows its state and its need first and expands like a log row. Empty sections are hidden.
+A state counts only as the latest `result` its bot sent on that chain, with or without a state, so a `blocked`
+answered by a later `ready` (or by a later result without a state) is done. A stopped chain never shows under Needs you
+or In progress. A row shows its state and its need first and expands like a log row. Empty sections are hidden.
 
 A row click expands it: the message, the reason and the fix (`why`, `fix`), and actions. An **Approve** and **Deny** pair (or one button per option for a `question`) is shown only to the row's approver while the request is open, together with the action and the draft as plain text. A **Pending approvals** switch narrows the list to the requests waiting for the user (`approval=pending`). **Stop** is offered in the expanded row to the chain's human owner; a team moderator or an admin stops a chain by filtering to it and using the filter bar's Stop, the same as the admin log. The table is the one the admin bot-to-bot log uses (`components/a2a/A2aRowsTable.tsx`), without `mine` there.
 

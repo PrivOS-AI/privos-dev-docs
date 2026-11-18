@@ -73,14 +73,19 @@ A person who answers in a chain's thread without mentioning a bot reaches the te
 bot that happens to have posted the thread's root record. Source: `server/services/a2a/a2a-human-followup.ts` in the
 hub ([hub #755](https://github.com/PrivOS-AI/privos-hub/pull/755)).
 
-- **Who gets it.** Every bot that holds an open task on the chain: the newest `task` addressed to it whose newest
-  `result` from it is missing or in state `blocked`, `progress` or `waiting`. Each gets one urgent `message` row with
-  `origin: human`, `from` the person's user id and `replyTo` that task. The chain initiator gets one `fyi` row when it
-  holds no open task. The Universal Bot never gets one; a super agent only when the person is its owner.
+- **Who gets it.** Every bot that holds an open task on the chain: only its newest `task` decides, and that task is
+  open when its newest `result` from the bot is missing or in state `blocked`, `progress` or `waiting` (a closed,
+  expired or undeliverable newest task makes the bot no recipient, whatever older tasks say). The bot must also pass the
+  same checks a mention of it would pass (`server/services/agent-mention-gate.ts`): the room's agent switch, membership
+  of the chain room, a super agent's owner, and "Allow everyone using this Agent". Each gets one urgent `message` row
+  with `origin: human`, `from` the person's user id and `replyTo` that task. The chain initiator gets one `fyi` row when
+  it holds no open task. The Universal Bot never gets one.
 - **When nothing is inserted.** The kill switch is off, the text is empty, the chain is stopped or is an agent-room
-  await chain, the author is a bot, a bot is mentioned, the team is off, no task is open, or the chain cap refuses. The
-  reply is then routed as before, to the thread's root author. A thread that a bot already answers as its session
-  owner keeps that routing. An @mention keeps addressing whoever is mentioned.
+  await chain, the author is a bot, a bot is mentioned or quoted, the team is off, no task is open, no recipient passes
+  the mention checks, or the chain cap refuses. The reply is then routed as before: to the bot that owns the thread as
+  its session, else to the thread's root author. The follow-up is tried first even in a thread a bot owns. An
+  @mention or a quote keeps addressing that bot. Once rows are stored, a later error never routes the reply the old
+  way as well.
 - **Limits.** No hop is spent (each row sits at the highest hop already addressed to its bot); each row counts once
   toward the chain cap; one chat message makes its rows once, so an edit adds nothing; the text is cut at 2000
   characters. A queued note expires with a Stop like any other row.
@@ -173,12 +178,12 @@ The hub prepends this block to the recipient's turn. Everything below the rule l
 - a decision card for @owner is pending in <room link> until <expiry>; row <id>   (rows that carry a decision request)
 - reply with the privos-team skill: send --correlation c_… --reply-to m_… --to <from> --kind result|question|needs-approval
 - a denial or expiry of an approval is final for 24 h; do not retry or reword
-- this task was delivered before and that run did not finish; check what already happened (files, lists, messages you sent, awaits you registered) before repeating any outside action   (redeliveries only)
+- this task may have been delivered before, and that run may not have finished; check what already happened (files, lists, messages you sent, awaits you registered) before repeating any outside action   (redeliveries only)
 ---
 <text>
 ```
 
-**Recovery line.** A row whose `attempts` is above 1 (a redelivery after a run that did not finish) carries the last
+**Recovery line.** A row whose `attempts` is above 1 (a redelivery; the row cannot tell whether the earlier run started, hence "may") carries the last
 line above the rule, with its own kind in place of `task`; a first delivery does not. It covers every kind, callbacks
 included.
 

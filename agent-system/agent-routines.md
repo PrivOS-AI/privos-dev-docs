@@ -310,14 +310,19 @@ it posting; the **decision gate** lets a cheap decision model drop a match befor
   message to read; never with "Fire now".
 - The hub sends, with the sync attempt request: the platform questions, each led by the routine's rubric
   (`targets_us`, `asks_for_action` and `direction_settled` are yes/no, `urgency` is a score from 1 to 4); a state
-  window, which is the newest message of the batch plus a bounded window of its thread or of the room's main line (ids
-  and usernames kept, attachments, system messages and edit copies left out); the threshold; and `model: "decider"`.
+  window, which is every message of the batch, oldest first (one message keeps 4,000 characters; a larger batch keeps
+  the newest 8 at 1,200 each and says how many it left out), plus a bounded window of the newest one's thread or of the
+  room's main line (ids and usernames kept, attachments, system messages and edit copies left out); the threshold; and
+  `model: "decider"`. The questions ask about any of the new messages, so an ignore drops the batch only when none
+  qualifies.
 - The sandbox proxy asks the decision model once, with the workspace's own gateway key, before any VM is acquired or
   woken: `run` when every yes/no answer reaches the threshold, otherwise `ignore`. It answers with `gate` on the sync
   response. Contract: the sandbox's `docs/architecture/sandbox-mode.md`, "Decision gate before an attempt".
 - On `ignore` no attempt exists: the hub drops its placeholders, posts nothing and records
-  `lastOutcome: "assessed-ignore"` with `lastGate: { probabilities, cost, at }`. On `run` it records `lastGate` the same
-  way and the turn posts as usual.
+  `lastOutcome: "assessed-ignore"` with `lastGate: { probabilities, cost, at }`. An ignore does not start the filter's
+  cooldown, so the next message is not delayed by it. If the connection drops on a gated request and recovery finds no
+  attempt, it ends as an ignore with `reason: "answer-lost"` and no notice. On `run` it records `lastGate` the same way
+  and the turn posts as usual.
 - **Fail open.** Any gate failure (no provider configured, a timeout, a gateway error, a workspace key that is blocked or
   not granted `decider`, a malformed answer) is `skipped` and the turn runs; the hub records
   `lastGate: { skipped: true, reason, at }`. A message the hub cannot read sends no gate, and a result without `gate`

@@ -371,7 +371,10 @@ Accepted on `add` and `update`, returned by `list`. Behaviour, the card and the 
 - **Who.** Only a person who created the agent, or a holder of `view-user-administration`, may change either field. The
   agent itself, other owners or leaders of the agent room and any bot get
   `only the agent owner or an admin may change mode or assess` (`error-not-authorized`). Only a change is checked: a
-  value sent back as stored passes for any editor and writes nothing.
+  value sent back as stored passes for any editor and writes nothing. Removing a trigger that is in observe mode or has
+  `assess`, or turning it off (`enabled` false), needs the same person and is refused otherwise with
+  `only the agent owner or an admin may remove or disable a trigger in observe mode or with assess`, so an agent cannot
+  swap its observed routine for a live copy. A removal is audited with the mode and threshold, never the rubric.
 - **Update.** The checks run on the trigger as it will be after the write, so a filter edit that would leave a stored
   gate or observe mode inapplicable is refused unless the same write removes it.
 - **Audit.** The `agent-trigger.created` row of every `add`, and on a super agent the `super-agent.trigger-change` row of
