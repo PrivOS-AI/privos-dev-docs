@@ -119,6 +119,33 @@ agent team it is on (id, room, roster bots with bot ids) and `## Owner's agents`
 both sections on every agent-room push and re-pushes the affected bots when a roster, the Agent team switch or a bot changes;
 the `privos-team` skill's `teams` command (`GET agents.a2a.teams.mine`) is the live view.
 
+**Room rules of a team wake.** A row of a team chain starts a turn that runs on teammate output, so its platform rules
+keep the bot to the room it runs in and the chain's room, a super agent included (`teamWakeHarnessRules` in
+`apps/meteor/server/services/agent-prompt-injection.ts`). An active super agent keeps its usual reach (any room it is in)
+only when its owner stands behind the row in person, and only on a chain tree made of that owner's bots alone
+(`ownerBackedWake` in `apps/meteor/server/services/a2a/a2a-dispatch.ts`). The chain's session holds every earlier row to
+the bot, which is why one bot of another owner on the chain keeps it locked. The three cases:
+
+- a `task` that opens a chain while the teammate answers that owner in person **in the teammate's own agent room**. The
+  send records `ownerTurn` on the row from server state: the running attempt is a turn the owner started, not a trigger
+  run, a wake or someone else's turn. A turn in any other room also reads other people's messages and the bot's queued
+  team messages, so it never counts; there the owner can tag the super agent directly. A later send on the same chain
+  names no attempt and never counts;
+- the hub's `answer` or granted `approval` row for the super agent's own card, when the owner decided it themselves, in
+  the team room and in the thread the super agent opened the chain from. Any option of a question counts (the hub cannot
+  tell a yes from a no); a card the super agent answered for its owner, a denial and an expiry do not;
+- a note the owner wrote in the chain thread.
+
+Every other wake stays locked: a chain a trigger or routine started, a teammate's result, and any super agent while the
+kill switch is engaged. A turn with the wider reach takes no queued team messages (they wait for the next locked turn),
+and a reply under the team-wake rules is never steered into a turn without them, nor the reverse (`roomLock` in the steer
+scope, `agent-trigger-turn-steer.ts`): the later row waits and runs as its own turn. Each exempt wake writes an
+`[a2a-audit] decision=owner-backed` line.
+
+Known limits. The teammate writes the task text, so a teammate misled by something it read during its owner's turn can
+hand that on with the owner's standing. The attempt id comes from the sandbox's request, checked against the running
+turn of that bot in that room, not bound to the calling process.
+
 **Decision requests.** A teammate's `question` with options (or `needs-approval`) addressed to a super agent is woken to it like any urgent task, while the decision card stays the teammate owner's. An active super agent whose principal is that owner (the kill switch is consulted) may answer a `question` through `POST agents.a2a.approvals.decide { rowId, option }` (CLI skill: `team.py answer --row ROW --option N`); the answer is audited as made by a super agent, the first of the owner's click and the bot's answer wins, and a `needs-approval` can only be decided by the owner. See [Bot-to-bot protocol](bot-to-bot-protocol.md#approval-flow).
 
 **When it runs.** A pass runs immediately when the flag changes and within seconds of the owner joining, leaving, being

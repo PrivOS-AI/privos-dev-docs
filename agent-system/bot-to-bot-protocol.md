@@ -191,6 +191,10 @@ included.
 m_…`. Its rule line tells the bot to answer the bot that gave it the task with `result --state`, never the person, and
 its reply line addresses that bot.
 
+**Room rules.** A turn started by a row of a team chain may act only in the room it runs in and the chain's room. The
+one exception is a super agent whose owner stands behind the row in person, on a chain of that owner's bots only; see
+[Room rules of a team wake](./super-agent.md#room-mirror).
+
 ## Await and callback
 
 Some work finishes outside the chain: a board task, a release stage, a file landing in a room, a person's system. An await
