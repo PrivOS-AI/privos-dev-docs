@@ -84,6 +84,57 @@ Exactly one binding or none is used; secrets are never merged.
   stops them; in a room VM the relay simply uses the new value or refuses the next call. See
   [Room Services](./room-services.md#credentials).
 
+## Sharing a key with another agent
+
+An owner can let one of their agents use a key stored in another of their agents' private scope. There is one source
+key and no copy: the proxy stores a share ("agent B may use key X of agent A") and resolves X for B's projects through
+the relay, exactly as it resolves B's own keys. B never sees the value.
+
+**Who may share.** Only a person, from the source agent's vault panel ("Shared with") or with one tap on the key
+request card of the agent that asks. Both agents must have the same owner; a workspace admin acts for that one owner
+and never joins the agents of two owners. Both must be sandbox agents on the workspace sandbox: the Universal Bot,
+harness agents and agents whose agent room runs its own sandbox can neither share nor receive a key. No agent, super
+agent or bot can share or remove a share.
+
+**What the grantee gets.** Exactly one key, with the source key's host, path prefix, methods and variable names, in
+every room the grantee works in. A share is refused when the grantee already resolves a key that covers the same
+requests (same host, one path equal to or a prefix of the other), when the key would tie with a room key of a room
+the grantee works in, or when one of its variable names is already exported to the grantee. So an agent never has two
+keys for one request. The usual order then applies: the longest path wins, and on equal length the order is
+platform, room, agent-private, shared key (rank 2.25), workspace. A collocated project gets no shared key.
+
+**Lifecycle.**
+
+- **Rotate** the source key and every grantee uses the new value with no action. A rotation starts only in the source
+  agent's vault: a grantee that asks for a key a share covers is answered `shared` with the variables to use, never a
+  rotate request, and the agent tells the user that the owner rotates it in the source agent's vault.
+- **Revoke** a share and the grantee's next call answers `403 no-binding`. Deleting the source key removes its shares
+  first; a new key with the same pattern is never shared by an old share.
+- **Delete** an agent and its shares are removed when the delete returns (within 10 minutes if the sandbox was
+  unreachable). The agent's own keys are left as they are today.
+- **Hand over** agents to another owner: a share between two agents that move together is kept; every other share of
+  a moved agent is removed, and the handover result names the removed shares.
+- **Audit**: `credential.grant` and `credential.grant.revoke` under the source scope, with the grantee and the reason.
+  Each use row names the grantee's project and the source key.
+
+**Hub routes** (people only; bots and apps are refused, and the Universal Assistant cannot read them):
+
+| Route | Input | Answer |
+|---|---|---|
+| `GET privos-sandbox.catalog.vault.grants.list` | `botId` | `sharedOut` (who each key is shared with), `sharedIn` (keys shared with this agent), `peers` (agents it may share with, with `teamVm`) |
+| `POST privos-sandbox.catalog.vault.grants.grant` | `{ botId, pattern, granteeBotId, requestId? }` (`botId` is the source agent) | `{ grant, created, settled? }` |
+| `POST privos-sandbox.catalog.vault.grants.revoke` | `{ botId, pattern, granteeBotId }` | `{ ok: true }` |
+
+`capabilities` reports `grants`, `requests.get` adds share `offers` for a pending request, `usage` names the agent that
+used a key (`usedBy`) and `audit` names the grantee. A client shows nothing new when `grants` is absent. Refusals
+arrive as `errorType`: `vault-grant-not-allowed`, `vault-grant-room-sandbox`, `grant-binding-conflict`,
+`grant-env-name-conflict`, and `request-settle-failed` when the share was made but the request was not settled (retry
+the same call).
+
+**Limits.** One owner for both agents; the workspace sandbox only; no narrower limits per share. Agents of one team
+that share a VM run as one OS user and can read each other's `vault.env`, and that VM also runs the team room's default
+bot: inside such a VM a share is a rule and a log, not a wall.
+
 ## Using it from a skill
 
 A process that must outlive the agent's turn (a listener, a long job, a poller) names its bindings in a
@@ -272,6 +323,8 @@ The design assumes the model is hostile.
 - **Redirects:** redirects are never followed with credentials, and cross-host `Location` headers are stripped.
 - **SSRF:** hosts are resolved and pinned, and internal and metadata addresses are denied.
 - **Model writes:** agents cannot create or widen bindings.
+- **Shares:** no agent can share a key or remove a share; a share exposes exactly one key of the source agent; a share
+  ends when either agent is deleted or moves to another owner without the other.
 - **Residual risk:** an API that mints new tokens can still hand the model a fresh, live token. Narrow methods and
   path prefixes are the control for that.
 
