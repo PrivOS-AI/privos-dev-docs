@@ -156,6 +156,9 @@ created with a team agent in it, invite links, integrations). The sentence, its 
 by hub #781. A login is now set up with Run command, which shows its own disclaimer before every run: the command has
 full access to the sandbox, and anyone who may configure the sandbox can read what it stores, keys included.
 
+One rule never depended on the sentence and came back with hub #786: an agent that runs on a team login is put into
+a room by the owner of that login, and by nobody else.
+
 What is left are permission rules:
 
 | Action | Who may |
@@ -163,7 +166,8 @@ What is left are permission rules:
 | Save, replace or clear a room's login | The room owner; a workspace admin may clear it ([The room setting](#the-room-setting)) |
 | Save, replace or clear the team login | The owner of the team's covered agents; a workspace admin may clear it ([Agent teams](#agent-teams-one-login-for-the-team)) |
 | Put an agent on the team login | The login's owner only, and only their own agents; an agent of the owner that invites one of them into the team room counts as the owner ([Which agents are on it](#which-agents-are-on-it)) |
-| Add an agent or a person to a room | Whoever may add members to that room, on every path: Members, invites, joins, invite links, default channels, team default rooms, "add all users", integrations, the MCP rooms-invite tool, federation. No path checks for a login any more, so another person can add an agent that runs on your login to their room, or create a room with it |
+| Add an agent that runs on a team login to a room | The owner of that login only (`apps/meteor/server/services/team-login-agent-add.ts`). **Refused** with `error-agent-cli-owner-only`, and nobody of that call is added: Members, an invite, `/invite`, the mention button, `teams.addMembers`, and a room, team or discussion created with the agent in its member list (a team created for a named owner is checked for the caller too). **Left out**, the others are added: a room made a team default room, a member joining a team, "add all users", and the author of the message a discussion starts from. **Never by itself**: a channel join, the default channels, a trigger into a room it is not in, an item room; a bot is never the owner of a login. **Not asked**: the owner's super agent following them into their rooms, an agent re-attached to its own agent room, an agent that is already in the room, and an agent that creates a room |
+| Add a person, or an agent that is on no team login, to a room | Whoever may add members to that room, on every path: Members, invites, joins, invite links, default channels, team default rooms, "add all users", integrations, the MCP rooms-invite tool, federation. No path checks whether a login can be read in the room |
 | Add members as a bot | Through an invite (`channels.invite`, `groups.invite`, the `addUsersToRoom` method, `/invite`): only in the bot's own agent room, in a room it created, or in a room where its super-agent owner holds owner, admin or leader (`botMayInviteTo` in `apps/meteor/app/lib/server/methods/addUsersToRoom.ts`). `teams.addMembers`, a room created with a member list and a bot joining a public channel have no bot rule |
 
 Every save, clear and removal of a login is a durable audit event of the `agent-team.cli-login-*` family in the hub's
@@ -174,16 +178,17 @@ keep working.
 
 ## Exposure and threat model
 
-- **No consent step in the hub.** Nothing asks the person who adds a member or an agent to a room to confirm that
-  the login becomes readable there. The owner is warned by the disclaimer Run command shows when the login is set
-  up and by the texts on the team card and the room setting, and nothing stops a member of a room from reading the
-  login.
+- **No consent step in the hub.** Nothing asks the person who adds a member to a room to confirm that the login
+  becomes readable there. The owner is warned by the disclaimer Run command shows when the login is set up and by
+  the texts on the team card and the room setting, and nothing stops a member of a room from reading the login.
+  Which existing rooms a team-login agent is added to is its owner's decision: only they can add it
+  ([Who may widen the exposure](#who-may-widen-the-exposure)). Memberships it had before the login was saved stay.
 - **Who can drive an agent decides who can read its login.** A person who is not a member of the agent's own room
   can use the agent only in a room its owner opened ("Allow everyone using this Agent"), in the team room of a
   roster agent, or where it is the room's default bot (`apps/meteor/server/services/agent-mention-gate.ts`,
-  `apps/meteor/app/api/server/v1/lib/agent-room-visibility.ts`). Adding an agent to another room does not give that
-  room's members the login. Adding a person to a room where the agent is open does, and a bot that may invite there
-  (a super agent in a room where its owner holds authority) can do it without a person acting.
+  `apps/meteor/app/api/server/v1/lib/agent-room-visibility.ts`). An agent in another room does not give that room's
+  members the login. Adding a person to a room where the agent is open does, and a bot that may invite there (a super
+  agent in a room where its owner holds authority) can do it without a person acting.
 - **Every member of every room the team's agents work in can obtain the login**, through the agent or its files, and
   use the owner's subscription. A team VM gives no isolation between those rooms: files and vault relay tokens are
   reachable across projects. This is wider than the room login, which exposes one room.
