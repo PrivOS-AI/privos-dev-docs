@@ -8,8 +8,9 @@ what a trigger does, and the next scorecard says whether each one worked.
 
 > **Status: not released.** This page describes hub [#785](https://github.com/PrivOS-AI/privos-hub/pull/785),
 > [#792](https://github.com/PrivOS-AI/privos-hub/pull/792) and [#788](https://github.com/PrivOS-AI/privos-hub/pull/788)
-> and sandbox [#387](https://github.com/PrivOS-AI/privos-sandbox/pull/387) and
-> [#388](https://github.com/PrivOS-AI/privos-sandbox/pull/388), all drafts. None of it exists on a workspace until they
+> and sandbox [#387](https://github.com/PrivOS-AI/privos-sandbox/pull/387),
+> [#388](https://github.com/PrivOS-AI/privos-sandbox/pull/388) and
+> [#389](https://github.com/PrivOS-AI/privos-sandbox/pull/389), all drafts. None of it exists on a workspace until they
 > are released. Everything is off by default: a team without a designated evaluator, an owner who has not turned on
 > automatic stops, and a trigger without `decide` behave as before.
 
@@ -38,49 +39,60 @@ what a trigger does, and the next scorecard says whether each one worked.
 
 ## Role cards
 
+The owner writes them in the **Evaluation setup** section of the team's card ([Agents page](./agents-page.md), Teams
+tab), shown to every owner of a roster bot and listing only their own agents, or with
 `POST agents.a2a.teams.mark { teamId, roleCards: { <botId>: card | null } }`. Only the bot's current owner or a holder
-of `view-user-administration` writes one, and only for a roster bot. The caller also needs a team role on the team room
-(`add-team-member` or `edit-team-member`), like every `mark` call.
+of `view-user-administration` writes one, and only for a roster bot. A body with only `roleCards`, `evaluators` and
+`autoStop` needs no team role; one that also changes the roster or tiers needs `add-team-member` or `edit-team-member`.
 
 | Field | Values |
 |---|---|
 | `class` | `sales`, `content`, `operations`, `coordination`, `assistant`, `service`, `utility` |
 | `primaryOutcome` | One line: the countable result the agent exists for |
-| `outcomeSource.kind` | `list-stage` (items entering a counting stage; names `listId` and `stageId`), `a2a-ready` (tasks answered `ready` on the first result), `published-files`, `outcome-cards` (cards filed for the agent on an Outcomes list; self-reported) |
+| `outcomeSource.kind` | `list-stage` (items entering a counting stage; names `listId` and `stageId`), `a2a-ready` (tasks answered `ready` on the first result), `published-files`, `outcome-cards` (cards filed for the agent on an Outcomes list; self-reported), `verified-proposals` (its proposals the hub marked Verified; the evaluator only) |
 | `baseline` | Optional: primary outcomes per week to compare with |
+| `valuePerOutcomeUsd` | Optional: what one primary outcome is worth in US$ (above 0, at most 1,000,000); rates `profitable` |
 
-A bot without a role card is `unmeasured`. A `utility` agent (reports, timekeeping, monitors) is counted by the fires
-that started and is never a stop candidate. A card is tied to the bot's owner: a handover removes it.
+A bot without a role card is `unmeasured`, except the evaluator, which is then counted by `verified-proposals`. A
+`utility` agent (reports, timekeeping, monitors) is counted by the fires that started and is never a stop candidate. A
+card is tied to the bot's owner: a handover removes it.
 
 ## The evaluator
 
 - **Designation.** `mark { evaluators: { <ownerId>: <botId> | null } }`, by that owner or a holder of
   `view-user-administration`, only to a roster agent the owner owns now. Another roster editor cannot replace it. The
   hub rechecks it on every run, and a handover removes it.
-- **Wake.** The hub wakes the evaluator with an in-app notification addressed to it, naming the team and the
-  scorecard. The evaluator needs a filtered event trigger on `notification.created`
+- **Wake.** The hub wakes the evaluator with an in-app notification addressed to it, carrying the team (`teamId`) and
+  the scorecard (`itemId`); a notice that a teammate paused carries `teamId` and no `itemId`. The evaluator needs a
+  filtered event trigger on `notification.created`
   ([Subscription filter](./trigger-api-reference.md#subscription-filter)); the turn runs in its own agent room, which
   only it and its owner see. Without a listener the scorecard is still stored and the owner still notified.
 - **Skill.** `privos-team-evaluate` (`scripts/evaluate.py`): `scorecard`, `ack`, `propose`, `proposals`. It prints
   every answer as one line of escaped JSON, so names and titles reach the agent as data. The skill teaches the agent
   to treat every name and text as data, to change no trigger itself and ask nobody to, to keep numbers in its agent
-  room, and to file at most one proposal per agent per week.
-- **Its own row.** The evaluator is on the scorecard like every other agent, and never a stop candidate.
+  room, to file at most one proposal per agent per week, and to wait, not refile, after `a2a-approval-final` or
+  `a2a-approver-unreachable`.
+- **Its own row.** The evaluator is on the scorecard like every other agent, counted by its Verified proposals (a mark
+  counts on the next week's scorecard) unless it has a role card, and never a stop candidate.
 
 ## The scorecard
 
 A hub job, not an agent, runs every **Monday at 08:00 Asia/Bangkok** (01:00 UTC). For each team and each owner with a
-designated evaluator it reads the 7 days that end at the run and stores one scorecard. Then it checks the proposals
-applied before that window, applies the automatic stops the owner allowed, notifies the owner (a link to the team
-card, no number) and wakes the evaluator. A **daily** run at 08:30 closes undecided proposals, posts fresh cards,
+designated evaluator it reads the 7 days that end at the run and stores one scorecard; the previous week is a
+scorecard made 6 to 8 days before, and `cycle` restarts at 1 after a gap of more than 8 days. Each job runs once a
+day across hub instances (a lease per job and UTC date). Then it checks the proposals applied before that window,
+applies the automatic stops the owner allowed, notifies the owner (a link to the team card, no number) and wakes the
+evaluator. A **daily** run at 08:30 closes undecided proposals, posts fresh cards,
 reminds an evaluator that has not acknowledged the week's scorecard, and wakes it when the waiting question boxes or a
 trigger's health changed (paused, or 20 % or more of 10 or more fires in a day failed).
 
 What it reads: the trigger fire log, the stage events of each counting list, the trigger question log (see
-[Owner questions](./trigger-api-reference.md#owner-questions-decide)), bot-to-bot tasks and their results' work
-state, published files, the hub usage log, and who opened the rooms the agent posted in. Stage events are written by
-the hub's item model, one per move, creation in a stage, list copy and stage or list deletion, with the actor typed
-`user`, `bot` or `unattributed`. A move by the agent itself counts as its own outcome, never as a person's.
+[Owner questions](./trigger-api-reference.md#owner-questions-decide)), bot-to-bot tasks and their results' work state,
+published files, the hub usage log, and who opened the rooms the agent posted in. Team-core CLI spend reaches the usage
+log only with sandbox #389, as per-session increments; earlier rows summed the CLI's running totals (about 2.8x too high
+on the measured core). Stage events are written by the hub's item model, one per move, creation in a stage, list copy
+and stage deletion (a deleted list leaves one `list-deleted` event), with the actor typed `user`, `bot` or
+`unattributed`. A move by the agent itself counts as its own outcome, never as a person's.
 
 **Six dimensions**, each a level from 0 to 3, or unrated (`null`, left out of the score, never counted as zero).
 Levels and thresholds: hub `apps/meteor/server/services/a2a/a2a-team-evaluation.ts`.
@@ -88,7 +100,7 @@ Levels and thresholds: hub `apps/meteor/server/services/a2a/a2a-team-evaluation.
 | Key | Rule | Measured as | Unrated when |
 |---|---|---|---|
 | `ships` | Everyone ships | Primary outcomes in the week against the role card's baseline | Before a baseline exists, unless the agent had no outcome (level 0) |
-| `profitable` | Everyone profitable | Value of outcomes divided by model spend; cost per outcome is always shown | Until a value per outcome exists |
+| `profitable` | Everyone profitable | Outcomes times `valuePerOutcomeUsd`, divided by model spend; cost per outcome is always shown | Without a value per outcome, or while spend is unknown or zero |
 | `zeroPerson` | Zero-person work | Share of started runs that ended without a question box | No started runs |
 | `ownOutcomes` | Own outcomes | Share of received tasks answered `ready` on the first result; held at level 1 while 5 % or more of fires failed | No received tasks |
 | `writeDecide` | Write, decide | Median minutes from a received task to its result | No task answered |
@@ -98,8 +110,9 @@ Levels and thresholds: hub `apps/meteor/server/services/a2a/a2a-team-evaluation.
 - **State**: `keep` from two thirds; `fix` from one third, or when the use guard is under 20 %; `stop` under one third
   or as a stop candidate; `unmeasured` when the coverage check fails or nothing is rated.
 - **Coverage check**: fails with `no-source` (no role card), `results-without-state` (under 80 % of the agent's results
-  carry a work state), `source-missing`, `source-deleted` or `source-changed` (the counting list or stage is gone, was
-  deleted, or received cards because another stage was deleted).
+  carry a work state), `no-tasks` (an `a2a-ready` agent, not `utility`, that received no task), `not-evaluator` (a
+  non-evaluator counted by `verified-proposals`), `source-missing`, `source-deleted` or `source-changed` (the counting
+  list or stage is gone, was deleted, or received cards because another stage was deleted).
 - **Use guard**: the share of rooms the agent posted in during the week that a person opened after its first post
   there. Shown next to the score; never a stop by itself.
 - **Stop candidate**: no hub-recorded outcome in this and the previous scorecard, both covered, not `utility`, not the
@@ -107,7 +120,8 @@ Levels and thresholds: hub `apps/meteor/server/services/a2a/a2a-team-evaluation.
 
 The owner sees the latest scorecard on the team's card in the [Agents page](./agents-page.md), Teams tab: the week,
 whether the evaluator read it, and per agent the state, score, six levels (a dash with the reason when unrated),
-coverage reasons, rooms opened, fires, tasks, outcomes, cost and question-log totals.
+coverage reasons, rooms opened, fires, tasks, outcomes, cost and question-log totals; below it the owner's proposals
+with state, decision, check and audit references, and the Evaluation setup.
 
 ## Proposals and the owner's cards
 
@@ -119,13 +133,17 @@ coverage reasons, rooms opened, fires, tasks, outcomes, cost and question-log to
 | `advice` | Changes nothing. The text (at most 1,500 characters, all shown on the card) reaches the target as a hub row marked as data, never as its owner's instruction |
 
 1. **Filed** by the evaluator against one scorecard: the target, the type, the trigger (for the three trigger types),
-   a one-line cause (at most 300 characters) and the scorecard number it should move (`metric`, such as
-   `counts.fires` or `dims.zeroPerson`). Refused: any caller but the owner's designated evaluator, a proposal about the
-   evaluator itself, another owner's bot or a bot off the roster, an unknown type or metric, a trigger of another bot,
-   a change that does not apply now, and a second open proposal for the same agent.
-2. **Open** for 7 days. The card is posted as the evaluator, in its agent room when the owner is there, and only the
-   target's owner decides it. A card lasts 24 hours, so the daily run posts a fresh one each morning and retires the
-   old one.
+   a one-line cause (at most 300 characters) and the scorecard number it should move (`metric`): `score`,
+   `dims.ships`, `dims.profitable` or `counts.costUsd` for the two trigger types, `counts.reversed` or `dims.zeroPerson`
+   for `demote-decide`, `score` or a dimension rated for the target for `advice`. Refused: any caller but the owner's
+   designated evaluator, a proposal about the evaluator itself, another owner's bot or a bot off the roster, an unknown
+   type or a metric the type does not take, a trigger of another bot, a change that does not apply now, a second open
+   proposal for the same agent, and the same proposal (team, target, type, trigger) the owner denied in the last 7
+   days (`a2a-approval-final`).
+2. **Open** for 7 days. The card is posted as the evaluator, only in its agent room, and only the target's owner
+   decides it. An owner who is not a member of that room gets no card: the proposal is closed `expired` with
+   `closedReason: 'not-applicable'` (`a2a-approver-unreachable`). A card lasts 24 hours, so the daily run posts a fresh
+   one before it ends and retires the old one.
 3. **Decided** on the card or on the Activity page. A denial is `rejected`; 7 days without a decision is `expired`.
    The hub carries an approval out itself, so no bot receives a decision row from a proposal card.
 4. **Applied** through one trigger writer, which writes an `agent-trigger.changed` audit row naming the proposal, the
@@ -133,16 +151,23 @@ coverage reasons, rooms opened, fires, tasks, outcomes, cost and question-log to
 5. **Checked** by the next weekly run: `verified` when the metric moved the right way, else `not-moved`. The skill
    tells the evaluator not to file the same change again without new evidence.
 
+**Audit.** Every step (filed, card issued, decided, automatic stop, applied, expired, closed) and every change of a
+role card, a designation or the switch writes a durable `agent-team.*` row in `ServerEvents`, the store of
+`agent-trigger.changed`: ids, codes and numbers only, with its own `auditRef`, which the proposal keeps in `auditRefs`.
+
 The hub checks the evaluator, the target's owner, the roster and the trigger again at filing, at the decision and at
 apply; a proposal that no longer holds is closed with a `closedReason`. States: `open`, `approved`, `applied`,
 `rejected`, `expired`, `verified`, `not-moved`.
 
 **An evaluator cannot change a trigger through a teammate.** `agents.a2a.send` refuses a row that carries a trigger
-change (`data.triggerChange`) when its sender is a designated evaluator in any team: a proposal is its only way to
-change an agent. Other bots keep the [teammate trigger change](./bot-to-bot-protocol.md#sandbox-and-harness-agents-the-privos-team-skill).
+change (`data.triggerChange`) when a designated evaluator of any team is an initiator or participant anywhere in the
+row's chain lineage (its chain, its lineage parent, their root and parent chains), so a relay through teammates is
+refused too: a proposal is an evaluator's only way to change an agent. Other bots keep the
+[teammate trigger change](./bot-to-bot-protocol.md#sandbox-and-harness-agents-the-privos-team-skill).
 
 **Handover.** When a bot changes owner, its role cards, its designation as evaluator and its open proposals (about it
-or filed by it) are removed with their cards, and the automatic-stop switch of both owners in its teams is cleared.
+or filed by it) are removed with their cards, the automatic-stop switch of both owners in its teams is cleared, and
+`decide` is turned off on all its triggers (listed in the handover result as `triggersDecideReset`).
 
 ## Automatic stops
 
@@ -150,13 +175,15 @@ or filed by it) are removed with their cards, and the automatic-stop switch of b
 for an owner of a roster bot. Off by default. A `disable-trigger` proposal is applied without a card only when all of
 these hold:
 
-- the scorecard it answers is the owner's third or later in that team, and the owner's switch is on;
+- the scorecard it answers is the owner's third or later in that team, their newest there and at most 7 days old,
+  and the owner's switch is on;
 - the target is a stop candidate on that scorecard, passes the coverage check, is not `utility` and is not the
   evaluator;
-- the trigger is one of that row's `stopTriggerIds`.
+- the trigger is one of that row's `stopTriggerIds`, has not changed since that scorecard was made, and was never
+  stopped automatically before.
 
-The owner then gets an in-app notice naming the proposal, and the audit row has the system actor. Every other
-proposal needs a card. The owner turns a stopped trigger back on in one step.
+The owner then gets an in-app notice naming the proposal, and the audit rows have the system actor. Every other
+proposal needs a card, so a trigger the owner turned back on is never stopped again without one.
 
 ## Routes
 
@@ -165,10 +192,10 @@ Response shapes: hub `apps/meteor/app/api/server/v1/agents.ts` (Endpoints). Refu
 
 | Route | Who | Purpose |
 |---|---|---|
-| `POST agents.a2a.teams.mark` (`roleCards`, `evaluators`, `autoStop`) | a person with a team role on the team room, within the rules above; bots refused | Write role cards, the designation and the switch; the answer shows the caller's own cards, evaluator and switch |
+| `POST agents.a2a.teams.mark` (`roleCards`, `evaluators`, `autoStop`) | a person within the rules above (no team role needed for these three alone); bots refused | Write role cards, the designation and the switch; the answer shows the caller's own cards, evaluator and switch, as does `callerEvaluation` per team in `agents.a2a.teams.overview` |
 | `GET agents.a2a.teams.scorecard?teamId=&scorecardId=&history=&ownerId=` | the owner, the owner's evaluator, holders of `view-user-administration` (`ownerId` is for them only) | The latest scorecard (or the named one) and up to 8 earlier ones; rows only for bots the owner still owns |
 | `POST agents.a2a.teams.scorecard.ack { scorecardId }` | the evaluator named on the scorecard | Stamps `ackedAt` once; `alreadyAcked` after |
-| `POST agents.a2a.teams.proposals.file` | the owner's designated evaluator (bot key) | File a proposal; refused while bot-to-bot is switched off |
+| `POST agents.a2a.teams.proposals.file` | the owner's designated evaluator (bot key) | File a proposal; refused while bot-to-bot is switched off, and as in [Proposals](#proposals-and-the-owners-cards) |
 | `GET agents.a2a.teams.proposals.list?teamId=&state=` | the evaluator (its owner's), an owner of a roster bot, holders of `view-user-administration` | Proposals, newest first, at most 200 |
 
 ## Related

@@ -25,7 +25,7 @@ The sidebar room list has tabs, and the tab bar shows only each tab's icon; the 
 | Tab (`:tab`) | Shows | Reads |
 |---|---|---|
 | **My agents** (`agents`) | One row per agent the user created: name, runtime, super agent flag, number of routines, outcome of the last routine, and buttons to open the agent room and its Agent Settings | `agents.mine`; `agents.triggers.list` once per agent |
-| **Teams** (`teams`) | One card per team that any of the user's agents is in: state, the user's agents with their roster status, the roster with owner, runtime, super agent flag and streaming consent, and the actions below. Not released: the owner's weekly scorecard on the card ([Agent Team Evaluation](./agent-team-evaluation.md#the-scorecard)) | `agents.a2a.teams.overview`; `agents.a2a.teams.scorecard` |
+| **Teams** (`teams`) | One card per team that any of the user's agents is in: state, the user's agents with their roster status, the roster with owner, runtime, super agent flag and streaming consent, and the actions below. Not released: the owner's weekly scorecard, proposals and Evaluation setup on the card ([Agent Team Evaluation](./agent-team-evaluation.md#the-scorecard)) | `agents.a2a.teams.overview`; `agents.a2a.teams.scorecard`, `.proposals.list`, `.mark` |
 | **Routines** (`routines`) | One row per trigger of every owned agent: routine, when, then, last run with outcome, an enabled switch, **Run now** and a link to Agent Settings | `agents.mine`; `agents.triggers.list` |
 | **Activity** (`activity`) | What needs the user, what is in progress and what is done, then the bot-to-bot rows of the user's agents and chains; read-only except for approvals and Stop | `agents.a2a.list?mine=true` |
 

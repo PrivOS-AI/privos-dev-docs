@@ -420,35 +420,40 @@ run prepares that question and how far the agent may decide alone. The form call
 - **Who.** The same rule as `mode` and `assess`: the person who created the agent or a holder of
   `view-user-administration`. The agent itself, other owners or leaders of the agent room and any bot get
   `only the agent owner or an admin may change decide`. A value sent back as stored passes for any editor.
-- **Where it acts.** The rule line is added on the sandbox runtime only. The hub accepts the field on any trigger; the
-  forms hide it for a harness agent and for a webhook with `nextAction: emit_event`. A room-scoped cron runs as a live
-  thread session: its questions are not logged, held back or owner-restricted.
+- **Where it acts.** The rule line is added on the sandbox runtime only; the forms hide the field for a harness agent
+  and for a webhook with `nextAction: emit_event`. A cron scoped to rooms runs as a live thread session, so any value
+  but `off` is refused there (`decide-not-applicable`), also when rooms are added to a cron that has one; the forms
+  hide the field and the editor sends a stored value back to `off`. A handover of the bot turns `decide` off on all its
+  triggers.
 - **One question per topic** (`shadow` and `assist`). The question's header is its topic. While a box of the same bot
-  and trigger on the same topic waits for an answer, the hub holds a new one back, logs it as `duplicate-refused`, and
-  the run's report says `Not asked again: the question on "<topic>" is already waiting for an answer here: <link>`.
-  Other topics of the same box are still asked. `off` triggers show every question.
+  and trigger on the same topic waits for an answer, and a session still holds that box, the hub holds a new one back,
+  logs it as `duplicate-refused`, and the run's report says `Not asked again: the question on "<topic>" is already waiting for an answer here: <link>`.
+  Other topics of the same box are still asked. A waiting row whose box no session holds is stamped `clearedAt` and
+  the question is shown. `off` triggers show every question.
 - **Recommendation line.** One line in the question's context, parsed by the hub:
   `Recommended: <option text> (needs owner <n>, reversible <n>, confidence <n>)`, each number from 0 to 1 with two
   decimals. A missing or malformed line leaves the log row without numbers.
 - **Question log.** Every question a trigger run shows writes one row, whatever the mode: `kind` `question`,
   `duplicate-refused` or `self-decided`; the bot, its owner at write time, the trigger, the room, the topic, the
-  options, the recommendation and its numbers, the mode, and the box's expiry. The answer that wins stamps
-  `answeredAt`, `answer` and `answeredBy`. An expired box is one with no answer whose `expiresAt` has passed; nothing
-  writes at expiry. Rows are kept 180 days. The [weekly scorecard](./agent-team-evaluation.md#the-scorecard) reads
+  options, the recommendation and its numbers, the mode, the box's expiry and its AskUser call (`toolUseId`). The
+  answer that wins stamps `answeredAt`, `answer` and `answeredBy`; a box that went away unanswered (cancelled, replaced,
+  cleared) stamps `clearedAt`. An expired box has neither stamp and a past `expiresAt`; nothing writes at expiry. Rows are kept 180 days. The [weekly scorecard](./agent-team-evaluation.md#the-scorecard) reads
   them; source `apps/meteor/server/models/AgentTriggerQuestionLog.ts`.
 - **Owner-only answers, every mode.** A trigger run's question box, its bell and its participant go to the bot's
-  owner, and only the bot's owner or a holder of `view-user-administration` can answer it. A thread reply from anyone
-  else is consumed before it is recorded and the person gets an ephemeral note; the Answer questions form returns
-  `not-question-owner` (`Only this agent's owner or an administrator can answer this question.`).
+  owner, and only the bot's owner or a holder of `view-user-administration` can answer it, on every path. The Answer
+  questions form and the AI chat panel (`ai-messages.send` with `referenceAnswer`) return `not-question-owner`
+  (`Only this agent's owner or an administrator can answer this question.`). A thread reply from anyone else does not
+  answer: the person gets an ephemeral note, the reply reaches the agent as an ordinary message, and the box stays.
 - **Audit and export.** The `agent-trigger.created`, `agent-trigger.changed` and remove audit rows carry `decide` and
   `by`. An export carries the field; an import always restores `off` with a notice.
 
 ### `POST /v1/agents.triggers.decisions.record`
 
 Body `{ triggerId, topic, options, chosen, numbers: { needsOwner, reversible, confidence }, undo }`. Agent bot
-credentials only, for the bot's own trigger, while that trigger is in `assist`, and not from a session bound to a room
-other than the agent's own agent room. `chosen` must be one of `options`, the numbers from 0 to 1. Answers
-`{ success: true, logId }` and writes a `self-decided` row; anything else is HTTP 403 `{ success: false, error }`. The
+credentials only, for the bot's own trigger while it is in `assist` (also from a run bound to another room), and
+only when the trigger ran (`lastRunAt`) in the last 6 hours. `chosen` must be one of `options`, the numbers from 0 to 1.
+Answers `{ success: true, logId }` and writes a `self-decided` row; a refusal is HTTP 403 `{ success: false, error }`,
+and HTTP 429 after 10 decisions for one trigger within an hour. The
 skill calls it before it prints `decide`, so a decision the hub refused is never taken.
 
 ### `POST /v1/agents.triggers.decisions.reverse`
