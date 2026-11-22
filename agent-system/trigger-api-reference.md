@@ -14,6 +14,8 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.triggers.update` | Yes | Update an existing trigger |
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
 | POST | `/v1/agents.triggers.run` | Yes | Manually fire a trigger |
+| POST | `/v1/agents.triggers.decisions.record` | Bot key | Not released. The agent records a decision it took itself on a trigger in `assist`; see [Owner questions](#owner-questions-decide) |
+| POST | `/v1/agents.triggers.decisions.reverse` | Yes | Not released. The agent's owner reverses such a decision; same section |
 | GET | `/v1/agents.handlers.list` | Yes | List the services of the agent room's runtime, for the handler picker (`wake=true` may start the runtime; see [Agent Settings UI](./agent-settings-ui.md#then-what-runs)) |
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
 | POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`, `await`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
@@ -134,6 +136,7 @@ Add a new trigger. Maximum 20 triggers per agent.
 | `handler` | object | With `run_handler` | `{ "name": "<service>" }`, the room service to run first |
 | `mode` | string | No | `live` (default) or `observe`. See [Observe mode and the decision gate](#observe-mode-and-the-decision-gate-mode-and-assess) |
 | `assess` | object | No | `{ "rubric", "threshold"? }`, the decision gate of a filtered `message.new` trigger. Same section |
+| `decide` | string | No | Not released. `off` (default), `shadow` or `assist`. See [Owner questions](#owner-questions-decide) |
 
 **Body Parameters (type=cron):**
 
@@ -397,6 +400,65 @@ Accepted on `add` and `update`, returned by `list`. Behaviour, the card and the 
 
 ---
 
+## Owner questions (`decide`)
+
+> **Status: not released.** Hub [#785](https://github.com/PrivOS-AI/privos-hub/pull/785) and sandbox
+> [#387](https://github.com/PrivOS-AI/privos-sandbox/pull/387), drafts. Until they are released no trigger has the field
+> and the rules below do not apply.
+
+A trigger run that needs a choice only its owner can make asks through the AskUser question box (see
+[Questions from a trigger run](./trigger-registry.md#questions-from-a-trigger-run)). `decide` sets, per trigger, how the
+run prepares that question and how far the agent may decide alone. The form calls it **Owner questions**. Accepted on
+`add` and `update`, returned by `list`.
+
+| Value | What the run does |
+|---|---|
+| `off` | Default, stored as no field. The run's system context and prompt are byte-identical to a trigger without the field |
+| `shadow` | One platform rule line names the mode and the trigger id and tells the agent to run the `privos-decide` skill before any question box, follow its verdict, copy its `Recommended:` line into the question's context, and use one header per topic. In shadow the verdict is always `ask`: the recommendation rides on the box and is compared with the owner's answer |
+| `assist` | As shadow, and the skill may answer `decide <option>` for a reversible question it is confident about. The agent then takes that option, and the hub has logged it first through `agents.triggers.decisions.record`. Never a question marked as an approval-list action (outside, public, money, deletion, production, new permissions), and never on outside evidence alone |
+
+- **Who.** The same rule as `mode` and `assess`: the person who created the agent or a holder of
+  `view-user-administration`. The agent itself, other owners or leaders of the agent room and any bot get
+  `only the agent owner or an admin may change decide`. A value sent back as stored passes for any editor.
+- **Where it acts.** The rule line is added on the sandbox runtime only. The hub accepts the field on any trigger; the
+  forms hide it for a harness agent and for a webhook with `nextAction: emit_event`. A room-scoped cron runs as a live
+  thread session: its questions are not logged, held back or owner-restricted.
+- **One question per topic** (`shadow` and `assist`). The question's header is its topic. While a box of the same bot
+  and trigger on the same topic waits for an answer, the hub holds a new one back, logs it as `duplicate-refused`, and
+  the run's report says `Not asked again: the question on "<topic>" is already waiting for an answer here: <link>`.
+  Other topics of the same box are still asked. `off` triggers show every question.
+- **Recommendation line.** One line in the question's context, parsed by the hub:
+  `Recommended: <option text> (needs owner <n>, reversible <n>, confidence <n>)`, each number from 0 to 1 with two
+  decimals. A missing or malformed line leaves the log row without numbers.
+- **Question log.** Every question a trigger run shows writes one row, whatever the mode: `kind` `question`,
+  `duplicate-refused` or `self-decided`; the bot, its owner at write time, the trigger, the room, the topic, the
+  options, the recommendation and its numbers, the mode, and the box's expiry. The answer that wins stamps
+  `answeredAt`, `answer` and `answeredBy`. An expired box is one with no answer whose `expiresAt` has passed; nothing
+  writes at expiry. Rows are kept 180 days. The [weekly scorecard](./agent-team-evaluation.md#the-scorecard) reads
+  them; source `apps/meteor/server/models/AgentTriggerQuestionLog.ts`.
+- **Owner-only answers, every mode.** A trigger run's question box, its bell and its participant go to the bot's
+  owner, and only the bot's owner or a holder of `view-user-administration` can answer it. A thread reply from anyone
+  else is consumed before it is recorded and the person gets an ephemeral note; the Answer questions form returns
+  `not-question-owner` (`Only this agent's owner or an administrator can answer this question.`).
+- **Audit and export.** The `agent-trigger.created`, `agent-trigger.changed` and remove audit rows carry `decide` and
+  `by`. An export carries the field; an import always restores `off` with a notice.
+
+### `POST /v1/agents.triggers.decisions.record`
+
+Body `{ triggerId, topic, options, chosen, numbers: { needsOwner, reversible, confidence }, undo }`. Agent bot
+credentials only, for the bot's own trigger, while that trigger is in `assist`, and not from a session bound to a room
+other than the agent's own agent room. `chosen` must be one of `options`, the numbers from 0 to 1. Answers
+`{ success: true, logId }` and writes a `self-decided` row; anything else is HTTP 403 `{ success: false, error }`. The
+skill calls it before it prints `decide`, so a decision the hub refused is never taken.
+
+### `POST /v1/agents.triggers.decisions.reverse`
+
+Body `{ logId }`. The bot's current owner or a holder of `view-user-administration` only, the agent included in the
+refusal. Stamps `reversedAt` and `reversedBy` once; `already-reversed` after that. It only records the
+correction; undoing the action follows the `undo` text the agent reported.
+
+---
+
 ## Running a handler (`nextAction` and `handler`)
 
 Every trigger type can run a room service before, or instead of, the model turn. Behaviour, exit codes and fallback:
@@ -483,6 +545,7 @@ Update fields on an existing trigger.
 | `handler` | object | No | `{ "name": "<service>" }` |
 | `mode` | string | No | `live` or `observe`; see [Observe mode and the decision gate](#observe-mode-and-the-decision-gate-mode-and-assess) |
 | `assess` | object or null | No | `{ "rubric", "threshold"? }`; `null` removes the gate |
+| `decide` | string | No | Not released. `off`, `shadow` or `assist`; see [Owner questions](#owner-questions-decide) |
 
 Only provided fields are updated. At least one updatable field is required. The trigger records `updatedBy` (the caller's
 user id) and `updatedAt`. Writing the prompt field of the trigger's type removes a stray copy in the other field (a
