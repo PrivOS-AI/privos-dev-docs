@@ -127,9 +127,10 @@ platform, room, agent-private, shared key (rank 2.25), workspace. A collocated p
 
 `capabilities` reports `grants`, `requests.get` adds share `offers` for a pending request, `usage` names the agent that
 used a key (`usedBy`) and `audit` names the grantee. A client shows nothing new when `grants` is absent. Refusals
-arrive as `errorType`: `vault-grant-not-allowed`, `vault-grant-room-sandbox`, `grant-binding-conflict`,
-`grant-env-name-conflict`, and `request-settle-failed` when the share was made but the request was not settled (retry
-the same call).
+arrive as `errorType`: `vault-grant-not-allowed`, `vault-grant-room-sandbox`, `vault-grant-handover-open` (one of the
+agents is being handed over), `grant-binding-conflict`, `grant-env-name-conflict`, `vault-not-ready` (the proxy has just
+restarted and does not know the hub host yet; retry shortly), and `request-settle-failed` when the share was made but
+the request was not settled (retry the same call; a retry after a lost answer reports `settled: true`).
 
 **Limits.** One owner for both agents; the workspace sandbox only; no narrower limits per share. Agents of one team
 that share a VM run as one OS user and can read each other's `vault.env`, and that VM also runs the team room's default
