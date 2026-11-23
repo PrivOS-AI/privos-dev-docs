@@ -267,12 +267,17 @@ Map<`${agentId}:${triggerId}`, timestamp>
 
 Prevents rapid-fire when many events happen in quick succession.
 
-### No AskUser in Trigger Turns
+### Questions from a trigger run
 
-Agent-room harness rules (`server/services/agent-prompt-injection.ts`) forbid the agent
-from using the `AskUser` tool in orchestrator (agent-room) sessions: a trigger fires with
-nobody watching, so nothing would ever answer — the turn would hang and hold the
-project's lease until it is reaped.
+A trigger fires with nobody watching, so a run never waits for an answer. The platform rules of a trigger run
+(`server/services/agent-prompt-injection.ts`) tell the agent to decide with what it has when it can; a choice only its
+owner can make goes through the `AskUser` tool with options, once per run. The run does not pause: its report carries
+the question box, and the owner's answer wakes the agent in that thread later. A key or secret is never asked this way.
+A bot-to-bot (team) turn follows the team rules instead and never calls `AskUser`.
+
+Not released (hub [#785](https://github.com/PrivOS-AI/privos-hub/pull/785)): only the bot's owner or an admin answers a
+trigger run's box, every box is logged, and the per-trigger `decide` field adds a decision model's recommendation and
+one question per topic. See [Owner questions](./trigger-api-reference.md#owner-questions-decide).
 
 ### Context Payload
 
