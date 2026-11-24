@@ -62,6 +62,46 @@ or In progress. A row shows its state and its need first and expands like a log 
 
 A row click expands it: the message, the reason and the fix (`why`, `fix`), and actions. An **Approve** and **Deny** pair (or one button per option for a `question`) is shown only to the row's approver while the request is open, together with the action and the draft as plain text. A **Pending approvals** switch narrows the list to the requests waiting for the user (`approval=pending`). **Stop** is offered in the expanded row to the chain's human owner; a team moderator or an admin stops a chain by filtering to it and using the filter bar's Stop, the same as the admin log. The table is the one the admin bot-to-bot log uses (`components/a2a/A2aRowsTable.tsx`), without `mine` there.
 
+## Knowledge spaces page
+
+Not released, being built on the hub branch `feat/agent-knowledge-screens`; the rules behind it are in
+[Knowledge Spaces](./knowledge-spaces.md). Everything here is hidden while `Agent_Knowledge_Spaces_Enabled` is false, and
+the hub refuses the routes anyway.
+
+| Item | Detail |
+|---|---|
+| Entry | A **Knowledge spaces** button in the Agents page header (`AgentsPage.tsx`), shown only with the switch on; it opens the list |
+| Routes | `/knowledge-spaces` (route `knowledge-spaces-index`, the list) and `/knowledge-spaces/:spaceId/:tab?/:itemId?` (route `knowledge-spaces-space`), tabs `notes` (default; an unknown tab falls back to it), `proposals`, `audience`, `settings`. A card's link `/knowledge-spaces/<spaceId>/proposals/<proposalId>` opens that proposal ready to decide |
+| Code | `client/views/knowledge-spaces/` (page, tabs, create dialog); `client/components/knowledge-spaces/use-knowledge-spaces.ts` holds every call to the `knowledge-spaces.*` routes and `knowledgeErrorText`, which turns a route's `errorType` into a sentence |
+
+- **List.** The spaces the caller administers (`knowledge-spaces.list`): name, kind, a **Restricted** tag, and the counts
+  of active notes and of proposals waiting for review. **Create space** asks for the kind (Whole workspace only with
+  `manage-knowledge-spaces`), a name of 1 to 80 characters, the team for a team space, and **Restricted** for owner and
+  workspace spaces only; it lands on the new space's notes.
+- **Notes.** The order of authority as help text at the top, then title, type, **Approved** or **Not approved** and who
+  wrote it. **Bulk approval**: a checkbox on each note no person approved, at most 100 checked; **Approve selected** asks
+  for a confirm that names how many agents read the space, then sends each note with the version the list showed, and
+  lists what was approved and each skipped note with its reason (a note an agent changed after the list was shown is
+  skipped as stale). A note opens with its full text as plain text, its writer, its review date, **Edit**, **Retire** (with
+  a confirm) and its **History**. The editor takes a short name (new notes only, optional), a title, a type, a text of up
+  to 16,000 characters and an optional **Review by** date for the weekly review, and says how many agents the saved text
+  reaches.
+- **Proposals.** Pending proposals with operation, type, title, proposer and date. A **Batch** filter lists every batch of
+  the pending rows; with a batch chosen, **Reject this batch** rejects all its waiting proposals after a confirm. An open
+  proposal shows the cited message, the proposed text and, for a change, the current text next to it, with
+  **Approve**, **Reject** and **Edit and approve**. A stale answer or a refusal keeps the buttons.
+- **Audience.** Each entry with its name and level; levels follow the preset and `restricted` (a restricted space offers
+  only single agents), `none` is offered for a single agent, raising to Write needs a confirm, and removing an entry says
+  the agent loses access at its next read.
+- **Settings.** Name, enabled, restricted (not for a team space), approver (chosen among the space admins), admins (owner
+  and workspace spaces), and the **Reviewer agent** of the weekly review, shown only to the approver and listing only the
+  approver's own agents. **Collect from existing memory** starts a harvest: a runner among the caller's agents, the rules
+  files of the caller's agents and, on a team space whose memory has not moved, the team memory; it shows the 120,000
+  character limit, the hub's refusal with the size of each source, the batch's status and progress, and **Cancel
+  collection** while it runs. On a team space, **Move team memory** (with a confirm that explains what agents see after
+  the move) shows the created count and each skipped file with its reason; once moved, the date and **Move back**, which
+  shows the number of notes written and the archive files of team memory changed after the move.
+
 ## Routes
 
 All of them need a signed-in person; a bot caller gets `a2a-not-authorized` on `teams.list` and `teams.overview`, and an empty list from `agents.mine`. Response shapes live in the hub source; this table says who may call and where to look.

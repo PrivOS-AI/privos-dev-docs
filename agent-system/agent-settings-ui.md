@@ -110,6 +110,30 @@ useQuery({
 
 Mutations invalidate the query to refetch after toggle/delete/add.
 
+## Knowledge access panel
+
+Not released, being built on the hub branch `feat/agent-knowledge-screens`. File
+`client/components/knowledge-spaces/knowledge-agent-panel.tsx` (`KnowledgeAgentPanel({ botId })`), rendered in
+`AgentSettingsTab.tsx` right after the vault panel. It returns nothing while `Agent_Knowledge_Spaces_Enabled` is false. The
+rules are in [Knowledge Spaces](./knowledge-spaces.md#levels).
+
+- **Reads** `GET knowledge-spaces.agent?botId=` (only a person who manages the agent) and `GET knowledge-spaces.list`; a
+  space is editable when the caller administers it.
+- **Rows**, one per space: the spaces that give the agent a level, then spaces where the agent's own entry is `none`, then
+  the other spaces the caller administers. Each shows the space name, the effective level (No access, Read, Propose,
+  Write) and where it comes from: set for this agent, all agents of the owner, the agent team, or all workspace agents.
+- **Own setting** on an editable row: **Inherit** (no own entry: `audience.set` with `level: null`), **None** (the agent
+  gets no access even when a group gives one), **Read**, **Propose** or **Write**, each with a one-line hint. **Write**
+  first asks for a confirm that says the agent can add notes without asking, that they stay data until a person approves
+  them, and that it cannot change an approved note.
+- **Restricted spaces**: when the agent runs on an external harness or a shared team VM (`restrictedBlock`), Read, Propose
+  and Write are disabled for a restricted space and the reason is shown. A refusal from the route is shown under its row.
+
+When creating an agent, the same levels can be chosen per space with the knowledge access picker
+(`knowledge-access-picker.tsx`, in the agent builder review and the harness pair form). It offers the owner spaces of the
+creator and the workspace spaces the creator administers, never a team space, and never a restricted space for a harness
+agent; only rows changed from Inherit are sent, as `knowledgeSpaces` of `agents.create`, at most 50.
+
 ## Messages during a reply (mid-turn steering policy)
 
 When a new message reaches an agent bot while it is still generating a reply in

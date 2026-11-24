@@ -6,6 +6,27 @@ This document tracks significant features, improvements, and bug fixes released 
 
 ---
 
+## 2026-11-25
+
+### Knowledge spaces for agents (not released)
+
+**Summary:** Shared notes that the hub serves to agents under per-agent levels (read, propose, write), in spaces for an
+owner's agents, an agent team or the whole workspace. Every change, also a person's, is a proposal row; an agent's
+proposal waits for a person on an approval card in the approver's Universal Assistant DM, and a Write agent's notes are
+applied at once but stay data. At session start the digest gives each agent the approved rules as instructions (workspace,
+then owner, then team), the titles of other approved notes, and for a team space only the short names of notes no person
+approved. People approve notes in bulk and reject a whole batch; a harvest turns existing rules files and team memory
+into proposals; a weekly review lists notes past their review date; a team's memory can move into its space and back;
+semantic search uses the shared daily embedding budget. Off by default (`Agent_Knowledge_Spaces_Enabled`). Not released:
+hub [#801](https://github.com/PrivOS-AI/privos-hub/pull/801), [#806](https://github.com/PrivOS-AI/privos-hub/pull/806),
+[#807](https://github.com/PrivOS-AI/privos-hub/pull/807) and the screens branch, sandbox
+[#424](https://github.com/PrivOS-AI/privos-sandbox/pull/424) and [#429](https://github.com/PrivOS-AI/privos-sandbox/pull/429),
+with the memory fixes hub [#800](https://github.com/PrivOS-AI/privos-hub/pull/800) and sandbox
+[#423](https://github.com/PrivOS-AI/privos-sandbox/pull/423), all draft. Docs:
+[Knowledge Spaces](./agent-system/knowledge-spaces.md).
+
+---
+
 ## 2026-11-09
 
 ### MCP list tools: opt-in pagination, Files tab rules on file and folder tools
