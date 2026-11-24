@@ -69,7 +69,7 @@ Every trigger renders as one generic card; nothing in it is specific to a routin
 | **Playbook** | the first `AgentFiles/routines/<name>.md` path found in the trigger's prompt field, as text |
 | Prompt | the full prompt of the trigger's type (`promptTemplate` for event, `prompt` otherwise) |
 | Next run | a pure interval (from the last run) or the instant of a pending one-time trigger |
-| Last run | `lastRunAt`. For a trigger **without** a handler, the turn outcome: ` · ran, nothing to say` (`quiet`), ` · ran, posted a reply` (`posted`), ` · ran, failed` (`failed`), ` · ran in observe mode, kept what it would have posted` (`would-post`) or ` · assessed, not run` (`assessed-ignore`) (`turnOutcomeKey`) |
+| Last run | `lastRunAt`. For a trigger **without** a handler, the turn outcome: ` · ran, nothing to say` (`quiet`), ` · ran, posted a reply` (`posted`), ` · ran, failed` (`failed`), ` · ran in observe mode, kept what it would have posted` (`would-post`), ` · assessed, not run` (`assessed-ignore`) or, for a super agent's room cron the hub refused to start, ` · did not start: a super agent runs a room cron only as its owner. Make it a global cron, or have the owner save it` (`not-started:super-agent-principal`) (`turnOutcomeKey`) |
 | Observing | observe mode only: `observing · N would-post in 24 h` (the count reads with a plus at the hub's cap), the note `the handler still posts by itself if its script does` on a handler trigger, `Last would-post (<time>)` with the kept text folded under it, and `Earlier would-posts (N)`, a folded list of the up to 19 kept before it, newest first, each with its time. See [observe mode](./agent-routines.md#observe-mode-and-the-decision-gate) |
 | Gate | decision-gate triggers only, from `lastGate`: `assessed-ignore · targets … · action … · settled … · $<cost>` after an ignore, or `gate skipped: <reason>` after the gate could not decide and the turn ran |
 | Last outcome | handler triggers only: `Last outcome: <lastOutcome> (<lastError>)` |
@@ -89,7 +89,7 @@ handler trigger runs its handler first (the payload's `source` is `manual`, see 
   runtime's `reason` (for example `harness-offline` or `downloading`). The route stops waiting after `RUN_START_WAIT_MS` and
   treats a run still starting as begun, because the browser is cut off at 100 s.
 - The card shows a toast, then reads the trigger list again 3 s later, so the outcome the run recorded (`lastOutcome`, `lastRunAt`) appears without a reload.
-- A manual run stamps `lastRunAt`, except on a pending one-time trigger, which would otherwise never fire. It is attributed like a scheduled fire: the trigger's creator, else the agent's owner.
+- A manual run stamps `lastRunAt`, except on a one-time trigger, which would otherwise never fire on its schedule: there it stamps `manualRunAt`, which the heartbeat never reads and which lets a decision the run records pass the [run check](./trigger-api-reference.md#post-v1agentstriggersdecisionsrecord). It is attributed like a scheduled fire: the trigger's creator, else the agent's owner, and the last editor as the initiator when that is someone else.
 - A scheduled fire that lands while a manual run holds the slot is skipped (claim rules: [Agent Routines](./agent-routines.md#claim-one-fire-at-a-time-per-trigger)).
 - Hidden for a room-scoped cron (it fires as one thread per room, which one click cannot stand for) and for an `emit_event` webhook (it has no prompt to run). Access is the one of `agents.triggers.list`; for a super agent that means its owner, an administrator or the agent itself.
 
@@ -216,8 +216,10 @@ manual cron and one-time runs send none, so they follow the server's UTC.
 
 ### Inline editor (pencil)
 
-The pencil on a card opens an editor. It sends a field only when it changed, so saving a description never rewrites the
-schedule of a wall-clock cron.
+The pencil on a card opens an editor. It sends the description and the prompt field on every save and any other field
+only when it changed, so saving a description never rewrites the schedule of a wall-clock cron. Because the prompt
+field is always sent, every save makes the caller the trigger's last editor (`updatedBy`), whom its turns run as; the
+toggle and the model picker do not ([update](./trigger-api-reference.md#post-v1agentstriggersupdate)).
 
 | Field | Shown when | Behaviour |
 |---|---|---|
@@ -245,7 +247,9 @@ On successful webhook trigger creation, the returned `webhookUrl` is automatical
 ### Validation
 
 - Prompt field is required (submit disabled when empty)
-- Server-side validation returns error messages displayed inline
+- A hub refusal shows the hub's `error` text (the REST client carries it there): inline in the add form, and in a toast
+  for the toggle, the model picker and the inline editor, and for the toggle of the admin trigger table. A generic
+  message is shown only when the hub sent none.
 
 ## i18n Keys
 

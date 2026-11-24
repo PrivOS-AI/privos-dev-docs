@@ -189,6 +189,7 @@ turn ends. Values the hub actually writes:
 | `failed` | a turn ended with an error; the room got the platform's failure notice, never the error text |
 | `would-post` | a turn in [observe mode](#observe-mode-and-the-decision-gate) ended with text; nothing was posted |
 | `assessed-ignore` | the [decision gate](#observe-mode-and-the-decision-gate) said ignore; no turn started |
+| `not-started:super-agent-principal` | a room-scoped cron of a super agent fired but would run as someone other than its owner, so no thread opened ([rule](./trigger-api-reference.md#authorization)); removed when a later fire of the trigger starts |
 
 The typing also lists `started`, `not-started` and `skipped-active` (`TriggerLastOutcome` in
 `packages/core-typings/src/BotTokens.ts`); the hub does not write them to the trigger today.
