@@ -10,9 +10,10 @@ what a trigger does, and the next scorecard says whether each one worked.
 > [#792](https://github.com/PrivOS-AI/privos-hub/pull/792) and [#788](https://github.com/PrivOS-AI/privos-hub/pull/788)
 > and sandbox [#387](https://github.com/PrivOS-AI/privos-sandbox/pull/387),
 > [#388](https://github.com/PrivOS-AI/privos-sandbox/pull/388) and
-> [#389](https://github.com/PrivOS-AI/privos-sandbox/pull/389), all drafts. None of it exists on a workspace until they
-> are released. Everything is off by default: a team without a designated evaluator, an owner who has not turned on
-> automatic stops, and a trigger without `decide` behave as before.
+> [#389](https://github.com/PrivOS-AI/privos-sandbox/pull/389), merged to `develop`, and hub
+> [#808](https://github.com/PrivOS-AI/privos-hub/pull/808) (the evaluator and super-agent rule, the roster add without a
+> team role). None of it exists on a workspace until they are released. Everything is off by default: a team without a
+> designated evaluator, an owner who has not turned on automatic stops, and a trigger without `decide` behave as before.
 
 ## Why this shape
 
@@ -43,7 +44,20 @@ The owner writes them in the **Evaluation setup** section of the team's card ([A
 tab), shown to every owner of a roster bot and listing only their own agents, or with
 `POST agents.a2a.teams.mark { teamId, roleCards: { <botId>: card | null } }`. Only the bot's current owner or a holder
 of `view-user-administration` writes one, and only for a roster bot. A body with only `roleCards`, `evaluators` and
-`autoStop` needs no team role; one that also changes the roster or tiers needs `add-team-member` or `edit-team-member`.
+`autoStop` needs no team role; one that also changes the roster or tiers needs `add-team-member` or `edit-team-member`,
+except the roster add of an owner whom another person added to the team (below).
+
+**Putting an own agent on the roster without a team role.** An owner whose team membership another person added may
+roster agents they own now (never the Universal Bot) without a team role, with a `mark` body that carries only `add`
+(and `teamId`); the team-room join hook applies the same rule. The hub reads who added the member from the team member
+row (`createdBy`): it must be an existing person other than the member, and a row written when a channel became the team
+does not count. A member who joined by themselves (a public team, an invite link), one an agent added, or one with no
+recorded inviter still needs a team role, as does every removal and an add that also sends `roles` or `riskTiers`. The
+refusal says how to get there: `A team role is required to edit the roster. To add agents you own without one, someone
+else must have added you to the team: ask a team owner or moderator to add you (if you joined by yourself, leave the
+team first) or to give you a team role.` Each such add writes an `agent-team.roster-added-without-role` audit row naming
+the inviter. The team-login rule for CLI agents still applies after it ([Agent CLI Runtime](./agent-cli-runtime.md)). No
+UI offers this yet: the Agents page roster actions stay with team-role holders.
 
 | Field | Values |
 |---|---|
@@ -60,8 +74,10 @@ card is tied to the bot's owner: a handover removes it.
 ## The evaluator
 
 - **Designation.** `mark { evaluators: { <ownerId>: <botId> | null } }`, by that owner or a holder of
-  `view-user-administration`, only to a roster agent the owner owns now. Another roster editor cannot replace it. The
-  hub rechecks it on every run, and a handover removes it.
+  `view-user-administration`, only to a roster agent the owner owns now that is not a super agent. Another roster
+  editor cannot replace it. The hub rechecks it on every run, and a handover removes it. The reverse holds too: the
+  super-agent flag is refused on a bot that is a designated evaluator in a team that exists and still has it on the
+  roster, until that designation is cleared ([Super Agent](./super-agent.md#flag-and-eligibility)).
 - **Wake.** The hub wakes the evaluator with an in-app notification addressed to it, carrying the team (`teamId`) and
   the scorecard (`itemId`); a notice that a teammate paused carries `teamId` and no `itemId`. The evaluator needs a
   filtered event trigger on `notification.created`
@@ -88,7 +104,8 @@ trigger's health changed (paused, or 20 % or more of 10 or more fires in a day f
 
 What it reads: the trigger fire log, the stage events of each counting list, the trigger question log (see
 [Owner questions](./trigger-api-reference.md#owner-questions-decide)), bot-to-bot tasks and their results' work state,
-published files, the hub usage log, and who opened the rooms the agent posted in. Team-core CLI spend reaches the usage
+published files, the hub usage log, and who opened the rooms the agent posted in. A super agent's room cron fire the
+hub refused (`not-started:super-agent-principal`) counts as a failed fire. Team-core CLI spend reaches the usage
 log only with sandbox #389, as per-session increments; earlier rows summed the CLI's running totals (about 2.8x too high
 on the measured core). Stage events are written by the hub's item model, one per move, creation in a stage, list copy
 and stage deletion (a deleted list leaves one `list-deleted` event), with the actor typed `user`, `bot` or

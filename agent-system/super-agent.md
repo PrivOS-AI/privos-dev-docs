@@ -54,6 +54,18 @@ Enabling is refused unless the bot is an active ordinary agent bot (not the Univ
 whose creator (`_createdBy`) is an active person. That creator becomes the **owner** (`principalId`) and is frozen into the
 state at enable time. Clearing skips every eligibility lookup.
 
+Enabling is also refused (`error-invalid-bot`) while the bot is an owner's designated
+[evaluator](./agent-team-evaluation.md#the-evaluator) in a team that exists and still has it on the roster: an evaluator
+must never be a super agent. The answer names the team (a private team only to a caller who is a member of it) and says
+that the bot's owner or a workspace admin clears the designation in the team's evaluation settings first.
+
+A switch-on also lists the bot's room crons that will stop, since each would run as someone other than the owner
+([room crons](#trigger-authorship)). The flag still goes on; `bots.superAgent.set` answers
+`roomCronsNotRunning: [{ id, name?, schedule?, timezone? }]`, the `super-agent.flag-set` row carries their ids in
+`details.roomCronsNotRunning`, and the switch in Agent Settings shows them under it (by name, else schedule) with the two
+fixes: make each a global cron, or have the owner save it. Source:
+`apps/meteor/server/services/super-agent/super-agent-enable.ts`.
+
 State lives in its own collection, never in `customFields`: persona and user saves replace `customFields` whole, and the
 mirror needs per-room records that survive them. Schema: `apps/meteor/server/core-typings/ISuperAgentState.ts`.
 
@@ -261,8 +273,16 @@ Who may create, change, run and remove the triggers of a super agent (`resolveTr
   are refused with the usual "not authorized" answer.
 
 A trigger about the owner (`subject: principal`) must be created by the owner or by the agent. An agent-authored trigger
-runs with the owner as initiator. Every change records `updatedBy` and `updatedAt` and writes a `super-agent.trigger-change`
+runs with the owner as initiator. Every change records `updatedAt` (and `updatedBy` when it writes the prompt, room
+scope, filter or handler wiring) and writes a `super-agent.trigger-change`
 row before the change (action, trigger id, type, field names, and `by`: `owner`, `admin` or `agent`; never prompt text).
+
+**Room crons must run as the owner.** A cron scoped to rooms opens a thread in each room as its last editor (else its
+creator), and a super agent starts a turn only for its owner. So the hub refuses, for every caller (the agent and an
+administrator included), an add, update or prompt restore that leaves an enabled room cron running as anyone but the
+owner, and the message names the two fixes: a global cron, or the owner saves it. A stored one that still fires opens
+no thread, posts nothing and shows why on its card. The skills have a super agent apply a peer's cron from its own agent
+room as a global cron. Rule and messages: [Trigger API Reference](./trigger-api-reference.md#authorization).
 The agent editing its own triggers is a risk the owner accepted: one injected turn can change a filter or prompt with
 lasting effect, and the audit row is how it is noticed.
 
@@ -358,7 +378,7 @@ Durable rows in the server events collection (ids and counts only, never message
 
 | `t` | Written when | Actor |
 |---|---|---|
-| `super-agent.flag-set` | an admin sets the flag (before the flag is written) | the admin |
+| `super-agent.flag-set` | an admin sets the flag (before the flag is written); `details.roomCronsNotRunning` lists the room crons that stop | the admin |
 | `super-agent.flag-cleared` | an admin clears it | the admin |
 | `super-agent.item-write` | an app-owned list item write passes on a super agent's authority | the bot |
 | `super-agent.room-write` | a flagged bot's room-management write | the bot |
@@ -379,6 +399,7 @@ Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hu
 | Catalog re-push | `server/services/super-agent/super-agent-catalog.ts` |
 | Filters and dispatch | `server/services/agent-trigger-filter.ts`, `agent-event-trigger-handler.ts` |
 | Trigger routes and authorship | `app/api/server/v1/agent-trigger-endpoints.ts` |
+| Room cron rule | `server/services/super-agent/super-agent-room-cron.ts` |
 | DM reply | `server/services/super-agent/dm-reply-drafts.ts` |
 | Owner reads | `server/services/super-agent/super-agent-owner-read.ts`, `app/api/server/v1/agents-super-agent-owner-read.ts` |
 

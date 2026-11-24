@@ -47,7 +47,9 @@ side is described in privos-sandbox `docs/architecture/agent-execution.md`.
 ## Whose turns run on the CLI
 
 Only turns the owner starts: their chat messages, and agent triggers (cron, event, manual run) that the owner both
-created and last edited. A trigger last edited by someone else runs as that person and stays on the default runtime.
+created and last edited. A trigger last edited by someone else, a room-scoped cron included, runs as that person and
+stays on the default runtime. Only a write of the prompt, room scope, filter, `nextAction` or handler moves that
+stamp (`updatedBy`); turning a trigger on or off or changing its model or schedule does not.
 Webhook-fired triggers never run on the CLI. A change of runtime on an existing thread goes through the normal
 handoff summary and a fresh native session; it does not resume the other runtime's session.
 
