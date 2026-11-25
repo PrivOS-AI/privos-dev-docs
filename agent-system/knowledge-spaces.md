@@ -7,9 +7,9 @@ turns a note into an instruction; everything an agent writes stays data until a 
 
 > **Status: not released.** This page describes draft pull requests, none of them merged yet: hub
 > [#801](https://github.com/PrivOS-AI/privos-hub/pull/801) (spaces, notes, proposals, the card, the read path and the
-> digest), [#806](https://github.com/PrivOS-AI/privos-hub/pull/806) (harvest, weekly review and team memory, on #801) and
-> [#807](https://github.com/PrivOS-AI/privos-hub/pull/807) (semantic search, on #801); the people screens on the hub branch
-> `feat/agent-knowledge-screens` (on #806, being built); sandbox
+> digest), [#806](https://github.com/PrivOS-AI/privos-hub/pull/806) (harvest, weekly review and team memory, on #801),
+> [#807](https://github.com/PrivOS-AI/privos-hub/pull/807) (semantic search, on #806) and
+> [#809](https://github.com/PrivOS-AI/privos-hub/pull/809) (the people screens, on #806); sandbox
 > [#424](https://github.com/PrivOS-AI/privos-sandbox/pull/424) (the `privos-knowledge` skill) and
 > [#429](https://github.com/PrivOS-AI/privos-sandbox/pull/429) (harvest runner and `team.py memory` on the knowledge
 > routes, on #424); and the memory fixes hub [#800](https://github.com/PrivOS-AI/privos-hub/pull/800) and sandbox
@@ -162,9 +162,10 @@ A daily job (02:20 UTC) marks pending proposals past their end date (`Agent_Know
 
 **Bulk approval.** `POST knowledge-spaces.notes.approve` approves up to 100 notes of one space in one step. Each item is
 `{ slug, version }` with the version the person was shown. A note whose version changed since (an agent edited it after
-the person looked) is skipped with `error-knowledge-stale`, so nobody approves text they did not see. The note keeps its
-writer as the author of the text; `approvedBy` is the person. Skipped items carry `not-found`, `already-approved` or the
-error type of the refusal.
+the person looked) is skipped with `error-knowledge-stale`, so nobody approves text they did not see. The people screen
+first loads the full text and version of every checked note with `knowledge-spaces.notes?slugs=`, shows them, and sends
+those versions. The note keeps its writer as the author of the text; `approvedBy` is the person. Skipped items carry
+`not-found`, `already-approved` or the error type of the refusal.
 
 **Batch rejection.** `POST knowledge-spaces.proposals.reject-batch { spaceId, batchId }` rejects every pending proposal
 of one batch and answers `{ rejected }`.
@@ -207,15 +208,15 @@ exists for them, so a sandbox cannot reach them with a bot key.
 |---|---|---|
 | `GET knowledge-spaces.list` | none | Spaces the caller administers, with `audienceCount`, `activeNotes` and `pendingProposals` |
 | `POST knowledge-spaces.create` | `preset`, `name`, `teamId?`, `restricted?` | Create a space from a preset |
-| `POST knowledge-spaces.update` | `spaceId`, `name?`, `restricted?`, `enabled?`, `approverId?`, `admins?`, `reviewerBotId?` | Change a space; `reviewerBotId: null` clears the reviewer |
+| `POST knowledge-spaces.update` | `spaceId`, `name?`, `restricted?`, `enabled?`, `approverId?`, `admins?`, `reviewerBotId?` | Change a space; `reviewerBotId: null` clears the reviewer. `enabled: false` is refused on a team space whose team memory moved ([Team memory](#team-memory-move-and-move-back)) |
 | `GET knowledge-spaces.get` | `spaceId` | One space with its audience (names resolved), `adminUsers`, `teamName`, `readers` (agents with a level) and, for a team space, `memoryMovedAt` |
-| `POST knowledge-spaces.audience.set` | `spaceId`, `kind`, `id?`, `level` | Add, change or remove (`level: null`) one entry |
+| `POST knowledge-spaces.audience.set` | `spaceId`, `kind`, `id?`, `level` | Add, change or remove (`level: null`) one entry. Removing the `team-roster` entry of a team whose memory moved is refused; lowering its level is allowed |
 | `GET knowledge-spaces.agent` | `botId` | `{ botId, spaces, ownEntries, restrictedBlock }`: the spaces that give the agent a level and which entry gives it, the agent's own entries on spaces the caller administers (`none` included), and `'harness'`, `'shared-vm'` or `null`. Only for a person who manages the agent |
-| `GET knowledge-spaces.notes` | `spaceId`, `slug?`, `status?` (`active`, `retired`, `all`) | Notes without text, or one note with its history when `slug` is given |
+| `GET knowledge-spaces.notes` | `spaceId`, `slug?`, `slugs?`, `status?` (`active`, `retired`, `all`) | Notes without text; one note with its history when `slug` is given; with `slugs` (comma-separated, 1 to 100 distinct short names, wins over `slug`), `{ notes }` with `slug`, `title`, `type`, `text`, `version` and `approved` of the active notes asked, in the order asked, for the confirm of a bulk approval (a short name with no active note is left out) |
 | `POST knowledge-spaces.notes.save` | `spaceId`, `slug?`, `title`, `type`, `text`, `reviewBy?` (ISO date or `null`), `expectedVersion?` | Create or change a note as a person: applied and approved at once |
 | `POST knowledge-spaces.notes.retire` | `spaceId`, `slug`, `expectedVersion?` | Retire a note; its history stays |
 | `POST knowledge-spaces.notes.approve` | `spaceId`, `notes` (1 to 100 `{ slug, version }`) | Bulk approval, `{ approved, skipped }` |
-| `GET knowledge-spaces.proposals` | `spaceId`, `status?`, `batchId?`, `offset?`, `count?` | `{ proposals, total }`, each with `proposerName` and, for a cited message, `sourceExcerpt` (`username`, `ts`, first 300 characters) |
+| `GET knowledge-spaces.proposals` | `spaceId`, `status?`, `batchId?`, `offset?`, `count?`, `proposalId?` | `{ proposals, total }`, each with `proposerName` and, for a cited message, `sourceExcerpt` (`username`, `ts`, first 300 characters). With `proposalId`, that one proposal whatever its status (the link of a card); a missing id and one of another space both answer `error-invalid-params` |
 | `POST knowledge-spaces.proposals.decide` | `proposalId`, `decision` (`approve` or `reject`), `title?`, `type?`, `text?` | `{ proposalId, status, noteVersion? }`, status `applied`, `rejected` or `stale` |
 | `POST knowledge-spaces.proposals.reject-batch` | `spaceId`, `batchId` | `{ rejected }` |
 | `POST knowledge-spaces.harvest.start` | `spaceId`, `runnerBotId`, `agentIds`, `teamMemory?` | Start a harvest, `{ harvest }` |
@@ -302,8 +303,10 @@ A **harvest** turns existing agent memory into proposals. A space admin starts i
 - Sources are the rules files of up to 20 agents the person owns (`error-not-authorized` for any other agent) and, for a
   team space the person administers, that team's memory, unless it has already moved into the space. Team memory is read
   only by a runner on the team's roster.
-- One batch reads at most 120,000 characters. A larger selection is refused with `error-knowledge-limit`, and the message
-  names the size of each source, so the person starts several batches. One space has at most one running batch.
+- One batch reads at most 120,000 characters. A larger selection is refused with `error-knowledge-limit`, and the
+  message names the size of each source, so the person starts several batches. A team memory is read whole, so a team
+  memory over 120,000 characters is refused on its own, with a message to move it into the space or trim it first. One
+  space has at most one running batch.
 - The runner fetches the text with `agents.knowledge.harvest.next` in chunks of at most 12,000 characters, wrapped as
   data. Only the runner of the batch may fetch; a repeated cursor returns the same chunk; a cursor past the stored cursor
   is refused (`error-invalid-params`), so a runner cannot skip text. Control and format characters are removed from the
@@ -312,7 +315,8 @@ A **harvest** turns existing agent memory into proposals. A space admin starts i
 - Every batch proposal waits for a person on the proposals page and may be a `rule` without a cited message.
 - A batch ends when the runner closes it (`agents.knowledge.harvest.done`), when a space admin cancels it
   (`knowledge-spaces.harvest.cancel`), when the runner's turn ends while it is still running, after 60 minutes without a
-  chunk or a proposal, or seven days after it started. Batch rows stay as the record of whose files were read.
+  chunk or a proposal, seven days after it started, or when the hub starts (the hub ends every running batch at start,
+  because the turn-end hook was lost with the old process). Batch rows stay as the record of whose files were read.
 
 The **weekly review** runs on Mondays at 02:00 UTC for each enabled space that has a reviewer agent (`reviewerBotId`).
 Only the approver sets the reviewer, to an eligible agent the approver owns. A space is skipped when its reviewer does
@@ -330,24 +334,37 @@ Until a team's memory is moved, `RoomFiles/TeamMemory/` works as before and its 
   note no person approved (writer kind `import`), the roster's level becomes `write`, and `knowledgeMemoryMovedAt` is
   stamped on the team document with the time the move started. A file over 16,000 characters is imported cut, after its
   whole text is copied to `TeamMemory/archive/<file>`. The move never deletes or changes a topic file. Running it again
-  changes nothing: a file not imported is listed in `skipped` with a reason (`name`, `exists`, `changed-after-move`,
-  `unreadable`, `empty`, `archive-failed`, or the error type of the refusal). The move cancels every running harvest of
-  the space that reads this team's memory. Reply: `{ spaceId, created, skipped, audienceChanged, movedAt }`.
+  changes nothing: a file not imported is listed in `skipped` with a reason: `name` (also a file whose name without
+  `.md` is not already a valid short name: rename it, then move again), `exists` (a note with that short name holds the
+  same text), `changed-after-move` (a note with that short name holds other text; decided by content, not by time),
+  `unreadable`, `empty`, `archive-failed`, or the error type of the refusal. The move refuses a disabled space
+  (`error-invalid-params`): there the roster has no level and could neither read nor note its memory. The move cancels
+  every running harvest of the space that reads this team's memory. Reply:
+  `{ spaceId, created, skipped, audienceChanged, movedAt }`.
 - **After the move** the hub no longer injects the file index for that team, whatever the switch says, and adds one
   sentence naming the knowledge space. `team.py memory note` appends one paragraph through the hub and `team.py memory
   read` lists the space; a failure of the knowledge routes is an error and no file is written. Team notes written by
   agents are fetched, not preloaded: until a person approves one, the digest shows the team's agents only its short name.
   `agents.a2a.teams.mine` carries `memoryMoved` per team, which is how `team.py` chooses.
-- **Move back** (`knowledge-spaces.team-memory.move-back { spaceId }`). It first copies every `TeamMemory/*.md` file
-  changed after the stamp (less 60 seconds) to `TeamMemory/archive/<stem>-<UTC yyyymmddThhmmssZ>.md`, in a write that must
-  succeed before anything is overwritten (an agent whose sandbox still had the old `team.py` may have written there after
-  the move). Then it writes every active note to `TeamMemory/<slug>.md`, rebuilds `MEMORY.md` and clears the stamp. The
-  notes stay in the space. Reply: `{ spaceId, written, archived, movedAt: null }`.
+- **Move back** (`knowledge-spaces.team-memory.move-back { spaceId }`). It first copies every existing `TeamMemory/*.md`
+  file it is about to overwrite with other content (a topic file whose normalised text differs from its note, and
+  `MEMORY.md` when its bytes change), whatever the file's time, to
+  `TeamMemory/archive/<stem>-<UTC yyyymmddThhmmssZ>.md`. That write must upload every copy before anything is
+  overwritten: an agent whose sandbox still had the old `team.py`, or a file the move skipped, may hold text the notes
+  lack. Then it writes every active note to `TeamMemory/<slug>.md`, rebuilds `MEMORY.md` (keeping the index lines of
+  topics that stayed files) and clears the stamp. A file it does not overwrite is left as it is, and a file equal to its
+  note is not archived. When the archive write fails nothing is overwritten, and when the note write fails the stamp
+  stays, so a rerun is safe. Move back works on a disabled space. The notes stay in the space. Reply:
+  `{ spaceId, written, archived, movedAt: null }`, with `archived` the list of archive paths.
+- **Access stays while moved.** While a team's memory is moved, the hub refuses `knowledge-spaces.update` with
+  `enabled: false` on its team space and the removal of the space's `team-roster` entry (`audience.set` with
+  `level: null`), both with `error-invalid-params` and the message to move the memory back first. Lowering the roster
+  level stays allowed. Turning the agent team itself off is allowed (the team then gets no team context at all).
 - **Team export** of a moved team reads the notes of the team space in place of the files, whatever the switch says.
 
 Move back is the rollback of a move. Like every route it answers `error-knowledge-disabled` while the switch is off, so
-every moved team is moved back before the switch is turned off on a workspace. Move a team only after every roster agent's
-sandbox has the `team.py` that knows the moved branch.
+every moved team is moved back before the switch is turned off on a workspace, and before its team space is disabled.
+Move a team only after every roster agent's sandbox has the `team.py` that knows the moved branch.
 
 ## Semantic search
 
@@ -355,10 +372,13 @@ Off unless `Agent_Knowledge_Semantic_Search_Enabled`, `Knowledge_Index_Enabled` 
 true. A note's text is embedded when the note is created or its text changes, with the workspace's embedding endpoint
 and model, and the vector is stored on the note with its model. Every note embedding is reserved from the workspace's
 existing daily budget `Knowledge_Backlog_Daily_Embed_Budget`, the same budget the room index spends. No reservation, no
-embedding: the note stays searchable by keyword, and a daily job (00:01 UTC, at most 100 notes) embeds it later inside the
-same budget. A search runs the keyword search first, then adds notes of the readable spaces whose vector is close to the
-query, at least `Knowledge_Vector_Minimum_Similarity_Percent`. No route reply ever carries `embedding` or
-`embeddingModel`.
+embedding: the note stays searchable by keyword, and a daily job (00:01 UTC, at most 100 notes) embeds it later inside
+the same budget. A search runs the keyword search first, then adds notes of the readable spaces whose vector is close to
+the query, at least `Knowledge_Vector_Minimum_Similarity_Percent`. The embeddings on write and the daily job share one
+queue, so one note version is never embedded twice; the daily job takes the notes never tried first, then those whose
+last attempt (`embeddingAttemptedAt`, set only by the vector writer) is oldest. An update that leaves title and text as
+they are keeps the vector and spends no budget. A vector write changes neither `_updatedAt` nor `version` of the note.
+No route reply ever carries `embedding`, `embeddingModel` or `embeddingAttemptedAt`.
 
 ## Settings and permission
 
@@ -420,15 +440,17 @@ Returned through `API.v1.failure(message, errorType)`: `error-knowledge-disabled
 
 ## Screens
 
-Web only, hidden while the switch is off (the hub refuses anyway). Being built on the hub branch
-`feat/agent-knowledge-screens`:
+Web only, in hub [#809](https://github.com/PrivOS-AI/privos-hub/pull/809) (branch `feat/agent-knowledge-screens`). While
+the switch is off the panel, the picker and the Agents page button are hidden, and the page itself only says that
+knowledge spaces are turned off (the hub refuses the routes anyway).
 
-- **Knowledge access** panel in Agent Settings: the agent's spaces, level and source, and the agent's own entry per
-  space a person administers ([Agent Settings UI](./agent-settings-ui.md#knowledge-access-panel)).
+- **Knowledge access** panel in Agent Settings: the agent's spaces, level and source, and the agent's own entry on each
+  space a person administers where the hub accepts one
+  ([Agent Settings UI](./agent-settings-ui.md#knowledge-access-panel)).
 - A level picker per space when creating an agent, sent as `knowledgeSpaces`.
 - The **Knowledge spaces** page, `/knowledge-spaces` and `/knowledge-spaces/:spaceId/:tab?/:itemId?` with tabs `notes`,
   `proposals`, `audience` and `settings`, opened from the Agents page header
-  ([Agents Page](./agents-page.md#knowledge-spaces-page)).
+  ([Agents Page](./agents-page.md#knowledge-spaces-page)). A disabled space is tagged in the list and on its page.
 
 There is no mobile screen; cards work through the generic keyboard.
 

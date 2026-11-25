@@ -528,13 +528,19 @@ files are not deleted or changed. Until a team moves, everything above holds unc
 - **`team.py memory`.** `agents.a2a.teams.mine` carries `memoryMoved` for each team, and `team.py` chooses by it. Moved:
   `memory note --topic <slug> --text "..."` sends `op: 'append'` to `agents.knowledge.propose` (one paragraph of at most
   2,000 characters; the hub adds it to the note, so teammates never overwrite each other; a missing topic is created as
-  a `reference`), and `memory read` lists the space, or reads one topic with `--topic`. Both work from any room, not only
-  the team room project. A topic a person approved refuses notes (`error-knowledge-note-approved`): write under a new
-  topic. A failure of the knowledge routes is an error and no file is written. Not moved: the files, as before.
-- **Move back.** `POST knowledge-spaces.team-memory.move-back` archives every team memory file changed after the move,
-  writes every active note of the space to `TeamMemory/<slug>.md`, rebuilds `MEMORY.md` and clears the stamp; `team.py`
-  then uses the folder again. It is the rollback of a move and is run for every moved team before knowledge spaces are
-  switched off on a workspace.
+  a `reference`), and `memory read` lists the space, or reads one topic with `--topic`. Both work from any room, not
+  only the team room project. A topic a person approved refuses notes (`error-knowledge-note-approved`): write under a
+  new topic. A topic that would pass 16,000 characters, the most one note holds, also refuses the note, and `team.py`
+  says to write under a new topic. A failure of the knowledge routes is an error and no file is written. Not moved: the
+  files, as before.
+- **Access stays while moved.** The move refuses a disabled space. While the memory is moved, the hub refuses to turn
+  the team space off and to remove its `team-roster` entry (lowering the roster level stays allowed): move the memory
+  back first.
+- **Move back.** `POST knowledge-spaces.team-memory.move-back` first archives every team memory file it would overwrite
+  with other text (compared by content with the note, whatever the file's time), then writes every active note of the
+  space to `TeamMemory/<slug>.md`, rebuilds `MEMORY.md` and clears the stamp; `team.py` then uses the folder again. It
+  is the rollback of a move and is run for every moved team before knowledge spaces are switched off on a workspace, and
+  before the team space is turned off.
 - **Export.** The team export of a moved team takes the notes of the team space in place of the `TeamMemory/` files.
 
 Move a team only after every roster agent's sandbox has a `team.py` that knows the moved branch: an older copy keeps
