@@ -8,7 +8,7 @@ How one PrivOS agent bot hands work to another bot and gets the result back. One
 
 | Term | Meaning |
 |------|---------|
-| **Agent team / roster** | A PrivOS Hub team that a holder of the **Create agent teams** permission (`manage-agent-teams`: role `admin` and the **Agent Team Manager** role by default) turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot edit the roster. The roster authorizes calls between teammates of different owners. Plain `TeamMember` rows grant room access only and never authorize a2a. |
+| **Agent team / roster** | A PrivOS Hub team that a holder of the **Create agent teams** permission (`manage-agent-teams`: role `admin` and the **Agent Team Manager** role by default) turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot call `mark`; a bot's invite into the team room rosters only its own owner's agents ([Who joins on a bot's invite](#who-joins-the-roster-on-a-bots-invite)). The roster authorizes calls between teammates of different owners. Plain `TeamMember` rows grant room access only and never authorize a2a. |
 | **Destination room** | `roomId` of the envelope: any room both bots are members of. The recipient acts there, its reply streams there and a one-line record is posted in the chain thread. 1:1 DMs are refused (`a2a-room-shape-unsupported`); channels, private groups, group DMs, team main rooms and the recipient's own agent room qualify; the sender's own agent room never does for another bot (an agent room hosts only its own bot, whoever is a member), so a bot acting in its agent room sends to a shared room such as the team room. |
 | **Acting room** | The room the sender acts in, resolved by the hub from provenance it owns (the proxy-stamped session room for sandbox bots; the running a2a turn's room or the bot's agent room for harness bots; the bot's agent room for a CLI caller). |
 | **Same-room call** | Acting room equals destination room. |
@@ -391,10 +391,29 @@ Returned as `errorType` with HTTP 400 or 403.
 ### Turning a team into an agent team
 
 1. Someone with the **Create agent teams** permission switches on **Agent team** when creating the team, or later in the team's **Edit** panel (Team Info). The switch is shown only to holders of that permission and applies at once. Workspace admins hold it; give it to anyone else with the **Agent Team Manager** role, or grant `manage-agent-teams` to any role in Administration → Permissions.
-2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
+2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member; for an agent bot that invites another bot, see [Who joins the roster on a bot's invite](#who-joins-the-roster-on-a-bots-invite). A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
 3. A bot that leaves or is removed from the team leaves the roster.
 4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
 5. In the team room, every bot row of the member list carries **On agent team** or **Not on agent team**, and the room header shows a pill ("Agent team on · N bots", "Agent team off", or "Bot-to-bot paused workspace-wide" when the kill switch is off) that opens the member list. Both appear only in a team that is an agent team, and any team member sees them. The same roster actions, with the owner's risk tiers, are on the Teams tab of the [Agents page](./agents-page.md).
+
+### Who joins the roster on a bot's invite
+
+When an agent bot invites another bot into an agent team's main room, it acts for its owner (`rosterOnTeamJoin` in
+`apps/meteor/server/services/a2a/a2a-teams.ts`). From hub PR [#814](https://github.com/PrivOS-AI/privos-hub/pull/814)
+(on `develop` once it merges; not released):
+
+- Only an agent created by the inviting bot's owner joins the roster. Another person's agent and the Universal Assistant
+  stay plain team members.
+- The owner's right to add members counts only from the roles of the owner's own subscription to the team room
+  (`add-team-member` or `edit-team-member`), or, as for a person, from having been added to the team by another person.
+  An admin owner's workspace role no longer widens it.
+- The agent is never put on the team's CLI login by a bot's invite; it is rostered and keeps running in its own VM. The
+  login's owner puts it on the login in person ([Agent CLI Runtime](./agent-cli-runtime.md#which-agents-are-on-it)).
+
+The other way in for a super agent is a `team-add` proposal: the owner approves it on a card, and the hub adds the agent
+as the owner, on the team's CLI login when the owner owns it and the card said so
+([Super Agent, Managing the owner's agents](./super-agent.md#managing-the-owners-agents)). A person's own invite keeps
+the rule of step 2 above.
 
 ### What the owner sees
 

@@ -128,9 +128,12 @@ agent that qualifies for the VM later by other means (an admin reactivates it, a
 VM**; the login is not dropped, and the card lists it as running outside the login until the owner adds it or saves
 the login again. Nobody but the login's owner can put an agent on the login: the roster action answers "Only the
 owner of the team CLI login can add this agent to the team", and such an agent that someone else adds to the team
-room stays a plain team member. One of the owner's own agents counts as the owner here: when it invites the owner's
-other agent into the team room, that agent is put on the login without a person acting (`rosterOnTeamJoin`,
-`humanBehind`). Removing an agent from coverage or changing its owner takes it off the login without dropping it.
+room stays a plain team member. An agent's invite does not count as the owner: when one of the owner's agents invites
+the owner's other agent into the team room, that agent joins the roster and stays off the login (`rosterOnTeamJoin`).
+The login's owner puts it on the login in person, or by approving a `team-add` card of their super agent
+([Super Agent, Managing the owner's agents](./super-agent.md#managing-the-owners-agents)). This holds from hub PR
+[#814](https://github.com/PrivOS-AI/privos-hub/pull/814), on `develop` once it merges and not released; before it, such
+an invite put the agent on the login. Removing an agent from coverage or changing its owner takes it off the login without dropping it.
 
 ### Removal
 
@@ -167,7 +170,7 @@ What is left are permission rules:
 |---|---|
 | Save, replace or clear a room's login | The room owner; a workspace admin may clear it ([The room setting](#the-room-setting)) |
 | Save, replace or clear the team login | The owner of the team's covered agents; a workspace admin may clear it ([Agent teams](#agent-teams-one-login-for-the-team)) |
-| Put an agent on the team login | The login's owner only, and only their own agents; an agent of the owner that invites one of them into the team room counts as the owner ([Which agents are on it](#which-agents-are-on-it)) |
+| Put an agent on the team login | The login's owner only, and only their own agents: in person, or by approving a `team-add` card of their super agent. An agent's invite into the team room rosters the agent and leaves it off the login ([Which agents are on it](#which-agents-are-on-it)) |
 | Add an agent that runs on a team login to a room | The owner of that login only (`apps/meteor/server/services/team-login-agent-add.ts`). **Refused** with `error-agent-cli-owner-only`, and nobody of that call is added: Members, an invite, `/invite`, the mention button, `teams.addMembers`, and a room, team or discussion created with the agent in its member list (a team created for a named owner is checked for the caller too). **Left out**, the others are added: a room made or created as a default room of a team the agent is in, "add all users", and the author of the message a discussion starts from. **Never by itself**: a channel join, the default channels, a trigger into a room it is not in, an item room; a bot is never the owner of a login. **Not asked**: the owner's super agent following them into their rooms, an agent re-attached to its own agent room, an agent that is already in the room, and an agent that creates a room |
 | Add a person, or an agent that is on no team login, to a room | Whoever may add members to that room, on every path: Members, invites, joins, invite links, default channels, team default rooms, "add all users", integrations, the MCP rooms-invite tool, federation. No path checks whether a login can be read in the room |
 | Add members as a bot | Through an invite (`channels.invite`, `groups.invite`, the `addUsersToRoom` method, `/invite`): only in the bot's own agent room, in a room it created, or in a room where its super-agent owner holds owner, admin or leader (`botMayInviteTo` in `apps/meteor/app/lib/server/methods/addUsersToRoom.ts`). `teams.addMembers`, a room created with a member list and a bot joining a public channel have no bot rule |
