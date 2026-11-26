@@ -137,7 +137,8 @@ and for a viewer who does not manage the agent (the hub answers `error-not-autho
 When creating an agent, the same levels can be chosen per space with the knowledge access picker
 (`knowledge-access-picker.tsx`, in the agent builder review and the harness pair form). It offers the owner spaces of the
 creator and the workspace spaces the creator administers, never a team space, and never a restricted space for a harness
-agent; only rows changed from Inherit are sent, as `knowledgeSpaces` of `agents.create`, at most 50.
+agent; only rows changed from Inherit are sent, as `knowledgeSpaces` of `agents.create`, at most 50. Choosing
+Write asks for the same confirmation as the panel and the Audience tab; Cancel keeps the previous level.
 
 ## Messages during a reply (mid-turn steering policy)
 
