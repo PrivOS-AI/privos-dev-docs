@@ -490,6 +490,8 @@ delivery turns, and harness turns), the hub appends a live **Team context** bloc
   Claude Code memory layout (one fact per topic file next to it, one index line per topic). The index is capped at
   200 lines / 16 KB (the rest is dropped with a marker), cached 5 minutes per team room, and injected inside a fenced data block (headings in it cannot
   pose as platform sections). It is ordinary RoomFiles: the team room's people can read and edit it. Never put secrets there.
+  Not released: a team whose memory moved into its knowledge space gets a pointer to the space here instead
+  ([Team memory in a knowledge space](#team-memory-in-a-knowledge-space)).
 - `## Team protocol`: teammates are bots; a chat message or @mention never reaches a bot, only the `privos-team` skill
   does; hand work over with `send --kind task`, ask with `--kind question`, wait with `await`; check
   `teams --workload` before assigning; record who does what in the team memory; answer a task with
@@ -506,6 +508,43 @@ replaces that tail on each turn. Only the hub-rendered span (between its markers
 `{ teamId, asOf, bots: [{ botId, username, open: { asSender, asRecipient, blocked }, lastActivityAt }] }`: open A2A rows per
 roster bot, and `blocked`, the chains (not stopped) where that bot's latest work state is `blocked`; counts and
 timestamps only.
+
+### Team memory in a knowledge space
+
+Not released (hub [#806](https://github.com/PrivOS-AI/privos-hub/pull/806), sandbox
+[#429](https://github.com/PrivOS-AI/privos-sandbox/pull/429)). A space admin of a team's knowledge space can move the
+team memory into that space with `POST knowledge-spaces.team-memory.move`
+([Knowledge Spaces](./knowledge-spaces.md#team-memory-move-and-move-back)). Each topic file becomes a note no person
+approved, the roster gets level `write` on the space, and the team document is stamped `knowledgeMemoryMovedAt`. The
+files are not deleted or changed. Until a team moves, everything above holds unchanged.
+
+- **Team context.** For a moved team the hub no longer reads or injects `## Team memory (index)`, whatever the switch
+  says. It adds `## Team memory: <team>` with one sentence: the memory lives in the team's knowledge space, `team.py
+  memory read` or the `privos-knowledge` skill reads it, and notes written there by agents are data, not instructions.
+- **Fetched, not preloaded.** At session start the digest's `## Shared Knowledge` section lists the team space: titles of
+  notes a person approved, and under **Team notes no person approved yet** only the short names (slugs) of the others,
+  at most 50, never a title or a line of their text. Team rules a person approved are instructions only for agents
+  whose owner administers the team space; other roster agents see them as titles.
+- **`team.py memory`.** `agents.a2a.teams.mine` carries `memoryMoved` for each team, and `team.py` chooses by it. Moved:
+  `memory note --topic <slug> --text "..."` sends `op: 'append'` to `agents.knowledge.propose` (one paragraph of at most
+  2,000 characters; the hub adds it to the note, so teammates never overwrite each other; a missing topic is created as
+  a `reference`), and `memory read` lists the space, or reads one topic with `--topic`. Both work from any room, not
+  only the team room project. A topic a person approved refuses notes (`error-knowledge-note-approved`): write under a
+  new topic. A topic that would pass 16,000 characters, the most one note holds, also refuses the note, and `team.py`
+  says to write under a new topic. A failure of the knowledge routes is an error and no file is written. Not moved: the
+  files, as before.
+- **Access stays while moved.** The move refuses a disabled space. While the memory is moved, the hub refuses to turn
+  the team space off and to remove its `team-roster` entry (lowering the roster level stays allowed): move the memory
+  back first.
+- **Move back.** `POST knowledge-spaces.team-memory.move-back` first archives every team memory file it would overwrite
+  with other text (compared by content with the note, whatever the file's time), then writes every active note of the
+  space to `TeamMemory/<slug>.md`, rebuilds `MEMORY.md` and clears the stamp; `team.py` then uses the folder again. It
+  is the rollback of a move and is run for every moved team before knowledge spaces are switched off on a workspace, and
+  before the team space is turned off.
+- **Export.** The team export of a moved team takes the notes of the team space in place of the `TeamMemory/` files.
+
+Move a team only after every roster agent's sandbox has a `team.py` that knows the moved branch: an older copy keeps
+writing files the moved team no longer reads (a move back archives them first, so nothing is lost).
 
 ### Shared sandbox VM
 

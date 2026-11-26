@@ -110,6 +110,36 @@ useQuery({
 
 Mutations invalidate the query to refetch after toggle/delete/add.
 
+## Knowledge access panel
+
+Not released: hub [#809](https://github.com/PrivOS-AI/privos-hub/pull/809), branch `feat/agent-knowledge-screens`. File
+`client/components/knowledge-spaces/knowledge-agent-panel.tsx` (`KnowledgeAgentPanel({ botId })`), rendered in
+`AgentSettingsTab.tsx` right after the vault panel. It returns nothing while `Agent_Knowledge_Spaces_Enabled` is false,
+and for a viewer who does not manage the agent (the hub answers `error-not-authorized`). The rules are in
+[Knowledge Spaces](./knowledge-spaces.md#levels).
+
+- **Reads** `GET knowledge-spaces.agent?botId=` (only a person who manages the agent) and `GET knowledge-spaces.list`; a
+  space is editable when the caller administers it.
+- **Rows**, one per space: the spaces that give the agent a level, then spaces where the agent's own entry is `none`,
+  then the other spaces the caller administers where the hub accepts an entry for this agent: workspace spaces and owner
+  spaces of the agent's owner (`users.info` `agentBot.ownerId`). A team space is listed only when it already gives the
+  agent a level or holds its own entry, because the hub accepts a `bot` entry on a team space only for a roster agent.
+  Each shows the space name, the effective level (No access, Read, Propose, Write) and where it comes from: set for this
+  agent, all agents of the owner, the agent team, or all workspace agents.
+- **Own setting** on an editable row: **Inherit** (no own entry: `audience.set` with `level: null`), **None** (the agent
+  gets no access even when a group gives one), **Read**, **Propose** or **Write**, each with a one-line hint. **Write**
+  first asks for a confirm that says the agent can change the space without asking: add notes, and change or retire at
+  once every note no person approved, notes of other agents and notes imported from team memory included; that its notes
+  stay data until a person approves them; and that a change to an approved note still waits for a person.
+- **Restricted spaces**: when the agent runs on an external harness or a shared team VM (`restrictedBlock`), Read, Propose
+  and Write are disabled for a restricted space and the reason is shown. A refusal from the route is shown under its row.
+
+When creating an agent, the same levels can be chosen per space with the knowledge access picker
+(`knowledge-access-picker.tsx`, in the agent builder review and the harness pair form). It offers the owner spaces of the
+creator and the workspace spaces the creator administers, never a team space, and never a restricted space for a harness
+agent; only rows changed from Inherit are sent, as `knowledgeSpaces` of `agents.create`, at most 50. Choosing
+Write asks for the same confirmation as the panel and the Audience tab; Cancel keeps the previous level.
+
 ## Messages during a reply (mid-turn steering policy)
 
 When a new message reaches an agent bot while it is still generating a reply in
