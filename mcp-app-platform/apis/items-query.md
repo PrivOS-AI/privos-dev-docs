@@ -150,23 +150,35 @@ do {
 
 ### Incremental sync
 
-Record when a sync finished, then ask only for what changed since:
+Record when a sync started, then ask only for what changed since. Keep the mark in
+`app.storage`: the app frame runs in an opaque origin, where its own `localStorage`
+throws or is wiped.
 
 ```tsx
-const since = localStorage.getItem('lastSync') ?? new Date(0).toISOString();
+const key = `v1:${userId}:${roomId}:lastSync:${listId}`;
+const since = (await app.storage.get(key)) ?? new Date(0).toISOString();
+// Start the next window a minute before this sync began, so a change made while it
+// runs, or a browser clock slightly behind the Hub's, is read again instead of lost.
+const nextSince = new Date(Date.now() - 60_000).toISOString();
 
-const res = await app.rest({
-  method: 'POST',
-  path: 'items.query',
-  body: { listId, filter: { updatedAt: { gte: since } }, sort: { field: '_updatedAt', direction: -1 }, count: 100 },
-});
+let cursor: string | undefined;
+do {
+  const res = await app.rest({
+    method: 'POST',
+    path: 'items.query',
+    body: { listId, filter: { updatedAt: { gte: since } }, sort: { field: '_updatedAt', direction: 1 }, count: 100, ...(cursor ? { cursor } : {}) },
+  });
+  res.body.items.forEach((item) => cache.set(item._id, item));
+  cursor = res.body.nextCursor ?? undefined;
+} while (cursor);
 
-res.body.items.forEach((item) => cache.set(item._id, item));
-localStorage.setItem('lastSync', new Date().toISOString());
+await app.storage.set(key, nextSince);
 ```
 
-Deletions do not appear in this stream. Re-page in full occasionally if your copy must
-converge exactly.
+Deletions do not appear in this stream, and `items.deleted` is not yet open to apps through the
+bridge. Re-page in full occasionally if your copy must converge exactly. The whole pattern,
+including what may be stored in the browser, is in
+[Building fast apps](../building-fast-apps.md#3-offline-first).
 
 ## Errors
 

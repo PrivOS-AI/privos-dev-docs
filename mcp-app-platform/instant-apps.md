@@ -6,7 +6,8 @@ preloads into the workspace and serves to every user who opens it (see
 [The signed UI bundle](./ui-bundle.md)). Application data lives in
 **PrivOS Lists**, reached from the browser through the same
 `@privos_ai/app-react` bridge every MCP app UI uses — there is just no backend
-on the other end of any of its own tool calls.
+on the other end of any of its own tool calls. [Building fast apps](./building-fast-apps.md) covers
+reading that data, drawing first and keeping an offline-first copy.
 
 ## When to choose it
 
