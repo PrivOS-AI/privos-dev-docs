@@ -74,6 +74,10 @@ Notes:
 
 ## 3. Build the UI
 
+Read List data in the browser with `app.rest()` rather than through a tool of your own, draw the
+screen before any check finishes, and show the last saved copy while a fresh one loads. Why and
+how: [Building fast apps](./building-fast-apps.md). The scaffolded `src/ui/` already does all three.
+
 Use `@privos_ai/app-react` hooks (see [React SDK Reference](./react-sdk-reference.md)):
 
 ```tsx
@@ -449,9 +453,9 @@ Apps running in a sandboxed iframe communicate with the PrivOS host via `window.
 
 `host/storage.get` / `host/storage.set` proxy to the host's `localStorage` under a sandboxed `mcp-app:` prefix. Apps cannot read or write host keys (e.g. Meteor login tokens).
 
-- Keys are stored as `mcp-app:<your-key>` in host storage — apps see only their key, not the prefix.
+- Keys are stored as `mcp-app:{appId}:<your-key>` in host storage. The host stamps the `appId` itself, so one app can neither read nor overwrite another's keys; apps see only their key, not the prefix.
 - Values are strings; serialize JSON yourself (`JSON.stringify` before `set`, `JSON.parse` after `get`).
-- Storage is scoped to the PrivOS host origin and shared across app instances on that origin. There is **no per-app isolation yet** — collisions between apps on the same key are possible. Use a unique prefix such as `<appId>:`.
+- Storage belongs to the browser profile, not to the user, and is not cleared when the user logs out. Put the user and room in your keys and store nothing secret or personal; see [Building fast apps](./building-fast-apps.md#in-the-ui).
 - Missing keys return `{ value: null }`.
 
 Example (raw):

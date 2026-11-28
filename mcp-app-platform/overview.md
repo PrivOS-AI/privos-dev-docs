@@ -74,6 +74,7 @@ PrivOS Hub Host
 | [Auth & REST Integration](./auth-and-rest-integration.md) | REST-first model, frontend session vs backend bot token, security |
 | [Runtime Modes](./runtime-modes.md) | One app across managed / standalone / development — `serveApp`, transport & trust bootstrap |
 | [Developer Guide](./developer-guide.md) | Direct & relay app setup, build, DB tutorial, run |
+| [Building fast apps](./building-fast-apps.md) | Read List data in the browser, draw the UI first with checks in the background, offline-first caching |
 | [The signed UI bundle](./ui-bundle.md) | `bundle-ui`, `ui.distDir`, install/upgrade verification, refusal codes |
 | [INSTANT apps](./instant-apps.md) | Frontend-only apps: manifest contract, data in Lists, publish checklist |
 | [API Reference](./api-reference.md) | REST endpoints, relay WS, MCP tools, scopes |
