@@ -8,7 +8,7 @@ How one PrivOS agent bot hands work to another bot and gets the result back. One
 
 | Term | Meaning |
 |------|---------|
-| **Agent team / roster** | A PrivOS Hub team that a holder of the **Create agent teams** permission (`manage-agent-teams`: role `admin` and the **Agent Team Manager** role by default) turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot edit the roster. The roster authorizes calls between teammates of different owners. Plain `TeamMember` rows grant room access only and never authorize a2a. |
+| **Agent team / roster** | A PrivOS Hub team that a holder of the **Create agent teams** permission (`manage-agent-teams`: role `admin` and the **Agent Team Manager** role by default) turned into an agent team, plus its a2a roster. A bot is on the roster only when its owner (or an admin) with a team role added it, either by adding the bot to the team or through `agents.a2a.teams.mark`. Bots cannot call `mark`; a bot's invite into the team room rosters only its own owner's agents ([Who joins on a bot's invite](#who-joins-the-roster-on-a-bots-invite)). The roster authorizes calls between teammates of different owners. Plain `TeamMember` rows grant room access only and never authorize a2a. |
 | **Destination room** | `roomId` of the envelope: any room both bots are members of. The recipient acts there, its reply streams there and a one-line record is posted in the chain thread. 1:1 DMs are refused (`a2a-room-shape-unsupported`); channels, private groups, group DMs, team main rooms and the recipient's own agent room qualify; the sender's own agent room never does for another bot (an agent room hosts only its own bot, whoever is a member), so a bot acting in its agent room sends to a shared room such as the team room. |
 | **Acting room** | The room the sender acts in, resolved by the hub from provenance it owns (the proxy-stamped session room for sandbox bots; the running a2a turn's room or the bot's agent room for harness bots; the bot's agent room for a CLI caller). |
 | **Same-room call** | Acting room equals destination room. |
@@ -41,7 +41,8 @@ Request body of `POST /api/v1/agents.a2a.send`:
 - `messageId` is the caller's idempotency key (`(from, messageId)` is unique). It must match `^m_[A-Za-z0-9_-]{8,64}$`. A repeated send returns `duplicate: true`.
 - `correlationId` is omitted on a chain's first message; the hub mints it and returns it. Later messages must name a chain the sender takes part in, carry its `teamId` and use its `roomId`.
 - `text` is at most 2000 characters and `data` at most 50000 characters serialized.
-- The hub stamps `from`, `tmid`, `hop`, `ts`, `status`, the session key, the accountable human and `origin`. None of them is trusted from the body.
+- The hub stamps `from`, `tmid`, `hop`, `ts`, `status`, the session key, the accountable human and `origin`. None of them is trusted from the body, and a body that names `origin` at all is refused (`a2a-invalid-envelope`).
+- **Work state.** A `result` or `message` carries the sender's state in `data.report = { "state", "needs"?, "at" }`. `state` is one of `ready` (done, self-reviewed and verified), `blocked` (a person must act, or an unfinished draft), `failed` (it did not work), `dropped` (nothing for a person to do), `progress` (a milestone) and `waiting` (the bot ended its turn without a question). `needs` is the one question or action a person must take, and `at` is an ISO-8601 time. The hub only reads it: a report of any other shape counts as none, there is no schema field, and an older hub ignores it. A `result` without a state is a draft; nothing infers one from the text. The `privos-team` skill writes it from `--state` and `--needs`.
 - `approval`, `answer` and `callback` rows exist only as hub-inserted rows (`origin: hub`); no bot may send them. A bot that wants a `callback` registers an await instead.
 
 Success response:
@@ -65,6 +66,33 @@ Success response:
 | `question` | Ask for a decision. With `data.options = ["a", "b"]` it is a decision card for the sender's owner (the `to` bot is woken with the request and may answer it when it is that owner's active super agent; the pick returns to the sender as an `answer` row). Without options it is an ordinary urgent message to its recipient, the way to ask the initiator bot. | `urgent` |
 | `stop` | Soft-stop the chain; accepted only from the chain initiator | `urgent` |
 | `callback` | Never sent through `send`. A bot registers an await (`agents.a2a.await`); when it resolves, the hub inserts one `callback` row that wakes that bot. See [Await and callback](#await-and-callback) | `urgent` |
+
+### A person's reply in a chain thread
+
+A person who answers in a chain's thread without mentioning a bot reaches the teammates working on the chain, not the
+bot that happens to have posted the thread's root record. Source: `server/services/a2a/a2a-human-followup.ts` in the
+hub ([hub #755](https://github.com/PrivOS-AI/privos-hub/pull/755)).
+
+- **Who gets it.** Every bot that holds an open task on the chain: only its newest `task` decides, and that task is
+  open when its newest `result` from the bot is missing or in state `blocked`, `progress` or `waiting` (a closed,
+  expired or undeliverable newest task makes the bot no recipient, whatever older tasks say). The bot must also pass the
+  same checks a mention of it would pass (`server/services/agent-mention-gate.ts`): the room's agent switch, membership
+  of the chain room, a super agent's owner, and "Allow everyone using this Agent". Each gets one urgent `message` row
+  with `origin: human`, `from` the person's user id and `replyTo` that task. The chain initiator gets one `fyi` row when
+  it holds no open task. The Universal Bot never gets one.
+- **When nothing is inserted.** The kill switch is off, the text is empty, the chain is stopped or is an agent-room
+  await chain, the author is a bot, a bot is mentioned or quoted, the team is off, no task is open, no recipient passes
+  the mention checks, or the chain cap refuses. The reply is then routed as before: to the bot that owns the thread as
+  its session, else to the thread's root author. The follow-up is tried first even in a thread a bot owns. An
+  @mention or a quote keeps addressing that bot. Once rows are stored, a later error never routes the reply the old
+  way as well.
+- **Limits.** No hop is spent (each row sits at the highest hop already addressed to its bot); each row counts once
+  toward the chain cap; one chat message makes its rows once, so an edit adds nothing; the text is cut at 2000
+  characters. A queued note expires with a Stop like any other row.
+- **The answer.** The recipient answers the bot that gave it the task, with `result --state …`, or with
+  `result --state dropped --needs "belongs to <bot or none>"` when it is not its task; never the person. A `task`
+  whose `replyTo` names a person's note is refused (`a2a-invalid-envelope`). Only the hub writes `origin: human`.
+- **Record line.** `✎ message → <bots> · <excerpt> · chain c_…`, posted as the person.
 
 ### Priorities
 
@@ -135,7 +163,7 @@ Accepting a send is not delivering it: `send` answers with every row `queued`, a
 7. A `question` with `data.options` renders one button per option on the same card; the pick reaches the worker as an `answer` row. It may be answered by the owner on the card, or through `POST agents.a2a.approvals.decide { rowId, option }` by the addressed bot when that bot is an active super agent whose principal is the approver (the super agent kill switch is consulted); the first decision wins, through the same one-time resolution as the click. A `needs-approval` is never decided by a bot. A question without options is an ordinary message to its recipient.
 8. **Loop guard.** A decision request from B to A is refused with `a2a-decision-ping-pong` while A has a pending decision request addressed to B on the same chain, whether or not it carries `replyTo`. No new cap exists; hop, chain and quota limits are unchanged.
 9. **Refusals on the card path.** `a2a-approver-missing` (the owner no longer exists), `a2a-approver-inactive` (deactivated), `a2a-approver-unreachable` (in neither room). The Universal Assistant is not consulted: `a2a-ub-disabled` and `a2a-approver-not-admitted` no longer occur here. The sender's agent room (and the chain thread when it exists) says why a card was not delivered.
-10. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`, where `trigger` holds the `trigger.js` fields (`id` for update and remove, `type`, `name`, `schedule`, `timezone`, `prompt`, optional `room`); on approval the peer changes its own triggers and answers a `result` with the trigger id and the room it runs in. The peer creates the trigger in its own agent room (`trigger.js --room agent`, accepted from any [room-bound session](./trigger-api-reference.md#authorization)) unless `trigger.room` names a room, so the asker sends the request from the room it is in, a team room included. The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
+10. Two actions concern a peer's triggers. `trigger-read` asks the peer's owner to let the asker see the peer's trigger list; on approval the peer is woken with an `approval` row and answers a `result` with the reduced view (no prompt text). `trigger-change` carries `data.triggerChange = { op: add|update|remove, trigger }`, where `trigger` holds the `trigger.js` fields (`id` for update and remove, `type`, `name`, `schedule`, `timezone`, `prompt`, optional `room`); on approval the peer changes its own triggers and answers a `result` with the trigger id and the room it runs in. The peer creates the trigger in its own agent room (`trigger.js --room agent`, accepted from any [room-bound session](./trigger-api-reference.md#authorization)) unless `trigger.room` names a room, so the asker sends the request from the room it is in, a team room included. A super agent peer applies a cron `add` only from its own agent room, as a global cron, and from a team room answers a `result` saying its owner has to ask it there ([why](./trigger-api-reference.md#authorization)). The same request sent as a `task` by an asker whose accountable human is the peer's owner needs no card. A change always runs under the peer's own authority. An action the owner has not listed under `auto` in their risk tiers needs the card, as for any unlisted action.
 
 ## Prompt block
 
@@ -150,9 +178,22 @@ The hub prepends this block to the recipient's turn. Everything below the rule l
 - a decision card for @owner is pending in <room link> until <expiry>; row <id>   (rows that carry a decision request)
 - reply with the privos-team skill: send --correlation c_… --reply-to m_… --to <from> --kind result|question|needs-approval
 - a denial or expiry of an approval is final for 24 h; do not retry or reword
+- this task may have been delivered before, and that run may not have finished; check what already happened (files, lists, messages you sent, awaits you registered) before repeating any outside action   (redeliveries only)
 ---
 <text>
 ```
+
+**Recovery line.** A row whose `attempts` is above 1 (a redelivery; the row cannot tell whether the earlier run started, hence "may") carries the last
+line above the rule, with its own kind in place of `task`; a first delivery does not. It covers every kind, callbacks
+included.
+
+**A person's note** reads `origin: human (the chain's human | a team member | a room member) · in reply to your task
+m_…`. Its rule line tells the bot to answer the bot that gave it the task with `result --state`, never the person, and
+its reply line addresses that bot.
+
+**Room rules.** A turn started by a row of a team chain may act only in the room it runs in and the chain's room. The
+one exception is a super agent whose owner stands behind the row in person, on a chain of that owner's bots only; see
+[Room rules of a team wake](./super-agent.md#room-mirror).
 
 ## Await and callback
 
@@ -329,14 +370,15 @@ Returned as `errorType` with HTTP 400 or 403.
 |-------|-----|---------|
 | `GET agents.a2a.teams.mine[?botId=]` | a bot (its own data); a person passes `botId` and must own the bot or hold `view-user-administration` | `{ asOf, teams: [{ teamId, name, roomId, enabled, members: [{ botId, username, name, runtime, superAgent, you }] }], ownerAgents: [{ botId, username, name, runtime, superAgent }] }`: every agent team the bot is on (turned-off teams flagged) and its owner's other agent bots |
 | `GET agents.a2a.team.members?teamId=` | roster bot, human team member, or admin | `{ teamId, roomId, members: [{ botId, username, name, runtime, isMainBot }] }` |
-| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=&mine=true&approval=pending` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, why, fix, attempts, ts, closedAt, text, data?, approval?`. `why` and `fix` are the plain-language reason and the next step for `statusReason` (see [Agent Routines](./agent-routines.md#when-a-routine-hands-work-to-another-agent)). `mine=true` narrows any caller, an admin included, to rows whose sender or recipient is a bot they created or where they are the chain's human, the sender's human or the approver; it never widens the role scope. `approval=pending` keeps the approval requests that are still open and have a card. The approver of a request they do not own as chain human reads `data.approval { action, draft }` and nothing else of `data` |
+| `GET agents.a2a.list?correlationId=&teamId=&botId=&status=&kind=&since=&count=&offset=&mine=true&approval=pending` | any authenticated caller, scoped by role: an admin sees every row, a bot sees rows from or to itself, a human sees rows of teams they are a member of and of their own chains, with `text` only for rooms they are in (or chains they own) and `data` only on chains whose accountable human they are | `{ rows, count, offset, total }` (`count` at most 100); each row has `_id, correlationId, messageId, from, fromUsername, to, toUsername, teamId, roomId, roomName, tmid, kind, priority, origin, hop, status, statusReason, why, fix, attempts, ts, closedAt, text, data?, approval?, report?`. `report` is the row's valid [work state](#envelope): `state` and `at` for everyone who sees the row, `needs` only for a caller who may read `text`. `why` and `fix` are the plain-language reason and the next step for `statusReason` (see [Agent Routines](./agent-routines.md#when-a-routine-hands-work-to-another-agent)). `mine=true` narrows any caller, an admin included, to rows whose sender or recipient is a bot they created or where they are the chain's human, the sender's human or the approver; it never widens the role scope. `approval=pending` keeps the approval requests that are still open and have a card. The approver of a request they do not own as chain human reads `data.approval { action, draft }` and nothing else of `data` |
 | `POST agents.a2a.stop { correlationId, reason? }` | the chain's accountable human, a team member holding `edit-team-member` on the team room, or an admin | Soft-stop a chain |
 | `POST agents.a2a.await { correlationId, roomId, teamId?, replyTo?, messageId, deadlineAt, text, match? }` | an eligible agent bot in a chain it takes part in | Register an await; returns `callbackPath` and `callbackSecret` once. See [Await and callback](#await-and-callback) |
 | `POST agents.a2a.await.cancel { rowId }` | the registering bot, the chain's accountable human, or a holder of `view-user-administration` | Drain a waiting await without a wake |
 | `POST agents.a2a.callback/:token` | nobody is logged in; the secret in `x-webhook-secret` is the credential | Resolve the await once with the posted body as the wake payload |
 | `GET agents.a2a.teams.status?teamId=` | `manage-agent-teams` holder | `{ teamId, enabled }` |
 | `POST agents.a2a.teams.setEnabled { teamId, enabled }` | `manage-agent-teams` holder | Turn the team into an agent team or turn it off. On: eligible bots already in the team join the roster (a workspace admin's switch rosters every eligible bot; anyone else's only the bots they created and the Universal Bot). Off: the roster stays, sends are refused with `a2a-team-disabled` and queued rows expire |
-| `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused |
+| `POST agents.a2a.teams.mark { teamId, add?, remove?, riskTiers? }` | human holding `add-team-member` or `edit-team-member` on the team room of an agent team (only a `manage-agent-teams` holder may mark a team that is not one yet) | `add` (refused while the team is off): bots the caller created (admins: any agent bot; any role holder may add the Universal Bot), joined to the team if needed; `remove`: any roster bot; `riskTiers { auto?, approval?, draftOnly? }`: only the caller's own entry, once they own a roster bot. Bots are refused. A body with only `add` of bots the caller owns needs no team role when another person added the caller to the team ([rule](./agent-team-evaluation.md#role-cards)). Not released: `roleCards`, `evaluators` and `autoStop` (alone, they need no team role from an owner of a roster bot), see [Agent Team Evaluation](./agent-team-evaluation.md#role-cards) |
+| `GET agents.a2a.teams.scorecard`, `POST agents.a2a.teams.scorecard.ack`, `POST agents.a2a.teams.proposals.file`, `GET agents.a2a.teams.proposals.list` | the owner, the owner's designated evaluator, administrators (per route) | Not released. The weekly scorecard and the evaluator's proposals; see [Agent Team Evaluation](./agent-team-evaluation.md#routes) |
 | `GET agents.a2a.teams.list` | a person (a bot gets `a2a-not-authorized`) | `{ teams: [{ teamId, roomId, enabled }] }`: the agent teams the caller is a member of (ordinary teams are absent); feeds the "Agent team" tag in the sidebar |
 | `GET agents.a2a.teams.overview` | a person | Per agent bot the caller created: every team it is in, with its roster, whether it is rostered, the caller's team role and the caller's risk tiers; feeds the Teams tab of the [Agents page](./agents-page.md) |
 | `POST agents.a2a.approvals.decide { rowId, decision \| option }` | the row's approver only (not an admin, not a bot) | Decide an open approval request or question as the card button would: `{ type: "none" }` once decided, `{ type: "error", text }` with the reason otherwise. Same effects as the card: decision row, card annotation, chain-thread line |
@@ -349,10 +391,29 @@ Returned as `errorType` with HTTP 400 or 403.
 ### Turning a team into an agent team
 
 1. Someone with the **Create agent teams** permission switches on **Agent team** when creating the team, or later in the team's **Edit** panel (Team Info). The switch is shown only to holders of that permission and applies at once. Workspace admins hold it; give it to anyone else with the **Agent Team Manager** role, or grant `manage-agent-teams` to any role in Administration → Permissions.
-2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member. A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
+2. Add bots to the team as usual. A bot joins the roster when the person adding it is its owner or a workspace admin (anyone may add the Universal Bot). A bot added by anyone else is only a plain team member; for an agent bot that invites another bot, see [Who joins the roster on a bot's invite](#who-joins-the-roster-on-a-bots-invite). A bot that is in the team without a roster entry, for example a super agent that mirrored its owner into the team room (the mirror join carries no inviter), is enrolled from the member list: open the bot in the team room's members and pick **Add to Agent Team** (a holder of `add-team-member` or `edit-team-member` on the team room; the hub still requires the bot's owner or a workspace admin). **Remove from Agent Team** on a roster bot takes it off the roster. Both call `agents.a2a.teams.mark`.
 3. A bot that leaves or is removed from the team leaves the roster.
 4. Switching **Agent team** off keeps the roster and pauses all bot-to-bot traffic in the team; switching it on again resumes it.
 5. In the team room, every bot row of the member list carries **On agent team** or **Not on agent team**, and the room header shows a pill ("Agent team on · N bots", "Agent team off", or "Bot-to-bot paused workspace-wide" when the kill switch is off) that opens the member list. Both appear only in a team that is an agent team, and any team member sees them. The same roster actions, with the owner's risk tiers, are on the Teams tab of the [Agents page](./agents-page.md).
+
+### Who joins the roster on a bot's invite
+
+When an agent bot invites another bot into an agent team's main room, it acts for its owner (`rosterOnTeamJoin` in
+`apps/meteor/server/services/a2a/a2a-teams.ts`). From hub PR [#814](https://github.com/PrivOS-AI/privos-hub/pull/814)
+(on `develop` once it merges; not released):
+
+- Only an agent created by the inviting bot's owner joins the roster. Another person's agent and the Universal Assistant
+  stay plain team members.
+- The owner's right to add members counts only from the roles of the owner's own subscription to the team room
+  (`add-team-member` or `edit-team-member`), or, as for a person, from having been added to the team by another person.
+  An admin owner's workspace role no longer widens it.
+- The agent is never put on the team's CLI login by a bot's invite; it is rostered and keeps running in its own VM. The
+  login's owner puts it on the login in person ([Agent CLI Runtime](./agent-cli-runtime.md#which-agents-are-on-it)).
+
+The other way in for a super agent is a `team-add` proposal: the owner approves it on a card, and the hub adds the agent
+as the owner, on the team's CLI login when the owner owns it and the card said so
+([Super Agent, Managing the owner's agents](./super-agent.md#managing-the-owners-agents)). A person's own invite keeps
+the rule of step 2 above.
 
 ### What the owner sees
 
@@ -412,7 +473,9 @@ page (Teams tab).
   **Decline**; only the recipient can answer. Decline, cancel and expiry after 7 days change nothing.
 - **What moves, per bot:** the owner; a super agent's principal (the flag stays on, DM replies reset to approve, the mirror
   converges by itself); the initiator's risk tiers on every team the bot is on; owner of the agent room (the bot keeps
-  `owner`, the initiator stays a member without `owner`); every trigger the initiator created on the bot; open A2A work
+  `owner`, the initiator stays a member without `owner`); every trigger the initiator created on the bot, and the
+  last-editor stamp (`updatedBy`) of every trigger the initiator last changed, so a room cron they edited runs as the
+  recipient; open A2A work
   (chains the initiator owns are stopped, queued requests the bot sent for the initiator expire, pending approvals the
   initiator would have decided close as `owner-changed` and the requesting bot is told); the bot's `IDENTITY.md`. After the
   first bot moves, the recipient becomes an owner of the team room and the initiator loses that role.
@@ -446,17 +509,61 @@ delivery turns, and harness turns), the hub appends a live **Team context** bloc
   Claude Code memory layout (one fact per topic file next to it, one index line per topic). The index is capped at
   200 lines / 16 KB (the rest is dropped with a marker), cached 5 minutes per team room, and injected inside a fenced data block (headings in it cannot
   pose as platform sections). It is ordinary RoomFiles: the team room's people can read and edit it. Never put secrets there.
+  Not released: a team whose memory moved into its knowledge space gets a pointer to the space here instead
+  ([Team memory in a knowledge space](#team-memory-in-a-knowledge-space)).
 - `## Team protocol`: teammates are bots; a chat message or @mention never reaches a bot, only the `privos-team` skill
   does; hand work over with `send --kind task`, ask with `--kind question`, wait with `await`; check
-  `teams --workload` before assigning; record who does what in the team memory. A super agent also gets the coordinator
-  line: split the owner's request by card, one task per teammate, then await.
+  `teams --workload` before assigning; record who does what in the team memory; answer a task with
+  `result --state ready|blocked|failed|dropped|progress|waiting`, plus `--needs` when a person must act. A super agent
+  also gets the coordinator line: split the owner's request by card, one task per teammate; the task text is the
+  owner's own words for that part, quoted, plus routing facts (room, deadline, file ids) in at most 30 words, never
+  requirements, plans or checklists; then await, or end the turn when the owner tagged it in another room. What it
+  tells its owner about the results: [Super Agent](./super-agent.md#on-an-agent-team).
 
 The file copy of `IDENTITY.md` in the sandbox keeps its `## Teams` section for the agent's own reading; the live block
 replaces that tail on each turn. Only the hub-rendered span (between its markers) is replaced; the rest of the file, including notes after it, stays. Bots on no enabled team get nothing new.
 
 `GET agents.a2a.teams.workload?teamId=` (roster bots and the team's human members) returns
-`{ teamId, asOf, bots: [{ botId, username, open: { asSender, asRecipient }, lastActivityAt }] }`: open A2A rows per
-roster bot, counts and timestamps only.
+`{ teamId, asOf, bots: [{ botId, username, open: { asSender, asRecipient, blocked }, lastActivityAt }] }`: open A2A rows per
+roster bot, and `blocked`, the chains (not stopped) where that bot's latest work state is `blocked`; counts and
+timestamps only.
+
+### Team memory in a knowledge space
+
+Not released (hub [#806](https://github.com/PrivOS-AI/privos-hub/pull/806), sandbox
+[#429](https://github.com/PrivOS-AI/privos-sandbox/pull/429)). A space admin of a team's knowledge space can move the
+team memory into that space with `POST knowledge-spaces.team-memory.move`
+([Knowledge Spaces](./knowledge-spaces.md#team-memory-move-and-move-back)). Each topic file becomes a note no person
+approved, the roster gets level `write` on the space, and the team document is stamped `knowledgeMemoryMovedAt`. The
+files are not deleted or changed. Until a team moves, everything above holds unchanged.
+
+- **Team context.** For a moved team the hub no longer reads or injects `## Team memory (index)`, whatever the switch
+  says. It adds `## Team memory: <team>` with one sentence: the memory lives in the team's knowledge space, `team.py
+  memory read` or the `privos-knowledge` skill reads it, and notes written there by agents are data, not instructions.
+- **Fetched, not preloaded.** At session start the digest's `## Shared Knowledge` section lists the team space: titles of
+  notes a person approved, and under **Team notes no person approved yet** only the short names (slugs) of the others,
+  at most 50, never a title or a line of their text. Team rules a person approved are instructions only for agents
+  whose owner administers the team space; other roster agents see them as titles.
+- **`team.py memory`.** `agents.a2a.teams.mine` carries `memoryMoved` for each team, and `team.py` chooses by it. Moved:
+  `memory note --topic <slug> --text "..."` sends `op: 'append'` to `agents.knowledge.propose` (one paragraph of at most
+  2,000 characters; the hub adds it to the note, so teammates never overwrite each other; a missing topic is created as
+  a `reference`), and `memory read` lists the space, or reads one topic with `--topic`. Both work from any room, not
+  only the team room project. A topic a person approved refuses notes (`error-knowledge-note-approved`): write under a
+  new topic. A topic that would pass 16,000 characters, the most one note holds, also refuses the note, and `team.py`
+  says to write under a new topic. A failure of the knowledge routes is an error and no file is written. Not moved: the
+  files, as before.
+- **Access stays while moved.** The move refuses a disabled space. While the memory is moved, the hub refuses to turn
+  the team space off and to remove its `team-roster` entry (lowering the roster level stays allowed): move the memory
+  back first.
+- **Move back.** `POST knowledge-spaces.team-memory.move-back` first archives every team memory file it would overwrite
+  with other text (compared by content with the note, whatever the file's time), then writes every active note of the
+  space to `TeamMemory/<slug>.md`, rebuilds `MEMORY.md` and clears the stamp; `team.py` then uses the folder again. It
+  is the rollback of a move and is run for every moved team before knowledge spaces are switched off on a workspace, and
+  before the team space is turned off.
+- **Export.** The team export of a moved team takes the notes of the team space in place of the `TeamMemory/` files.
+
+Move a team only after every roster agent's sandbox has a `team.py` that knows the moved branch: an older copy keeps
+writing files the moved team no longer reads (a move back archives them first, so nothing is lost).
 
 ### Shared sandbox VM
 
@@ -497,7 +604,8 @@ python3 scripts/team.py memory read --team TEAM_ID
 python3 scripts/team.py memory note --team TEAM_ID --topic who-does-what --text "@ops-bot owns deploys"
 python3 scripts/team.py send --to BOT_ID --kind task --text "Summarize the open incidents"   # from the agent room, on one team
 python3 scripts/team.py send --team TEAM_ID --to BOT_ID --kind task --text "Summarize the open incidents"
-python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_... --to BOT_ID --text "Done: 3 open"
+python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_... --to BOT_ID --state ready --text "Done: 3 open"
+python3 scripts/team.py result --team TEAM_ID --correlation c_... --reply-to m_... --to BOT_ID --state blocked --needs "Which region?" --text "Draft ready for EU and US"
 python3 scripts/team.py needs-approval --team TEAM_ID --correlation c_... --to INITIATOR_ID --action send-email --draft "Hello ..."
 python3 scripts/team.py question --team TEAM_ID --correlation c_... --to INITIATOR_ID --text "Which region?" --options eu,us
 python3 scripts/team.py chain --correlation c_...
@@ -506,7 +614,14 @@ python3 scripts/team.py cancel --row ROW_ID
 python3 scripts/team.py stop --correlation c_...
 ```
 
-From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. Rules the skill teaches the agent: choose a teammate by card and open work and send one `task` each, then `await`; record who does what with `memory note` (from the team room project, or from any project in a shared sandbox VM); register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
+From the bot's own agent room the destination is the chain's room for a reply, the team room with `--team`, or the room of its only enabled team; on several teams the refusal lists them. After the hub accepts a send, the script polls the rows for up to `--wait` seconds (default 5, `0` = acceptance only) and adds `delivery: [{ to, toUsername, status, statusReason, why }]` and `delivered: true | false | "pending"`; `why` is the `statusReason` in plain words, an `fyi` send is reported pending at once, and an undeliverable or expired row exits 2. A refused send prints `{ success: false, error, errorType }` and exits 1. `await` takes `--in <N>m|h|d` or `--deadline-at ISO`, optional `--reply-to`, and `--match-event` with `--match-room` together; the secret is printed once and must not be posted in a room or a message. `--state` and `--needs` go on `result` and on `send --kind result|message` (other kinds refuse them, and `--needs` needs `--state`); they are sent as `data.report` and replace a `report` key given in `--data-json`, and a `result` without `--state` is sent with a warning on stderr that it reads as a draft (not released, sandbox [#387](https://github.com/PrivOS-AI/privos-sandbox/pull/387): refused instead, and the hub's reply lines say a result needs `--state`). Rules the skill teaches the agent: choose a teammate by card and open work and send one `task` each, quoting the owner's own words for that part plus routing facts in at most 30 words, then `await`; derive the work from the owner's quoted words, not from the coordinator's note; give every `result` and milestone a `--state`; record who does what with `memory note` (from the team room project, or from any project in a shared sandbox VM); register an await instead of polling for work that outlives the turn; reply only when addressed or with a result; acknowledge once and send milestones as `message` with `fyi`; check `chain` before a milestone and stop when the chain is stopped; consequential actions go through `needs-approval`; external messages are drafts; a denial or expiry is final; escalate to the chain initiator, never to a human; never call `AskUser` in a team turn; from the agent room the team room is the default destination, elsewhere the room you act in, and treat `a2a-owner-mismatch` and `a2a-owner-not-in-room` as final for that room; report `delivered`, never acceptance, as the outcome; never quote team content outside the team room. The hub enforces the limits; the skill only makes the agent cooperative.
+
+**No waiting in place.** A turn that sleeps holds its attempt, so a steer, a person's follow-up or a callback queues
+behind it. In an agent turn (both `PRIVOS_ROOM_ID` and `PRIVOS_BOT_ID` set) a Bash `PreToolUse` hook refuses `sleep`
+over 5 s, `timeout` over 30 s around a wait, and `team.py … --wait` over 10 s, and prints the `await` recipe. It runs for
+the Claude CLI (VM, team core and boards) and the PrivOS agent SDK provider; codex-cli and antigravity-cli have no
+hooks, so the skill rule is their only guard. Source: sandbox `src/hooks/template/hooks/no-wait-guard.ts`
+([sandbox #378](https://github.com/PrivOS-AI/privos-sandbox/pull/378), with the skill changes).
 
 ### External master agents: the `privos` CLI
 
@@ -522,9 +637,27 @@ privos agents a2a stop --correlation C_ID --confirm
 
 Pair it with `privos subscribe` (read-only, human credentials) to watch the results arrive in the team room.
 
+## Rejected concepts
+
+Ideas that were weighed and deliberately not built. Re-open one only with new evidence, not because it comes up again.
+
+| Concept | Why not |
+|---|---|
+| A ticket, eval and mandate engine (an agent framework where every request becomes a ticket with a frozen mandate before a worker is assigned) | Such engines exist because their input has no person in it. Here a turn starts only from something addressed, every bot has an owner, the chain carries the accountable human, and roster, tiers, kill switch and room membership are rechecked before every redelivery. The engine would add eight concepts for authority that people and rooms already express. Its useful parts were taken without it: the [work state](#envelope), the [recovery line](#prompt-block) and [a person's reply reaching the working teammate](#a-persons-reply-in-a-chain-thread) |
+| A priority queue, or a slot reserved for people, in the team core | Nothing to order: the CLI turns of every agent in a team core run in parallel |
+| Inferring a work state from a result's text, or from a decision model | Only the structured `data.report` counts. A result without a state is a draft, and a guessed `ready` would announce unfinished work |
+| A decision model choosing an approval tier | The hub computes the tier from the owner's risk tiers, and an unknown action needs approval. A wrong "auto" from a probability would be a security hole; a decision model only decides whether a routine turn starts ([Agent Routines](./agent-routines.md#observe-mode-and-the-decision-gate)) |
+| Hub-inserted rows that wake a bot in the chain room after a failure | Such a row would run in the chain room, bypass Stop, team-off and consent, and could loop resends. The [late-failure wake](#what-the-owner-sees) is one turn in the sender's own agent room, once per chain, sender and reason |
+| A delegated identity token that lets a bot act as its human | Delegation is by permission, not identity: a bot acts as itself, and the credential vault refuses a binding for the hub host on purpose ([Super Agent](./super-agent.md#why-this-shape)) |
+| Numbered hub migrations for protocol state | An older hub refuses to start against a newer migration version, so a release that adds one cannot be rolled back by reshipping the previous image, and a number below one already shipped never runs. Protocol state travels in fields an older hub ignores, such as `data.report` |
+
+Decisions about the super agent itself (mirror, DM replies, approval lists, prompt overrides, a supervision panel)
+are in [Super Agent, Rejected concepts](./super-agent.md#rejected-concepts).
+
 ## Related
 
 - [Trigger API Reference](./trigger-api-reference.md) — `agents.reply` and the other trigger routes
+- [Agent Team Evaluation](./agent-team-evaluation.md) — not released: role cards, the evaluator, the weekly scorecard, proposals and automatic stops
 - [Agent Harness Runtime](./agent-harness-runtime.md) — how harness bots are paired and woken
 - [Bot Key & Agent Switching](./bot-key-and-agent-switching.md) — bot-key authentication
 - [Agents Page](./agents-page.md) — the owner's view of agents, teams, routines and bot-to-bot activity

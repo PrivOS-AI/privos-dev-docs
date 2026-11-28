@@ -14,6 +14,8 @@ All endpoints except `agents.webhook/:token` require authentication via `X-Auth-
 | POST | `/v1/agents.triggers.update` | Yes | Update an existing trigger |
 | POST | `/v1/agents.triggers.remove` | Yes | Remove a trigger |
 | POST | `/v1/agents.triggers.run` | Yes | Manually fire a trigger |
+| POST | `/v1/agents.triggers.decisions.record` | Bot key | Not released. The agent records a decision it took itself on a trigger in `assist`; see [Owner questions](#owner-questions-decide) |
+| POST | `/v1/agents.triggers.decisions.reverse` | Yes | Not released. The agent's owner reverses such a decision; same section |
 | GET | `/v1/agents.handlers.list` | Yes | List the services of the agent room's runtime, for the handler picker (`wake=true` may start the runtime; see [Agent Settings UI](./agent-settings-ui.md#then-what-runs)) |
 | POST | `/v1/agents.webhook/:token` | No | Receive external webhook |
 | POST/GET | `/v1/agents.a2a.*` | Bot key (Bearer) | Bot-to-bot messages between roster agents (`send`, `team.members`, `list`, `await`); see [Bot-to-Bot Protocol](./bot-to-bot-protocol.md) |
@@ -32,15 +34,30 @@ All authenticated endpoints verify **bot ownership**: the requesting user must b
 
 A [super agent](./super-agent.md) adds a stricter rule for `list`, `add`, `update`, `remove`, `run` and the prompt-history
 restore: only its owner, an administrator (`view-user-administration`) or the agent itself from a session in its own agent
-room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`. Every
-`add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row.
+room may call them. Any other caller, and any session bound to another room, gets `Bot not found or not authorized`
+(a body that sets `decide` gets `only the agent owner or an admin may change decide` instead). Every
+`add`, `update` and `remove` on a super agent also writes a `super-agent.trigger-change` audit row. On every agent, an
+`update` that changes whether a trigger runs, what it runs or how it is gated, and every `remove`, writes an
+`agent-trigger.changed` row ([audit](#observe-mode-and-the-decision-gate-mode-and-assess)).
+
+**A super agent's room crons run only as its owner.** A cron scoped to rooms opens its threads as its run-as user: the
+last editor (`updatedBy`) when that is not the creator, else the creator, else the agent's creator. A super agent starts
+a turn only for its owner, so `add`, `update` and the prompt-history restore refuse, for every caller (the agent itself
+and an administrator included), a write that leaves an enabled room cron of a super agent running as someone else; the
+message names both ways out (errors table below). Turning such a cron off or making it global is always accepted. A
+stored one that still fires opens no thread: nothing is invited or posted, its fire-log row reads
+`not-started:super-agent-principal`, and `lastOutcome` keeps that value until a fire of the trigger starts again. Rule:
+`roomCronWouldNotRunAsOwner` in `apps/meteor/server/services/super-agent/super-agent-room-cron.ts`.
 
 **Room-bound sessions.** A sandbox session bound to a room other than the agent's own agent room (a mention reply, a
 room-scoped cron thread, an A2A turn in a team room) may `add`, `list`, `update`, `remove` and read the prompt history of
 triggers scoped to exactly one room: that room, or, for the agent itself only, a **cron** scoped to its own agent room.
 From the `agent-scheduler` skill the second one is `trigger.js add --type cron --room agent`; it runs as a live thread in
 the agent room, like any room-scoped cron. This is how an agent applies a peer's `trigger-change` request (see the
-[bot-to-bot protocol](./bot-to-bot-protocol.md#approval-flow)) whatever room it was woken in. The exception is cron-only
+[bot-to-bot protocol](./bot-to-bot-protocol.md#approval-flow)) whatever room it was woken in. A super agent does not:
+its trigger writes are refused outside its own agent room and a room cron it writes would never run (above), so the
+skill has it apply a peer's cron from its agent room as a global cron (`trigger.js add` without `--room`). The
+exception is cron-only
 because an event trigger ignores events from the agent's own room, and another caller bound to the room (an owner or
 leader through the header) does not get it. Global triggers (webhooks, whatever room the body names; handler crons;
 unscoped crons), multi-room triggers and filtered triggers are refused on `add` with `error-not-authorized` and hidden
@@ -130,6 +147,9 @@ Add a new trigger. Maximum 20 triggers per agent.
 | `description` | string | No | One line shown under the title |
 | `nextAction` | string | No | What a fire does: `agentic_response` (default), `run_handler`, or `emit_event` (webhook only). See [Running a handler](#running-a-handler-nextaction-and-handler) |
 | `handler` | object | With `run_handler` | `{ "name": "<service>" }`, the room service to run first |
+| `mode` | string | No | `live` (default) or `observe`. See [Observe mode and the decision gate](#observe-mode-and-the-decision-gate-mode-and-assess) |
+| `assess` | object | No | `{ "rubric", "threshold"? }`, the decision gate of a filtered `message.new` trigger. Same section |
+| `decide` | string | No | Not released. `off` (default), `shadow` or `assist`. See [Owner questions](#owner-questions-decide) |
 
 **Body Parameters (type=cron):**
 
@@ -305,6 +325,7 @@ Rules enforced by `add` and `update`:
 | `a room-scoped cron runs threads; a handler needs the global cron` | `run_handler` on a cron with `sourceRoomId(s)` |
 | `run_handler webhooks require the secret` | `run_handler` webhook without a stored secret |
 | `Room-bound sessions may only add triggers scoped to their own room or to the agent's own agent room (trigger.js --room agent); ...` | A [room-bound session](#authorization) adds a global, multi-room, other-room or filtered trigger (`error-not-authorized`) |
+| `A super agent starts a turn only for its owner, and a cron scoped to rooms runs as whoever saved it last, so this cron would never run. Make it a global cron (no room scope), or have the owner save it.` | An enabled room cron of a super agent would run as someone other than its owner; also on `update` and the prompt-history restore (`error-not-authorized`, [rule](#authorization)) |
 | `only the owner, an admin or the agent in its room may attach a handler` | Caller is none of the three (`error-not-authorized`) |
 | `handler-not-found: no service "<name>" is declared in the agent room` | No such service in the agent room's project (`errorType` `handler-not-found`) |
 | `handler-not-found: service "<name>" is not a handler (kind <kind>)` | The service exists with another kind (`errorType` `handler-not-found`) |
@@ -356,6 +377,111 @@ agent builder chat ([Agent Builder](./agent-builder.md)) and by `trigger.js`
 
 ---
 
+## Observe mode and the decision gate (`mode` and `assess`)
+
+Accepted on `add` and `update`, returned by `list`. Behaviour, the card and the `decider` model:
+[Agent Routines](./agent-routines.md#observe-mode-and-the-decision-gate).
+
+| Field | Rule |
+|---|---|
+| `mode` | `live` or `observe`. Live is stored as no field, so `list` returns `mode` only for `observe`. Switching to `live` also removes `lastWouldPost`, `wouldPostAt` and `wouldPosts`. Refused with `mode-not-applicable` on a cron, a webhook with `nextAction: emit_event`, and a trigger that only answers mentions, DMs or bot tasks (a filter whose only predicates are `mention` and `dm`, an `a2a.task` filter, the legacy `message.mention` and `message.bot_mention` events) |
+| `assess` | `{ "rubric": "<1-2000 characters>", "threshold": <number> }`; no other key. `threshold` defaults to 0.6 and is clamped to 0.5-0.95 when stored. `assess: null` removes it and `lastGate`. Refused with `assess-not-applicable` unless the trigger is a filtered event trigger listening to `message.new` that does not only answer mentions or DMs, and on a harness agent |
+
+- **Who.** Only a person who created the agent, or a holder of `view-user-administration`, may change either field. The
+  agent itself, other owners or leaders of the agent room and any bot get
+  `only the agent owner or an admin may change mode or assess` (`error-not-authorized`). One exception only tightens:
+  `add` with `mode: "observe"` and no `assess` is open to anyone who may add a trigger, the agent itself included (an
+  owner who asks the agent to try a routine first). `assess` on `add`, and any change of an existing trigger's `mode` or
+  `assess`, stay with the owner or an admin. Only a change is checked: a value sent back as stored passes for any editor
+  and writes nothing. Removing a trigger that is in observe mode or has
+  `assess`, or turning it off (`enabled` false), needs the same person and is refused otherwise with
+  `only the agent owner or an admin may remove or disable a trigger in observe mode or with assess`, so an agent cannot
+  swap its observed routine for a live copy. A removal is audited with the mode and threshold, never the rubric.
+- **Update.** The checks run on the trigger as it will be after the write, so a filter edit that would leave a stored
+  gate or observe mode inapplicable is refused unless the same write removes it.
+- **Audit.** The `agent-trigger.created` row of every `add`, and on a super agent the `super-agent.trigger-change` row of
+  an `add` or `update`, record `mode` and `assess: { threshold }`, never the rubric. On every agent, an `update` that
+  changes `enabled`, the handler wiring (`nextAction` to or from `run_handler`, or the handler's name), `mode` or
+  `assess` writes one `agent-trigger.changed` row before the write:
+  `{ botId, triggerId, action: "update", type, by, changes }`. `changes` holds only what changed: `enabled`,
+  `nextAction`, `handler` (the name, or null), `mode` (`observe` or `live`) and `assess` (`{ threshold }` or null).
+  `by` is `agent` (the bot itself or another bot), `owner` (the person who created the agent), `admin` or `member`.
+  Every `remove` writes one with `action: "remove"`, the handler name when the trigger ran one, and the mode and
+  threshold it held. A prompt, schedule or filter edit alone writes none. Ids and settings only: never prompt or rubric
+  text.
+- **Export and import.** Both fields are exported and restored under these same rules; see
+  [Agent Routines](./agent-routines.md#observe-mode-and-the-decision-gate).
+
+---
+
+## Owner questions (`decide`)
+
+> **Status: not released.** Hub [#785](https://github.com/PrivOS-AI/privos-hub/pull/785) and sandbox
+> [#387](https://github.com/PrivOS-AI/privos-sandbox/pull/387), merged to `develop`. Until they are released no trigger
+> has the field and the rules below do not apply.
+
+A trigger run that needs a choice only its owner can make asks through the AskUser question box (see
+[Questions from a trigger run](./trigger-registry.md#questions-from-a-trigger-run)). `decide` sets, per trigger, how the
+run prepares that question and how far the agent may decide alone. The form calls it **Owner questions**. Accepted on
+`add` and `update`, returned by `list`.
+
+| Value | What the run does |
+|---|---|
+| `off` | Default, stored as no field. The run's system context and prompt are byte-identical to a trigger without the field |
+| `shadow` | One platform rule line names the mode and the trigger id and tells the agent to run the `privos-decide` skill before any question box, follow its verdict, copy its `Recommended:` line into the question's context, and use one header per topic. In shadow the verdict is always `ask`: the recommendation rides on the box and is compared with the owner's answer |
+| `assist` | As shadow, and the skill may answer `decide <option>` for a reversible question it is confident about. The agent then takes that option, and the hub has logged it first through `agents.triggers.decisions.record`. Never a question marked as an approval-list action (outside, public, money, deletion, production, new permissions), and never on outside evidence alone |
+
+- **Who.** The same rule as `mode` and `assess`: the person who created the agent or a holder of
+  `view-user-administration`. The agent itself, other owners or leaders of the agent room and any bot get
+  `only the agent owner or an admin may change decide`, on a super agent too. A value sent back as stored passes for
+  any editor.
+- **Where it acts.** The rule line is added on the sandbox runtime only; the forms hide the field for a harness agent
+  and for a webhook with `nextAction: emit_event`. A cron scoped to rooms runs as a live thread session, so any value
+  but `off` is refused there (`decide-not-applicable`), also when rooms are added to a cron that has one; the forms
+  hide the field and the editor sends a stored value back to `off`. A handover of the bot turns `decide` off on all its
+  triggers.
+- **One question per topic** (`shadow` and `assist`). The question's header is its topic. While a box of the same bot
+  and trigger on the same topic waits for an answer, and a session still holds that box, the hub holds a new one back,
+  logs it as `duplicate-refused`, and the run's report says `Not asked again: the question on "<topic>" is already waiting for an answer here: <link>`.
+  Other topics of the same box are still asked. A waiting row whose box no session holds is stamped `clearedAt` and
+  the question is shown. `off` triggers show every question.
+- **Recommendation line.** One line in the question's context, parsed by the hub:
+  `Recommended: <option text> (needs owner <n>, reversible <n>, confidence <n>)`, each number from 0 to 1 with two
+  decimals. A missing or malformed line leaves the log row without numbers.
+- **Question log.** Every question a trigger run shows writes one row, whatever the mode: `kind` `question`,
+  `duplicate-refused` or `self-decided`; the bot, its owner at write time, the trigger, the room, the topic, the
+  options, the recommendation and its numbers, the mode, the box's expiry and its AskUser call (`toolUseId`). The
+  answer that wins stamps `answeredAt`, `answer` and `answeredBy`; a box that went away unanswered (cancelled, replaced,
+  cleared) stamps `clearedAt`. An expired box has neither stamp and a past `expiresAt`; nothing writes at expiry. Rows are kept 180 days. The [weekly scorecard](./agent-team-evaluation.md#the-scorecard) reads
+  them; source `apps/meteor/server/models/AgentTriggerQuestionLog.ts`.
+- **Owner-only answers, every mode.** A trigger run's question box, its bell and its participant go to the bot's
+  owner, and only the bot's owner or a holder of `view-user-administration` can answer it, on every path. The Answer
+  questions form and the AI chat panel (`ai-messages.send` with `referenceAnswer`) return `not-question-owner`
+  (`Only this agent's owner or an administrator can answer this question.`). A thread reply from anyone else does not
+  answer: the person gets an ephemeral note, the reply reaches the agent as an ordinary message, and the box stays.
+- **Audit and export.** The `agent-trigger.created`, `agent-trigger.changed` and remove audit rows carry `decide` and
+  `by`. An export carries the field; an import always restores `off` with a notice.
+
+### `POST /v1/agents.triggers.decisions.record`
+
+Body `{ triggerId, topic, options, chosen, numbers: { needsOwner, reversible, confidence }, undo }`. Agent bot
+credentials only, for the bot's own trigger while it is in `assist` (also from a run bound to another room), and
+only when a run of the trigger started in the last 6 hours: `lastRunAt` or `manualRunAt` (a manual run of a one-time
+trigger, see [`agents.triggers.run`](#post-v1agentstriggersrun)) within that window, or a started fire-log row of the
+bot and trigger (written when a run ends). `chosen` must be one of `options`, the numbers from 0 to 1.
+Answers `{ success: true, logId }` and writes a `self-decided` row; a refusal is HTTP 403 `{ success: false, error }`,
+and HTTP 429 above 10 decisions for one trigger within an hour. The hub inserts the row, counts the hour's rows with it,
+and removes it again when the count is over 10, so parallel calls never keep more than 10; calls racing at the cap may
+all be refused. The skill calls it before it prints `decide`, so a decision the hub refused is never taken.
+
+### `POST /v1/agents.triggers.decisions.reverse`
+
+Body `{ logId }`. The bot's current owner or a holder of `view-user-administration` only, the agent included in the
+refusal. Stamps `reversedAt` and `reversedBy` once; `already-reversed` after that. It only records the
+correction; undoing the action follows the `undo` text the agent reported.
+
+---
+
 ## Running a handler (`nextAction` and `handler`)
 
 Every trigger type can run a room service before, or instead of, the model turn. Behaviour, exit codes and fallback:
@@ -393,10 +519,14 @@ Returned by `agents.triggers.list`; never accepted on `add` or `update`.
 | Field | Meaning |
 |---|---|
 | `lastRunAt` | When the trigger last fired (cron and event: before the dispatch; webhook and manual run: after it) |
-| `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet` or `posted`; see [outcome codes](./agent-routines.md#outcome-codes) |
+| `manualRunAt` | When a manual run of a one-time trigger last started; such a run leaves `lastRunAt` alone so the heartbeat still fires the trigger on time, and the heartbeat never reads this field |
+| `lastOutcome` | `handled`, `woke`, `fallback`, `paused`, `quiet`, `posted`, `failed`, `would-post`, `assessed-ignore` or `not-started:super-agent-principal`; see [outcome codes](./agent-routines.md#outcome-codes) |
+| `lastGate` | What the decision gate said on the last fire that carried it: `{ probabilities, cost, at }` (`probabilities` maps `targets_us`, `asks_for_action`, `direction_settled` to a probability and `urgency` to its level index, 0 (no time pressure) to 3 (needs action now)), or `{ skipped: true, reason, at }` |
+| `lastWouldPost`, `wouldPostAt`, `wouldPosts` | Observe mode: `{ text, at }` of the last turn that would have posted (text at most 5,000 characters), the times of the last 100 such turns, and `{ text, at }` of the newest 20, newest last (each text at most 2,000 characters) |
 | `lastError` | The failure code behind a `fallback` or `paused` (`exit-1`, `timed-out`, `owner-disabled`, …). Cleared by a `handled` or `woke` run; never holds output or payload |
 | `consecutiveFallbacks` | Fallbacks in a row; at 3 the next failing fire is `paused`. Reset by a successful run or any `update` |
-| `updatedBy`, `updatedAt` | The last editor |
+| `updatedBy` | Who last wrote what the trigger runs or where. A cron, event or manual-run turn of a trigger whose `updatedBy` is not its creator runs as that editor ([update](#post-v1agentstriggersupdate)) |
+| `updatedAt` | The last edit of any field |
 
 ```json
 {
@@ -438,10 +568,17 @@ Update fields on an existing trigger.
 | `name`, `description` | string | No | Card title and subtitle |
 | `nextAction` | string | No | `agentic_response`, `run_handler` or `emit_event` (webhook only); see [Running a handler](#running-a-handler-nextaction-and-handler) |
 | `handler` | object | No | `{ "name": "<service>" }` |
+| `mode` | string | No | `live` or `observe`; see [Observe mode and the decision gate](#observe-mode-and-the-decision-gate-mode-and-assess) |
+| `assess` | object or null | No | `{ "rubric", "threshold"? }`; `null` removes the gate |
+| `decide` | string | No | Not released. `off`, `shadow` or `assist`; see [Owner questions](#owner-questions-decide) |
 
-Only provided fields are updated. At least one updatable field is required. The trigger records `updatedBy` (the caller's
-user id) and `updatedAt`. Writing the prompt field of the trigger's type removes a stray copy in the other field (a
-`prompt` on an event trigger, a `promptTemplate` on a cron or webhook trigger). Any update also resets
+Only provided fields are updated. At least one updatable field is required. Every update stamps `updatedAt`. `updatedBy`
+(the caller's user id) is stamped only when the body carries `prompt`, `promptTemplate`, `sourceRoomIds`,
+`sourceRoomId`, `filter`, `nextAction` or `handler`, whatever the value, so saving the edit form counts. Any other
+write (turning a trigger on or off, renaming it, changing its model, schedule, timezone or gate) keeps the earlier
+editor, so whoever wrote the text stays the user its turns run as, room-scoped crons included. On a super agent that
+can refuse an enable ([rule](#authorization)). Writing the prompt field of the trigger's type removes a stray copy in
+the other field (a `prompt` on an event trigger, a `promptTemplate` on a cron or webhook trigger). Any update also resets
 `consecutiveFallbacks` and clears a `paused` outcome with its `lastError`.
 
 A filter cannot be cleared through `update`; remove the trigger and add a plain one instead. On a filtered trigger
@@ -481,7 +618,8 @@ Remove a trigger from an agent.
 
 ## POST /v1/agents.triggers.run
 
-Manually fire a trigger immediately. Updates `lastRunAt` when the fire started, was handled, or was paused. A trigger with
+Manually fire a trigger immediately. Updates `lastRunAt` when the fire started, was handled, or was paused; on a one-time
+trigger it updates `manualRunAt` instead, so the schedule still fires it. A trigger with
 `nextAction: run_handler` runs its handler first, exactly as a scheduled fire would.
 
 **Body Parameters:**

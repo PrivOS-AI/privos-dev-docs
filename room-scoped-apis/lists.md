@@ -14,6 +14,7 @@ When the target room belongs to a team, the GET endpoints can also surface cross
 - **App-owned lists.** A list created by an MCP app carries an app owner. Reading it needs room access only, but writing it (changing the list, its fields or stages, or any of its items) is limited to the app's own installation bot and to human room owners, admins and leaders. Any other caller, including a bot that holds a room role, is refused (`error-not-allowed`, or `error-unauthorized` when the route also needs a room role the caller lacks). In the batch endpoints the refusal is reported per element in `errors` instead of failing the whole request.
 - **Managing lists needs a room role.** Creating, updating or deleting a list, batch create and batch delete, and every field and field-option write (create, update, delete) require room owner, admin or leader (in a direct message, any participant). A caller without one gets `error-unauthorized`. Reads need room access only.
 - **Deleting is recoverable.** A deleted list is soft-deleted: its stages and items are kept and the list, with the deleting user, appears on the admin Recovery page. Deletion never removes stages or items.
+- **Deleting a room soft-deletes its lists** the same way (a team, an agent room and an inbox included), so no list outlives its room. The Recovery page (`admin.lists.recover`) refuses a list whose room no longer exists (`error-list-room-not-found`: delete it permanently instead) and an unknown id (`error-list-not-found`).
 
 ## Authentication
 

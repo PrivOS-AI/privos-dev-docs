@@ -343,6 +343,10 @@ for every `mcpapp.db.*` tool's full input schema.
 
 ## Pattern: Reads vs Mutations
 
+Read List data from the UI with `app.rest()` (`lists.listByRoomId`, `items.query`); a tool of your
+own that reads the same data costs a trip through your app server. Draw first, refresh in the
+background and keep the last copy in `app.storage`: see [Building fast apps](./building-fast-apps.md).
+
 - **Reads** — use `usePrivosTool` or convenience hooks (`useLists`, `useFiles`, `useRoom`). Auto-fetches.
 - **Hub data (REST-first)** — use `app.rest()` to reach existing hub REST endpoints (files, folders, rooms…) as the current user, gated by the app's scopes. Preferred over building dedicated resource tools.
 - **File upload** — use `app.uploadFile()` (requires `files:write`).

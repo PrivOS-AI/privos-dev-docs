@@ -150,23 +150,81 @@ do {
 
 ### Incremental sync
 
-Record when a sync finished, then ask only for what changed since:
+Record when a sync started, then ask only for what changed since. Keep the mark in
+`app.storage`: the app frame runs in an opaque origin, where its own `localStorage`
+throws or is wiped.
 
 ```tsx
-const since = localStorage.getItem('lastSync') ?? new Date(0).toISOString();
+const key = `v1:${userId}:${roomId}:lastSync:${listId}`;
+const since = (await app.storage.get(key)) ?? new Date(0).toISOString();
+// Start the next window a minute before this sync began, so a change made while it
+// runs, or a browser clock slightly behind the Hub's, is read again instead of lost.
+const nextSince = new Date(Date.now() - 60_000).toISOString();
 
-const res = await app.rest({
-  method: 'POST',
-  path: 'items.query',
-  body: { listId, filter: { updatedAt: { gte: since } }, sort: { field: '_updatedAt', direction: -1 }, count: 100 },
-});
+let cursor: string | undefined;
+do {
+  const res = await app.rest({
+    method: 'POST',
+    path: 'items.query',
+    body: { listId, filter: { updatedAt: { gte: since } }, sort: { field: '_updatedAt', direction: 1 }, count: 100, ...(cursor ? { cursor } : {}) },
+  });
+  res.body.items.forEach((item) => cache.set(item._id, item));
+  cursor = res.body.nextCursor ?? undefined;
+} while (cursor);
 
-res.body.items.forEach((item) => cache.set(item._id, item));
-localStorage.setItem('lastSync', new Date().toISOString());
+await app.storage.set(key, nextSince);
 ```
 
-Deletions do not appear in this stream. Re-page in full occasionally if your copy must
-converge exactly.
+Deletions do not appear in this stream: page them with [`items.deleted`](#deleted-items-itemsdeleted)
+from the same mark. The whole pattern, including what may be stored in the browser, is in
+[Building fast apps](../building-fast-apps.md#3-offline-first).
+
+## Deleted items: `items.deleted`
+
+`POST /api/v1/items.deleted`, scope **`lists:query`** (the same as `items.query`).
+
+The deletion half of incremental sync: tombstones of items hard-deleted from a list since a
+date. It resolves lists and checks access exactly like `items.query`.
+
+```jsonc
+{
+  "listId": "L1",           // or "listIds": ["L1", "L2"] (1 to 25; lists you cannot read are dropped)
+  "since": "2026-11-20T00:00:00Z",
+  "cursor": "<opaque>",     // a previous response's nextCursor
+  "count": 100              // default 100, maximum 200
+}
+```
+
+```jsonc
+{
+  "items": [{ "_id": "I9", "listId": "L1", "parentId": null, "deletedAt": "2026-11-21T08:00:00.000Z" }],
+  "count": 1,
+  "nextCursor": null,
+  "retentionDays": 30,
+  "fullResyncRequired": false,
+  "success": true
+}
+```
+
+- Tombstones carry ids only, never item content. On an isolated list, a caller who can read the
+  list sees every deleted id in it.
+- Tombstones are kept for `retentionDays` (30). When `since` is older than that,
+  `fullResyncRequired` is `true`: some deletions may be missing, so re-read the whole list.
+- Pages are ordered by `deletedAt`; follow `nextCursor` until it is `null`, and remove each `_id`
+  from your copy.
+
+```tsx
+let cursor: string | undefined;
+do {
+  const res = await app.rest({ method: 'POST', path: 'items.deleted', body: { listId, since, ...(cursor ? { cursor } : {}) } });
+  if (res.body.fullResyncRequired) { await rereadWholeList(listId); break; }
+  res.body.items.forEach((item) => cache.delete(item._id));
+  cursor = res.body.nextCursor ?? undefined;
+} while (cursor);
+```
+
+A Hub released before apps could call `items.deleted` refuses it through the bridge (the
+promise rejects). Fall back to re-reading the list in full from time to time.
 
 ## Errors
 

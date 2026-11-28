@@ -9,9 +9,24 @@ the sandbox proxy egress, so the bot key never enters the VM.
 Nothing happens until an admin sets the flag on a bot. Operator steps (enable, disable, emergency stop, rollback) live in
 the ops runbook, not here.
 
-On an agent team, a super agent is told on every turn that it coordinates the team: it splits its owner's request by its
-teammates' capability cards and open work (`team.py teams --workload`), sends one `task` per chosen teammate and then
-awaits the results (see [What every teammate knows](./bot-to-bot-protocol.md#what-every-teammate-knows-team-context-capability-cards-and-team-memory)).
+## On an agent team
+
+A super agent on an agent team is told on every turn that it coordinates the team: it splits its owner's request by its
+teammates' capability cards and open work (`team.py teams --workload`), sends one `task` per chosen teammate whose text
+is the owner's own words for that part plus routing facts, and then awaits the results (see
+[What every teammate knows](./bot-to-bot-protocol.md#what-every-teammate-knows-team-context-capability-cards-and-team-memory)).
+
+Teammates answer with a [work state](./bot-to-bot-protocol.md#envelope). Two lines of the super agent rules the hub
+renders with its teams say what reaches the owner (`a2a-teams-mine.ts`,
+[hub #755](https://github.com/PrivOS-AI/privos-hub/pull/755)):
+
+- a result to the owner, and the summary of a `team.py report`, is one sentence with the outcome and the link; a blocker
+  is a second sentence; technical evidence stays in the chain or the file;
+- a teammate's unfinished draft is never announced as done: it relays `ready` results and `blocked` needs and keeps
+  `progress` internal.
+
+A person's reply in a chain thread reaches a super agent only when that person is its owner
+([A person's reply in a chain thread](./bot-to-bot-protocol.md#a-persons-reply-in-a-chain-thread)).
 
 ## Why this shape
 
@@ -38,6 +53,18 @@ Routes (source: `apps/meteor/app/api/server/v1/bots-super-agent.ts`):
 Enabling is refused unless the bot is an active ordinary agent bot (not the Universal Assistant, not an installation bot)
 whose creator (`_createdBy`) is an active person. That creator becomes the **owner** (`principalId`) and is frozen into the
 state at enable time. Clearing skips every eligibility lookup.
+
+Enabling is also refused (`error-invalid-bot`) while the bot is an owner's designated
+[evaluator](./agent-team-evaluation.md#the-evaluator) in a team that exists and still has it on the roster: an evaluator
+must never be a super agent. The answer names the team (a private team only to a caller who is a member of it) and says
+that the bot's owner or a workspace admin clears the designation in the team's evaluation settings first.
+
+A switch-on also lists the bot's room crons that will stop, since each would run as someone other than the owner
+([room crons](#trigger-authorship)). The flag still goes on; `bots.superAgent.set` answers
+`roomCronsNotRunning: [{ id, name?, schedule?, timezone? }]`, the `super-agent.flag-set` row carries their ids in
+`details.roomCronsNotRunning`, and the switch in Agent Settings shows them under it (by name, else schedule) with the two
+fixes: make each a global cron, or have the owner save it. Source:
+`apps/meteor/server/services/super-agent/super-agent-enable.ts`.
 
 State lives in its own collection, never in `customFields`: persona and user saves replace `customFields` whole, and the
 mirror needs per-room records that survive them. Schema: `apps/meteor/server/core-typings/ISuperAgentState.ts`.
@@ -103,6 +130,33 @@ FYI and redelivery recheck. Every agent bot, super agent or not, finds its teams
 agent team it is on (id, room, roster bots with bot ids) and `## Owner's agents` its owner's other agent bots. The hub renders
 both sections on every agent-room push and re-pushes the affected bots when a roster, the Agent team switch or a bot changes;
 the `privos-team` skill's `teams` command (`GET agents.a2a.teams.mine`) is the live view.
+
+**Room rules of a team wake.** A row of a team chain starts a turn that runs on teammate output, so its platform rules
+keep the bot to the room it runs in and the chain's room, a super agent included (`teamWakeHarnessRules` in
+`apps/meteor/server/services/agent-prompt-injection.ts`). An active super agent keeps its usual reach (any room it is in)
+only when its owner stands behind the row in person, and only on a chain tree made of that owner's bots alone
+(`ownerBackedWake` in `apps/meteor/server/services/a2a/a2a-dispatch.ts`). The chain's session holds every earlier row to
+the bot, which is why one bot of another owner on the chain keeps it locked. The three cases:
+
+- a `task` that opens a chain while the teammate answers that owner in person **in the teammate's own agent room**. The
+  send records `ownerTurn` on the row from server state: the running attempt is a turn the owner started, not a trigger
+  run, a wake or someone else's turn. A turn in any other room also reads other people's messages and the bot's queued
+  team messages, so it never counts; there the owner can tag the super agent directly. A later send on the same chain
+  names no attempt and never counts;
+- the hub's `answer` or granted `approval` row for the super agent's own card, when the owner decided it themselves, in
+  the team room and in the thread the super agent opened the chain from. Any option of a question counts (the hub cannot
+  tell a yes from a no); a card the super agent answered for its owner, a denial and an expiry do not;
+- a note the owner wrote in the chain thread.
+
+Every other wake stays locked: a chain a trigger or routine started, a teammate's result, and any super agent while the
+kill switch is engaged. A turn with the wider reach takes no queued team messages (they wait for the next locked turn),
+and a reply under the team-wake rules is never steered into a turn without them, nor the reverse (`roomLock` in the steer
+scope, `agent-trigger-turn-steer.ts`): the later row waits and runs as its own turn. Each exempt wake writes an
+`[a2a-audit] decision=owner-backed` line.
+
+Known limits. The teammate writes the task text, so a teammate misled by something it read during its owner's turn can
+hand that on with the owner's standing. The attempt id comes from the sandbox's request, checked against the running
+turn of that bot in that room, not bound to the calling process.
 
 **Decision requests.** A teammate's `question` with options (or `needs-approval`) addressed to a super agent is woken to it like any urgent task, while the decision card stays the teammate owner's. An active super agent whose principal is that owner (the kill switch is consulted) may answer a `question` through `POST agents.a2a.approvals.decide { rowId, option }` (CLI skill: `team.py answer --row ROW --option N`); the answer is audited as made by a super agent, the first of the owner's click and the bot's answer wins, and a `needs-approval` can only be decided by the owner. See [Bot-to-bot protocol](bot-to-bot-protocol.md#approval-flow).
 
@@ -219,8 +273,16 @@ Who may create, change, run and remove the triggers of a super agent (`resolveTr
   are refused with the usual "not authorized" answer.
 
 A trigger about the owner (`subject: principal`) must be created by the owner or by the agent. An agent-authored trigger
-runs with the owner as initiator. Every change records `updatedBy` and `updatedAt` and writes a `super-agent.trigger-change`
+runs with the owner as initiator. Every change records `updatedAt` (and `updatedBy` when it writes the prompt, room
+scope, filter or handler wiring) and writes a `super-agent.trigger-change`
 row before the change (action, trigger id, type, field names, and `by`: `owner`, `admin` or `agent`; never prompt text).
+
+**Room crons must run as the owner.** A cron scoped to rooms opens a thread in each room as its last editor (else its
+creator), and a super agent starts a turn only for its owner. So the hub refuses, for every caller (the agent and an
+administrator included), an add, update or prompt restore that leaves an enabled room cron running as anyone but the
+owner, and the message names the two fixes: a global cron, or the owner saves it. A stored one that still fires opens
+no thread, posts nothing and shows why on its card. The skills have a super agent apply a peer's cron from its own agent
+room as a global cron. Rule and messages: [Trigger API Reference](./trigger-api-reference.md#authorization).
 The agent editing its own triggers is a risk the owner accepted: one injected turn can change a filter or prompt with
 lasting effect, and the audit row is how it is noticed.
 
@@ -296,6 +358,140 @@ DM reply: a bot with a live super-agent state whose session binding is its own a
 
 Source: `app/api/server/v1/agents-super-agent-owner-read.ts`, `server/services/super-agent/super-agent-owner-read.ts`.
 
+## Managing the owner's agents
+
+> **Status:** on `develop` after hub PR [#814](https://github.com/PrivOS-AI/privos-hub/pull/814) and sandbox PR
+> [#433](https://github.com/PrivOS-AI/privos-sandbox/pull/433) merge; not released. Off for every super agent until its
+> owner switches it on.
+
+A super agent may propose to create, edit, delete or restore one of its owner's agents, or to add one to an agent team.
+It never changes another agent itself. The hub stores each proposal as a request, posts a card for it in the agent room,
+and applies it only after the owner's click on that card, as the owner and with the owner's permissions. An admin
+owner's wider rights are never used: every rule below is checked for the owner as a person.
+
+An **owner's agent** is an agent bot (`customFields.isAgentBot`) whose creator (`_createdBy`) is the principal. Never a
+target: the Universal Assistant, an installation bot, a flagged super agent, the calling super agent, and an agent in a
+pending or running team handover.
+
+**The switch.** "Let this agent propose changes to my agents" in Agent settings of the agent room, or
+`POST /v1/bots.superAgent.agentManagement.set { botId, enabled }` (`app/api/server/v1/bots-super-agent.ts`). It is
+stored as `agentManagement { enabled, setBy, setAt }` on the state document; absent means off. Only the principal turns
+it on; the principal or a `manage-super-agents` holder turns it off; the bot itself is always refused. The write happens
+only while the stored principal is the one the route checked, otherwise the answer is `error-super-agent-changed`.
+Clearing the flag and the team handover that swaps the principal remove the switch in the same write, so a new owner
+starts from off; setting a flag that is already on keeps it. Turning the switch off, clearing the flag and the handover
+void every pending request and close its card. The switch-on audit row is written before the switch, the switch-off row
+after.
+
+**Routes** (`app/api/server/v1/agents-super-agent-agent-changes.ts`). All five accept only a bot whose session binding is
+its own agent room (else 403), whose super-agent state is live (flag set, kill switch released, principal an active
+person; else `error-super-agent-inactive`) and whose owner switch is on (else `error-agent-management-off`). The three
+GET routes are on the Universal Assistant's never-list. No answer carries a token, a key or `customFields`.
+
+| Route | Returns |
+|---|---|
+| `POST /v1/agents.superAgent.agentChanges.propose` `{ op, botId?, teamId?, copyId?, profile?, note?, attemptId? }` | `{ requestId, status: 'pending', cardMessageId, expiresAt }` |
+| `GET /v1/agents.superAgent.agentChanges.list` `{ id?, count?, offset? }` | `{ requests }`: the caller's requests with `op`, target, `status`, `voidReason`, dates and `result` (ids, warnings, an error). `count` is 1 to 50 (default 20) |
+| `POST /v1/agents.superAgent.agentChanges.cancel` `{ requestId }` | `{ requestId, status: 'void' }` for a request that is still pending |
+| `GET /v1/agents.superAgent.ownerAgents` `{ botId?, attemptId? }` | Without `botId`: the owner's agents by id, username, name, `active` and `superAgent`, inactive ones included. With it: one agent's profile (`bio`, `purpose`, `personality`, `instructions`, `knowledge`), only during an owner-started turn |
+| `GET /v1/agents.superAgent.deletedAgents` | `{ copies: [{ copyId, username, name, deletedAt, purgeAt }] }` for the current principal; never profile text |
+
+Every `ownerAgents` call writes a `super-agent.owner-read` row with `details.kind = 'owner-agents'` (a count or the
+target id); a read whose row cannot be written is withheld.
+
+**Operations.** An **owner-started turn** is a running attempt in the agent room that the principal started in person
+(`isOwnerAgentRoomTurn` in `server/services/a2a/a2a-agent-room.ts`), named by the `attemptId` the skill sends.
+
+| `op` | Needs | Owner-started turn |
+|---|---|---|
+| `create` | `profile.name`, `profile.username`, `profile.purpose`; optional `bio`, `personality`, `instructions`, `knowledge` and `teamId` | Not needed |
+| `update` | `botId` and at least one field that differs: `name`, `username`, `bio`, `active`, `purpose`, `personality`, `instructions`, `knowledge` | Needed when the profile names `bio`, `purpose`, `personality`, `instructions` or `knowledge`; a rename and switching an agent on or off can be proposed at any time |
+| `delete` | `botId` | Always |
+| `team-add` | `botId` (an active agent) and `teamId` | Not needed |
+| `restore` | `copyId`; `profile.username` when the stored one is taken | Always |
+
+The turn rule exists because a card shows the current profile text it changes, and a restore card the whole stored
+profile, in the agent room the agent reads. Outside the owner's own turn a card must not hand the agent text it could
+not read through the routes.
+
+**Limits and refusals.** Values are normalised to NFC and measured in `String.length`, the unit of the hub's own caps
+(`server/services/agent-export-import/sanitize-agent-data.ts`): name 2 to 200, username `^[a-zA-Z0-9._-]+$` up to 100
+and never `all` or `here`, bio 500, purpose and personality 2,000 each, instructions 5,000, knowledge 20 items of 500,
+note 500. A value over a limit is refused, never cut. An unknown key is refused, and `runtime`, `triggers`, `botConfig`,
+`roles`, `customFields` and `type` are named in the refusal. Control, bidirectional, zero-width, tag and other invisible
+characters are refused, and `name` and `username` must be one line without a backtick (the full set is
+`REFUSED_CHARACTER` in `server/services/super-agent/agent-change-validate.ts`). An agent may send 10 proposals in 24
+hours and hold 3 pending, one per target; the identical proposal that the owner denied or let expire in the last 24
+hours is refused. The principal must hold now `create-bot` (create, restore), `edit-bot` (update, plus
+`manage-bot-active-status` when `active` changes) or `delete-bot`. A team must be an agent team that is switched on, the
+principal a member of its room with a role of that subscription holding `add-team-member` or `edit-team-member`
+(workspace roles such as `admin` do not count), and the agent not on its roster yet. Codes:
+`error-agent-change-invalid`, `error-agent-change-target`, `error-agent-change-limit`, `error-agent-change-final`,
+`error-agent-change-owner-turn`, `error-audit-failed`; each message says what the agent should tell its owner.
+
+**The card.** The hub posts it as the super agent in the agent room, in the thread of the owner's running turn when
+there is one. Its second line says where the proposal came from: "a conversation you started", "an automated run, not a
+conversation you started", or that the agent shares its team's sandbox so the hub cannot tell which session asked.
+Agent-written text (note and profile fields) appears only inside code fences; an edit shows a line diff, and links,
+hosts and e-mail addresses in the new text are listed. A delete card names the rosters the agent leaves and the
+triggers that stop, says that a copy of the profile is kept for 30 days and that the agent room, files, triggers and
+team seats are not. A restore card shows the deletion date and the full stored profile, and says that a new agent is
+created without the old room, files, triggers or team seats. A card that adds an agent to a team says that every member
+of the team room can then use the agent and that it may join the team's shared sandbox; when the principal owns a live
+CLI login of that team, it also says the agent will run on that login and everyone who can use the agent can read and
+use it. Two buttons carry no data: Approve names the operation and the agent (a delete reads "Delete @username" in the
+danger style) and Deny. Labels are the `SuperAgent_Agent_Change_*` i18n keys; layout in
+`server/services/super-agent/agent-change-card.ts`. A request expires 24 hours after it was proposed.
+
+**The decision** (`agentChangeCallbackHandler`, `server/services/super-agent/agent-change-decide.ts`). Only the
+principal's click counts; the bot, an admin and other room members are refused, and every refusal that leaves the
+request pending keeps the buttons. Deny settles the request at once. Approve checks, before anything is written: the card
+is unedited and holds the stored text (else void `card-changed`); the request has not expired; the flag, the kill
+switch, the owner switch and the principal (else an error, and the owner can press again once that is resolved); the
+target, team and permission rules; and that the target and the team's CLI login fact are what the card showed (else void
+`target-changed`). It then claims the request (`pending` to `approved`) and writes the `approved` audit row; if that
+row cannot be written the request goes back to `pending`. The card is closed with "Approved by @owner at <time>.
+Applying." and the click returns.
+
+**Applying.** The change runs after the click, for every operation, through the same checks and functions as the
+routes people use: `agents.create` (no runtime, no triggers), `bots.update` with `agents.update` in one write,
+`bots.delete`, and `markTeam` as the principal. The running apply refreshes `applyHeartbeatAt` every 30 seconds. The
+live-state checks run again before the apply starts and before the team step of a `create`; a stop found there ends the
+apply with what was done so far. A team step whose CLI login fact changed since the card is skipped: a `create` keeps the
+new agent with a warning, a `team-add` fails with `target-changed`. The result is one more line on the card and an `applied` or `failed` audit row. An `approved` request whose heartbeat is
+older than 5 minutes belongs to a process that is gone; the next list, click, switch-off, flag clear or handover for that
+agent settles it from what exists (`applied`, or `failed` with `interrupted`).
+
+**Deleted agents.** An approved delete first writes a copy of the profile (name, username, bio, purpose, personality,
+instructions, knowledge; nothing else) to `rocketchat_super_agent_deleted_agent_profile` (model
+`server/models/SuperAgentDeletedAgentProfile.ts`); a delete that fails removes it. The copy is kept 30 days (TTL on
+`purgeAt`) and is reachable only while its `principalId` is the calling super agent's principal, so after a handover the
+old owner's copies expire unused. No route returns its text. A `restore` creates a new agent, with a new id, from the
+copy after passing it through the text rules (the card says when that changed something), and removes the copy once the
+agent exists. The agent room, its files, its triggers and its team seats do not come back. An agent deleted by a person
+through the existing routes leaves no copy.
+
+**Stored requests** live in `rocketchat_super_agent_agent_change` (model `server/models/SuperAgentAgentChange.ts`). The proposed
+text (`payload`, `note`, the card text) is removed in the write that settles a request, and the TTL index removes the
+document 48 hours after it was proposed. There is no wake after a decision: the closed card tells the owner, and the
+agent reads the result with `agentChanges.list` on its next turn.
+
+Known limits, accepted with the build:
+
+- `@all` or `@here` inside a fenced note still notifies the agent room's members, because mention extraction ignores
+  fences.
+- The bot can edit or delete its card after the card closed; the audit rows are the lasting record.
+- The 10-in-24-hours count is read before the insert, so a burst can reach 12.
+- An overdue request expires only when the agent next proposes or lists, or when the owner clicks; until then, and
+  until the 48-hour purge, it keeps its text. The card message keeps the proposed text, and a restore card the stored
+  profile, in the agent room after the request and the copy are gone.
+- An apply that died less than 5 minutes before a switch-off, a flag clear or a handover is not settled by it.
+
+Agent side: the `agent-bot-edit` skill's `bot.js agents` commands
+([Self-Management Skills](./self-management-skills.md#agent-bot-edit-botjs-agents)). A bot's invite into a team room
+rosters its owner's agents without a card, never on the team's CLI login
+([Bot-to-Bot Protocol](./bot-to-bot-protocol.md#who-joins-the-roster-on-a-bots-invite)).
+
 ## Kill switch
 
 The workspace setting `SuperAgent_Enabled` (default on) is a **freeze**, not a revoke. While it is off:
@@ -305,7 +501,10 @@ The workspace setting `SuperAgent_Enabled` (default on) is a **freeze**, not a r
 - triggers with `subject: principal` or `rooms: mirrored` stay silent;
 - the egress catalog is re-pushed narrow;
 - the mirror pauses (no joins, no leaves); the bot keeps its rooms and roles;
-- owner-only turns stay enforced, and clearing a flag is never blocked (a cleared flag is still cleaned up).
+- owner-only turns stay enforced, and clearing a flag is never blocked (a cleared flag is still cleaned up);
+- agent-change proposals are refused, and Approve on a pending card answers an error and keeps the buttons; the request
+  stays pending and can be approved after the release until it expires. A change that is already being applied is not
+  reversed.
 
 Releasing the switch re-pushes the catalog and catches every bot up. Revoking the bot's token is the emergency stop, because
 it stops the key itself.
@@ -316,13 +515,14 @@ Durable rows in the server events collection (ids and counts only, never message
 
 | `t` | Written when | Actor |
 |---|---|---|
-| `super-agent.flag-set` | an admin sets the flag (before the flag is written) | the admin |
+| `super-agent.flag-set` | an admin sets the flag (before the flag is written); `details.roomCronsNotRunning` lists the room crons that stop | the admin |
 | `super-agent.flag-cleared` | an admin clears it | the admin |
 | `super-agent.item-write` | an app-owned list item write passes on a super agent's authority | the bot |
 | `super-agent.room-write` | a flagged bot's room-management write | the bot |
 | `super-agent.trigger-change` | a trigger of a super agent is added, updated (a prompt restore counts) or removed | the caller |
 | `super-agent.dm-reply` | a DM reply is sent, discarded or superseded, or the mode is switched | owner, bot or system |
-| `super-agent.owner-read` | each owner-rooms or owner-messages call | the bot |
+| `super-agent.owner-read` | each owner-rooms or owner-messages call, and each `ownerAgents` call (`details.kind = 'owner-agents'`) | the bot |
+| `super-agent.agent-change` | the owner switch turns on (before) or off (after); a proposal is stored (before); a request is approved (before the apply), denied, expired, voided, applied or failed. `details`: `outcome`, `requestId`, `op`, `targetBotId`, `teamId`, field names and sizes, `ownerTurn`, `sharedSandbox`, `voidReason`, `createdBotId`, `profileCopyId`, `errorCode` (a code, never error text) | owner, admin, bot or system |
 
 Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hub). Query recipe: the ops runbook.
 
@@ -337,8 +537,31 @@ Declared in `packages/core-typings/src/ServerAudit/IAuditSuperAgentEvent.ts` (hu
 | Catalog re-push | `server/services/super-agent/super-agent-catalog.ts` |
 | Filters and dispatch | `server/services/agent-trigger-filter.ts`, `agent-event-trigger-handler.ts` |
 | Trigger routes and authorship | `app/api/server/v1/agent-trigger-endpoints.ts` |
+| Room cron rule | `server/services/super-agent/super-agent-room-cron.ts` |
 | DM reply | `server/services/super-agent/dm-reply-drafts.ts` |
 | Owner reads | `server/services/super-agent/super-agent-owner-read.ts`, `app/api/server/v1/agents-super-agent-owner-read.ts` |
+| Agent changes: routes, switch | `app/api/server/v1/agents-super-agent-agent-changes.ts`, `app/api/server/v1/bots-super-agent.ts` (`bots.superAgent.agentManagement.set`) |
+| Agent changes: rules, card, decision and apply | `server/services/super-agent/agent-change-validate.ts`, `agent-change-requests.ts`, `agent-change-card.ts`, `agent-change-decide.ts` |
+| Agent changes: stored requests and profile copies | `server/models/SuperAgentAgentChange.ts`, `server/models/SuperAgentDeletedAgentProfile.ts` |
+| Agent changes: the owner's switch in Agent settings | `client/views/room/agent-settings/super-agent-agent-management-toggle.tsx` |
+| Roster on a bot's invite | `server/services/a2a/a2a-teams.ts` (`rosterOnTeamJoin`) |
+
+## Rejected concepts
+
+Ideas that were weighed and deliberately not built. Re-open one only with new evidence. Protocol-level decisions are in
+[Bot-to-Bot Protocol, Rejected concepts](./bot-to-bot-protocol.md#rejected-concepts).
+
+| Concept | Why not |
+|---|---|
+| The bot as owner of every room its owner is in, whatever the owner's own role there | It would exceed the owner's authority. The mirror copies the owner's role, so where the owner is a plain member the bot is one ([Why this shape](#why-this-shape)) |
+| The bot joining the owner's direct messages | A one-to-one DM has a fixed pair of people; adding a bot turns it into a group conversation the other person never agreed to. The hub evaluates the owner's DMs itself (`includeDms`) and the bot answers [as the owner](#dm-reply-as-the-owner) without joining |
+| Per-contact or per-room approval lists for DM replies | Dropped by the owner when DM replies were designed, in favour of one switch per agent: approve every draft (the default) or auto for every DM |
+| Owner-editable platform prompt blocks, with a diff when the platform text changes | The hub injects the platform blocks and they cannot be overridden; the owner's own text lives in `MEMORY.md` and the profile, so there is nothing to diff |
+| A separate supervision panel | The [Agents page](./agents-page.md) already shows agents, teams, routines and activity, and its Activity tab opens with what needs the owner |
+| A mode in which a super agent changes the owner's agents without the owner's click (a workspace role for the bot, the existing routes accepting it as caller, or "act, then report") | One injected turn could then create, delete or rewrite every agent of the owner with no person involved, and agents created by the bot would not belong to the owner. A proposal costs the attacker at most a card the owner must still approve ([Managing the owner's agents](#managing-the-owners-agents)) |
+| Agent-change routes outside the open `agents.` prefix, added only to a flagged agent's egress catalog | A second layer, but a shipped skill may not depend on a route that only a flagged bot can call, so it would need a CLI release and a third repository. The hub gate (agent-room session, live state, owner switch) is the one that already protects DM replies |
+| Waking the agent after a decision through an await with a deadline | An ignored or voided proposal would start a model turn a day later that the owner did not start, and the await's callback secret could reach the VM. The closed card and `agentChanges.list` carry the result |
+| Locking the agent-change card with the bot-to-bot marker (`privosMetadata.a2a`) | The marker changes how many consumers treat a message and blocks the shared card-closing helper, for no gain over checking that the card text equals the stored text at the click |
 
 ## Related
 

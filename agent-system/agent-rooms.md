@@ -15,6 +15,13 @@ Each agent lives in a dedicated private room. Messages in the room are forwarded
 
 **Members:** Room creator (owner) + bot user (owner role).
 
+**Deleting the agent.** `bots.delete` deletes the bot's agent room (only a room marked as this bot's agent room; its
+lists are soft-deleted with it) and then the bot user. It first unlinks the room as the bot's default room, because
+deleting a default room runs the full user delete: the bot's messages in other rooms would be erased and its room
+ownerships handed on. So the bot's messages elsewhere stay and no other room changes owner. If the room delete fails,
+the link is restored and the request fails with the bot unchanged. It does not stop the agent room's sandbox VM. Source:
+`deleteOwnAgentRoom` in `apps/meteor/app/api/server/v1/bots.ts`.
+
 ## Auto-Reply Handler
 
 File: `server/services/agent-room-reply-handler.ts`
