@@ -39,6 +39,7 @@ signed-in user and the Hub checks it against the scopes your app was granted.
 |---|---|---|
 | The lists of the room | `GET lists.listByRoomId?roomId=` | `lists:read` |
 | A window of items, filtered and paged | `POST items.query` ([reference](./apis/items-query.md)) | `lists:query` |
+| Items deleted since your last sync | `POST items.deleted` ([reference](./apis/items-query.md#deleted-items-itemsdeleted)) | `lists:query` |
 | One item | `GET items.info?itemId=` | `lists:read` |
 | Ranked search | `GET items.search` | `lists:read` |
 | Create, update, move, delete items | `POST items.create`, `items.update`, `items.moveToStage`, `items.delete` | `lists:write` |
@@ -121,9 +122,10 @@ it when the fresh copy arrives.
   user.
 - **Sync incrementally** with `items.query` and `filter.updatedAt.gte` set a little before the
   last sync time, to absorb clock skew, and merge by `_id`
-  ([example](./apis/items-query.md#incremental-sync)). Deletions do not appear in that stream, and
-  `items.deleted` is not yet open to apps through the bridge: re-read the window in full from time
-  to time.
+  ([example](./apis/items-query.md#incremental-sync)). Deletions do not appear in that stream: page
+  them from the same mark with `items.deleted` (also `lists:query`,
+  [reference](./apis/items-query.md#deleted-items-itemsdeleted)), and re-read the whole list when it
+  answers `fullResyncRequired` or the Hub is too old to allow it.
 - **Write optimistically.** Show the change at once, send it, and on a refusal put the old value
   back and open a dialog. A write the network lost can wait in `app.storage` and be retried on the
   next open, provided it carries an operation key so a retry cannot apply it twice.
